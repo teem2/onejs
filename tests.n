@@ -13,7 +13,7 @@ testing("ONE:Classes") do :->{
 	d1.x()
 	d2.x()
 }
-out() do (:-10).toDump()
+
 testing("ONE:Roles") do :->{
 	Role1 = { a:20 }
 	Role2 extends Base{ a = 30 }
