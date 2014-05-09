@@ -1,0 +1,43 @@
+
+Interval extends Base{
+
+	make = ( _time, cb )->{
+		time = _time
+		interval = ->{
+			cb.call( __maker__, time, this )
+		}
+	}
+		
+	start = ->{
+		if(running) return
+		running = setInterval( this.interval, this.time )
+	}
+		
+	stop = ->{
+		if(!running) return
+		clearInterval(running)   
+		running = undefined
+	}
+}
+
+
+Timeout extends Base{
+
+	make = ( _time, cb )->{
+		time = _time
+		timeout = =>{
+			cb.call( __maker__, time, this )
+		}
+	}
+		
+	start = ->{
+		if(running) return
+		running = setTimeout( timeout, time )
+	}
+		
+	stop = ->{
+		if(!running) return
+		clearTimeout(running)   
+		running = undefined
+	}
+}

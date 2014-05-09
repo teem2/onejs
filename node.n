@@ -1,0 +1,94 @@
+/**
+ *  NodeJS API Classes
+ * 
+ *  Copyright (C) 2014 ONEJS 
+ *
+ *  MIT license =  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions =  The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * 
+ */
+
+var _fs = require('fs')
+var _http = require('http')
+
+Mime extends Base{
+
+	htm  = "text/html"
+	html = "text/html"
+	js   = "application/javascript"
+	jpg  = "image/jpeg"
+	jpeg = "image/jpeg"
+	txt  = "text/plain"
+	css  = "text/css"
+	ico  =  "image/x-icon"
+	png  = "image/png"
+	gif  = "image/gif"
+
+	regex = new RegExp("\\.(" + Object.keys(table).join("|") + ")$")
+
+	fromFilename = name->{
+		var ext = name.match(mimeRx)
+		return ext && this[ext[1]] || "text/plain"
+	}
+}
+
+// all file, path tools
+File extends Base{
+	stream = path->{
+	}
+
+	open = path->{
+	}
+	
+	exists = name->{
+	}
+
+	watch = ( name, options ) ->{
+	}
+}
+
+// url class
+Url extends Base{
+
+}
+
+HttpRequest extends Base{
+}
+
+HttpServer extends Base{
+	
+	make =->{
+
+	}
+	
+	Response extends Base{
+		_make = handle->{
+			req = maker.request
+		}
+
+		text = (code, text)->{
+			writeHead(code, {"Content-Type" =  "text/plain"})
+			end(text)
+		}
+		// url object
+	}
+
+	// add websocket support
+}
+
+WatchFile extends Base{
+	
+	watching = {}
+
+	make = (filename, options,  cb)->{
+		var stat = fs.statSync( filename )
+	}
+
+	watching[ filename ] = Interval.new(50) do -> {
+		var stat = fs.statSync(filename)
+		var diff = 0
+		if(stat[watch].toString() != stats[filename]){ 
+			stats[filename] = stat[watch].toString()
+			
+		}
+	}
+}

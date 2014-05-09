@@ -1,0 +1,2282 @@
+// ONEJS Constraint solver, based on cassowary.js
+// Parts Copyright (C) 1998-2000 Greg J. Badros
+// Parts Copyright (C) 2011-2012, Alex Russell (slightlyoff@chromium.org)
+// All licensed under Apache 2
+
+var util = Base.new() do{
+
+	var epsilon = 1e-8
+
+	//
+	// Configuration
+	//
+	debug = false
+	trace = false
+	verbose = false
+	traceAdded = false
+	GC = false
+	GEQ = 1
+	LEQ = 2
+
+	// FIXME = legacy API to be removed
+	traceprint = function(s /*String*/) { if (verbose) { console.log(s); } }
+	fnenterprint = function(s /*String*/) { console.log("* " + s); }
+	fnexitprint = function(s /*String*/) { console.log("- " + s); }
+
+	assert = function(f /*boolean*/, description /*String*/) {
+		if (!f) {
+			throw new InternalError("Assertion failed = " + description)
+		}
+	}
+
+	var exprFromVarOrValue = function(v) {
+		if (typeof v == "number" ) {
+			return Expression.fromConstant(v)
+		} else if(v instanceof Variable) {
+			return Expression.fromVariable(v)
+		}
+		return v
+	}
+
+	plus = function(e1, e2) {
+		e1 = exprFromVarOrValue(e1)
+		e2 = exprFromVarOrValue(e2)
+		return e1.plus(e2)
+	}
+
+	minus = function(e1, e2) {
+		e1 = exprFromVarOrValue(e1)
+		e2 = exprFromVarOrValue(e2)
+		return e1.minus(e2)
+	}
+
+	times = function(e1, e2) {
+		e1 = exprFromVarOrValue(e1)
+		e2 = exprFromVarOrValue(e2)
+		return e1.times(e2)
+	}
+
+	divide = function(e1, e2) {
+		e1 = exprFromVarOrValue(e1)
+		e2 = exprFromVarOrValue(e2)
+		return e1.divide(e2)
+	}
+
+	approx = function(a, b) {
+		if (a === b) { return true; }
+		a = +(a)
+		b = +(b)
+		if (a == 0) {
+			return (Math.abs(b) < epsilon)
+		}
+		if (b == 0) {
+			return (Math.abs(a) < epsilon)
+		}
+		return (Math.abs(a - b) < Math.abs(a) * epsilon)
+	}
+
+	var count = 1
+	_inc = ->{ return count++; }
+}
+
+
+AbstractConstraint extends Base{
+	make = function(strength /*util.Strength*/, weight /*double*/) {
+		hashCode = util._inc()
+		strength = strength || util.Strength.required
+		weight = weight || 1
+	}
+
+	isEditConstraint = false
+	isInequality =     false
+	isStayConstraint = false
+	get required() { return (strength === util.Strength.required); }
+
+	toString = ->{
+		// this is abstract -- it intentionally leaves the parens unbalanced for
+		// the subclasses to complete (e.g., with ' = 0', etutil.
+		return strength + " {" + weight + "} (" + expression +")"
+	}
+}
+
+var ts = util.AbstractConstraint.prototype.toString
+
+var EditOrStayCtor = function(cv /*util.Variable*/, strength /*util.Strength*/, weight /*double*/) {
+	util.AbstractConstraint.call(this, strength || util.Strength.strong, weight)
+	variable = cv
+	expression = new util.Expression(cv, -1, cv.value)
+}
+
+EditConstraint extends AbstractConstraint{
+	make = ->{ EditOrStayCtor.apply(this, arguments); }
+	isEditConstraint = true
+	toString = ->  "edit =" + ts.call(this) 
+}
+
+StayConstraint extends AbstractConstraint{
+	make = ->{ EditOrStayCtor.apply(this, arguments); }
+	isStayConstraint = true
+	toString = -> "stay =" + ts.call(this) 
+}
+
+var lc =
+Constraint extends AbstractConstraint{
+	make = function(cle /*util.Expression*/
+						 strength /*util.Strength*/
+						 weight /*double*/) {
+		AbstractConstraint.make.call(this, strength, weight)
+		expression = cle
+	}
+}
+
+Inequality extends Constraint{
+
+	_cloneOrNewCle = function(cle) {
+		// FIXME(D4) = move somewhere else?
+		if (cle.clone)  {
+			return cle.clone()
+		} else {
+			return new util.Expression(cle)
+		}
+	}
+
+	make = function(a1, a2, a3, a4, a5) {
+		// FIXME(slightlyoff) = what a disgusting mess. Should at least add docs.
+		// console.log("util.Inequality.make(", a1, a2, a3, a4, a5, ")")
+
+		var a1IsExp = a1 instanceof util.Expression
+				a3IsExp = a3 instanceof util.Expression
+				a1IsVar = a1 instanceof util.AbstractVariable
+				a3IsVar = a3 instanceof util.AbstractVariable
+				a1IsNum = typeof(a1) == 'number'
+				a3IsNum = typeof(a3) == 'number'
+
+		// (cle || number), op, cv
+		if ((a1IsExp || a1IsNum) && a3IsVar) {
+			var cle = a1, op = a2, cv = a3, strength = a4, weight = a5
+			lutil.call(this, _cloneOrNewCle(cle), strength, weight)
+			if (op == util.LEQ) {
+				expression.multiplyMe(-1)
+				expression.addVariable(cv)
+			} else if (op == util.GEQ) {
+				expression.addVariable(cv, -1)
+			} else {
+				throw new util.InternalError("Invalid operator in util.Inequality constructor")
+			}
+		// cv, op, (cle || number)
+		} else if (a1IsVar && (a3IsExp || a3IsNum)) {
+			var cle = a3, op = a2, cv = a1, strength = a4, weight = a5
+			lutil.call(this, _cloneOrNewCle(cle), strength, weight)
+			if (op == util.GEQ) {
+				expression.multiplyMe(-1)
+				expression.addVariable(cv)
+			} else if (op == util.LEQ) {
+				expression.addVariable(cv, -1)
+			} else {
+				throw new util.InternalError("Invalid operator in util.Inequality constructor")
+			}
+		// cle, op, num
+		} else if (a1IsExp && a3IsNum) {
+			var cle1 = a1, op = a2, cle2 = a3, strength = a4, weight = a5
+			lutil.call(this, _cloneOrNewCle(cle1), strength, weight)
+			if (op == util.LEQ) {
+				expression.multiplyMe(-1)
+				expression.addExpression(_cloneOrNewCle(cle2))
+			} else if (op == util.GEQ) {
+				expression.addExpression(_cloneOrNewCle(cle2), -1)
+			} else {
+				throw new util.InternalError("Invalid operator in util.Inequality constructor")
+			}
+			return this
+		// num, op, cle
+		} else if (a1IsNum && a3IsExp) {
+			var cle1 = a3, op = a2, cle2 = a1, strength = a4, weight = a5
+			lutil.call(this, _cloneOrNewCle(cle1), strength, weight)
+			if (op == util.GEQ) {
+				expression.multiplyMe(-1)
+				expression.addExpression(_cloneOrNewCle(cle2))
+			} else if (op == util.LEQ) {
+				expression.addExpression(_cloneOrNewCle(cle2), -1)
+			} else {
+				throw new util.InternalError("Invalid operator in util.Inequality constructor")
+			}
+			return this
+		// cle op cle
+		} else if (a1IsExp && a3IsExp) {
+			var cle1 = a1, op = a2, cle2 = a3, strength = a4, weight = a5
+			lutil.call(this, _cloneOrNewCle(cle2), strength, weight)
+			if (op == util.GEQ) {
+				expression.multiplyMe(-1)
+				expression.addExpression(_cloneOrNewCle(cle1))
+			} else if (op == util.LEQ) {
+				expression.addExpression(_cloneOrNewCle(cle1), -1)
+			} else {
+				throw new util.InternalError("Invalid operator in util.Inequality constructor")
+			}
+		// cle
+		} else if (a1IsExp) {
+			return lutil.call(this, a1, a2, a3)
+		// >=
+		} else if (a2 == util.GEQ) {
+			lutil.call(this, new util.Expression(a3), a4, a5)
+			expression.multiplyMe(-1)
+			expression.addVariable(a1)
+		// <=
+		} else if (a2 == util.LEQ) {
+			lutil.call(this, new util.Expression(a3), a4, a5)
+			expression.addVariable(a1,-1)
+		// error
+		} else {
+			throw new util.InternalError("Invalid operator in util.Inequality constructor")
+		}
+	}
+
+	isInequality = true
+
+	toString = -> lutil.prototype.toString.call(this) + " >= 0) id = " + hashCode
+}
+
+Equation extends Constraint{
+	make = function(a1, a2, a3, a4) {
+		// FIXME(slightlyoff) = this is just a huge mess.
+		if (a1 instanceof util.Expression && !a2 || a2 instanceof util.Strength) {
+			lutil.call(this, a1, a2, a3)
+		} else if ((a1 instanceof util.AbstractVariable) &&
+							 (a2 instanceof util.Expression)) {
+
+			var cv = a1, cle = a2, strength = a3, weight = a4
+			lutil.call(this, cle.clone(), strength, weight)
+			expression.addVariable(cv, -1)
+
+		} else if ((a1 instanceof util.AbstractVariable) &&
+							 (typeof(a2) == 'number')) {
+
+			var cv = a1, val = a2, strength = a3, weight = a4
+			lutil.call(this, new util.Expression(val), strength, weight)
+			expression.addVariable(cv, -1)
+
+		} else if ((a1 instanceof util.Expression) &&
+							 (a2 instanceof util.AbstractVariable)) {
+
+			var cle = a1, cv = a2, strength = a3, weight = a4
+			lutil.call(this, cle.clone(), strength, weight)
+			expression.addVariable(cv, -1)
+
+		} else if (((a1 instanceof util.Expression) || (a1 instanceof util.AbstractVariable) ||
+								(typeof(a1) == 'number')) &&
+							 ((a2 instanceof util.Expression) || (a2 instanceof util.AbstractVariable) ||
+								(typeof(a2) == 'number'))) {
+
+			if (a1 instanceof util.Expression) {
+				a1 = a1.clone()
+			} else {
+				a1 = new util.Expression(a1)
+			}
+
+			if (a2 instanceof util.Expression) {
+				a2 = a2.clone()
+			} else {
+				a2 = new util.Expression(a2)
+			}
+
+			lutil.call(this, a1, a3, a4)
+			expression.addExpression(a2, -1)
+
+		} else {
+			throw "Bad maker to util.Equation"
+		}
+		util.assert(strength instanceof util.Strength, "_strength not set")
+	}
+ 
+	toString = ->lutil.prototype.toString.call(this) + " = 0)"
+}
+
+EditInfo extends Base{
+	make = function(cn      /*util.Constraint*/
+					 eplus   /*util.SlackVariable*/
+					 eminus  /*util.SlackVariable*/
+					 prevEditConstant /*double*/
+					 i /*int*/) {
+		constraint = cn
+		editPlus = eplus
+		editMinus = eminus
+		prevEditConstant = prevEditConstant
+		index = i
+	}
+	toString = -> return "<cn=" + constraint +
+					 ", ep=" + editPlus +
+					 ", em=" + editMinus +
+					 ", pec=" + prevEditConstant +
+					 ", index=" + index + ">"
+}
+
+Error extends Base{
+	// extends = Error
+	make = function(s /*String*/) { if (s) { _description = s; } }
+	_name = "util.Error"
+	_description = "An error has occured in Cassowary"
+	set description(v)   { _description = v; }
+	get description()    { return "(" + _name + ") " + _description; }
+	get message()        { return description; }
+	toString = ->{ return description; }
+}
+
+var errorType = function(name, error) {
+	return Error.extend() do{
+		make = ->{ util.Error.apply(this, arguments); }
+		_name = name||"", _description = error||""
+	}
+}
+
+ConstraintNotFound =
+	errorType("util.ConstraintNotFound"
+			"Tried to remove a constraint never added to the tableu")
+
+InternalError =
+	errorType("util.InternalError")
+
+NonExpression =
+	errorType("util.NonExpression"
+			"The resulting expression would be non")
+
+util.NotEnoughStays =
+	errorType("util.NotEnoughStays"
+			"There are not enough stays to give specific values to every variable")
+
+util.RequiredFailure =
+	errorType("util.RequiredFailure", "A required constraint cannot be satisfied")
+
+util.TooDifficult =
+	errorType("util.TooDifficult", "The constraints are too difficult to solve")
+
+
+var checkNumber = function(value, otherwise){
+	// if(isNaN(value)) { debugger; }
+	return (typeof value === "number") ? value  = otherwise
+}
+
+Expression extends Base{
+
+	make = function(cvar /*util.AbstractVariable*/
+											 value /*double*/
+											 constant /*double*/) {
+		constant = checkNumber(constant, 0)
+		terms = new util.HashTable()
+		if (cvar instanceof util.AbstractVariable) {
+			value = checkNumber(value, 1)
+			setVariable(cvar, value)
+		} else if (typeof cvar == "number") {
+			if (!isNaN(cvar)) {
+				constant = cvar
+			} else {
+				console.trace()
+			}
+		}
+	}
+
+	makeFromHash = function(constant /*ClDouble*/, terms /*util.Hashtable*/) {
+		if (util.verbose) {
+			console.log("*******************************")
+			console.log("clone util.makeFromHash")
+			console.log("*******************************")
+		}
+
+		if (util.GC) console.log("clone util.Expression")
+		constant = constant
+		terms = terms.clone()
+		return this
+	}
+
+	multiplyMe = function(x /*double*/) {
+		constant *= x
+		var t = terms
+		t.each(function(clv, coeff) { t.set(clv, coeff * x); }
+		return this
+	}
+
+	clone = ->{
+		if (util.verbose) {
+			console.log("*******************************")
+			console.log("clone util.Expression")
+			console.log("*******************************")
+		}
+
+		var e = util.Expression.empty()
+		e.makeFromHash(constant, terms)
+		return e
+	}
+
+	times = function(x) {
+		if (typeof x == 'number') {
+			return (clone()).multiplyMe(x)
+		} else {
+			if (isConstant) {
+				return x.times(constant)
+			} else if (x.isConstant) {
+				return times(x.constant)
+			} else {
+				throw new util.NonExpression()
+			}
+		}
+	}
+
+	plus = function(expr /*util.Expression*/) {
+		if (expr instanceof util.Expression) {
+			return clone().addExpression(expr, 1)
+		} else if (expr instanceof util.Variable) {
+			return clone().addVariable(expr, 1)
+		}
+	}
+
+	minus = function(expr /*util.Expression*/) {
+		if (expr instanceof util.Expression) {
+			return clone().addExpression(expr, -1)
+		} else if (expr instanceof util.Variable) {
+			return clone().addVariable(expr, -1)
+		}
+	}
+
+	divide = function(x) {
+		if (typeof x == 'number') {
+			if (util.approx(x, 0)) {
+				throw new util.NonExpression()
+			}
+			return times(1 / x)
+		} else if (x instanceof util.Expression) {
+			if (!x.isConstant) {
+				throw new util.NonExpression()
+			}
+			return times(1 / x.constant)
+		}
+	}
+
+	addExpression = function(expr /*util.Expression*/
+													n /*double*/
+													subject /*util.AbstractVariable*/
+													solver /*util.Tableau*/) {
+
+		// console.log("util.Expression = =addExpression()", expr, n)
+		// console.trace()
+		if (expr instanceof util.AbstractVariable) {
+			expr = util.Expression.fromVariable(expr)
+			// if(util.trace) console.log("addExpression = Had to cast a var to an expression")
+		}
+		n = checkNumber(n, 1)
+		constant += (n * expr.constant)
+		expr.terms.each(function(clv, coeff) {
+			// console.log("clv =", clv, "coeff =", coeff, "subject =", subject)
+			addVariable(clv, coeff * n, subject, solver)
+		}, this)
+		return this
+	}
+
+	addVariable = function(v /*util.AbstractVariable*/, cd /*double*/, subject, solver) {
+		if (cd == null) {
+			cd = 1
+		}
+
+		/*
+		if (util.trace) console.log("util.Expression = =addVariable() =", v , cd)
+		*/
+		var coeff = terms.get(v)
+		if (coeff) {
+			var newCoefficient = coeff + cd
+			if (newCoefficient == 0 || util.approx(newCoefficient, 0)) {
+				if (solver) {
+					solver.noteRemovedVariable(v, subject)
+				}
+				terms.delete(v)
+			} else {
+				setVariable(v, newCoefficient)
+			}
+		} else {
+			if (!util.approx(cd, 0)) {
+				setVariable(v, cd)
+				if (solver) {
+					solver.noteAddedVariable(v, subject)
+				}
+			}
+		}
+		return this
+	}
+
+	setVariable = function(v /*util.AbstractVariable*/, c /*double*/) {
+		// console.log("terms.set(", v, c, ")")
+		terms.set(v, c)
+		return this
+	}
+
+	anyPivotableVariable = ->{
+		if (isConstant) {
+			throw new util.InternalError("anyPivotableVariable called on a constant")
+		}
+
+		var rv = terms.escapingEach(function(clv, c) {
+			if (clv.isPivotable) return { retval = clv }
+		}
+
+		if (rv && rv.retval !== undefined) {
+			return rv.retval
+		}
+
+		return null
+	}
+
+	substituteOut = function(outvar  /*util.AbstractVariable*/
+													expr    /*util.Expression*/
+													subject /*util.AbstractVariable*/
+													solver  /*ClTableau*/) {
+
+		/*
+		if (util.trace) {
+			util.fnenterprint("CLE =substituteOut = " + outvar + ", " + expr + ", " + subject + ", ...")
+			util.traceprint("this = " + this)
+		}
+		*/
+		var setVariable = setVariable.bind(this)
+		var terms = terms
+		var multiplier = terms.get(outvar)
+		terms.delete(outvar)
+		constant += (multiplier * expr.constant)
+		/*
+		console.log("substituteOut ="
+								"\n\toutvar =", outvar
+								"\n\texpr =", expr.toString()
+								"\n\tmultiplier =", multiplier
+								"\n\tterms =", terms)
+		*/
+		expr.terms.each(function(clv, coeff) {
+			var oldCoefficient = terms.get(clv)
+			if (oldCoefficient) {
+				var newCoefficient = oldCoefficient + multiplier * coeff
+				if (util.approx(newCoefficient, 0)) {
+					solver.noteRemovedVariable(clv, subject)
+					terms.delete(clv)
+				} else {
+					terms.set(clv, newCoefficient)
+				}
+			} else {
+				terms.set(clv, multiplier * coeff)
+				if (solver) {
+					solver.noteAddedVariable(clv, subject)
+				}
+			}
+		}
+		// if (util.trace) util.traceprint("Now this is " + this)
+	}
+
+	changeSubject = function(old_subject /*util.AbstractVariable*/
+													new_subject /*util.AbstractVariable*/) {
+		setVariable(old_subject, newSubject(new_subject))
+	}
+
+	newSubject = function(subject /*util.AbstractVariable*/) {
+		// if (util.trace) util.fnenterprint("newSubject =" + subject)
+
+		var reciprocal = 1 / terms.get(subject)
+		terms.delete(subject)
+		multiplyMe(-reciprocal)
+		return reciprocal
+	}
+
+	// Return the coefficient corresponding to variable var, i.e.
+	// the 'ci' corresponding to the 'vi' that var is =
+	//     v1*c1 + v2*c2 + .. + vn*cn + c
+	coefficientFor = function(clv /*util.AbstractVariable*/) {
+		return terms.get(clv) || 0
+	}
+
+	get isConstant() {
+		return terms.size == 0
+	}
+
+	toString = ->{
+		var bstr = ''; // answer
+		var needsplus = false
+		if (!util.approx(constant, 0) || isConstant) {
+			bstr += constant
+			if (isConstant) {
+				return bstr
+			} else {
+				needsplus = true
+			}
+		}
+		terms.each( function(clv, coeff) {
+			if (needsplus) {
+				bstr += " + "
+			}
+			bstr += coeff + "*" + clv
+			needsplus = true
+		}
+		return bstr
+	}
+
+	equals = function(other) {
+		if (other === this) {
+			return true
+		}
+
+		return other instanceof util.Expression &&
+					 other.constant === constant &&
+					 other.terms.equals(terms)
+	}
+
+	Plus = function(e1 /*util.Expression*/, e2 /*util.Expression*/) {
+		return e1.plus(e2)
+	}
+
+	Minus = function(e1 /*util.Expression*/, e2 /*util.Expression*/) {
+		return e1.minus(e2)
+	}
+
+	Times = function(e1 /*util.Expression*/, e2 /*util.Expression*/) {
+		return e1.times(e2)
+	}
+
+	Divide = function(e1 /*util.Expression*/, e2 /*util.Expression*/) {
+		return e1.divide(e2)
+	}
+
+	empty = ->{
+		return this.new(undefined, 1, 0)
+	}
+
+	fromConstant = function(cons) {
+		return this.new(cons)
+	}
+
+	fromValue = function(v) {
+		v = +(v)
+		return this.new(undefined, v, 0)
+	}
+
+	fromVariable = function(v) {
+		return this.new(v, 1, 0)
+	}
+
+}
+
+HashSet extends Base{
+
+	make = ->{
+		storage = []
+		size = 0
+		hashCode = util._inc()
+	}
+
+	add = function(item) {
+		var s = storage, io = s.indexOf(item)
+		if (s.indexOf(item) == -1) { s[s.length] = item; }
+		size = storage.length
+	}
+
+	values = ->{
+		// FIXME(slightlyoff) = is it safe to assume we won't be mutated by our caller?
+		//                     if not, return storage.slice(0)
+		return storage
+	}
+
+	has = function(item) {
+		var s = storage
+		return (s.indexOf(item) != -1)
+	}
+
+	delete = function(item) {
+		var io = storage.indexOf(item)
+		if (io == -1) { return null; }
+		storage.splice(io, 1)[0]
+		size = storage.length
+	}
+
+	clear = ->{
+		storage.length = 0
+	}
+
+	each = function(func, scope) {
+		if(size)
+			storage.forEach(func, scope)
+	}
+
+	escapingEach = function(func, scope) {
+		// FIXME(slightlyoff) = actually escape!
+		if (size)
+			storage.forEach(func, scope)
+	}
+
+	toString = ->{
+		var answer = size + " {"
+		var first = true
+		each(function(e) {
+			if (!first) {
+				answer += ", "
+			} else {
+				first = false
+			}
+			answer += e
+		}
+		answer += "}\n"
+		return answer
+	}
+
+}
+
+var keyCode = function(key) {
+	return key.hashCode
+}
+
+var copyOwn = function(src, dest) {
+	Object.keys(src).forEach(function(x) {
+		dest[x] = src[x]
+	}
+}
+
+if (false && typeof Map != "undefined") {
+
+	HashTable extends Base{
+
+		make = ->{
+			size = 0
+			_store = new Map()
+			_keys = []
+			// get = _store.get.bind(_store)
+		}
+
+		set = function(key, value) {
+			_store.set(key, value)
+			if (_keys.indexOf(key) == -1) {
+				size++
+				// delete _keys[_keys.indexOf(key)]
+				_keys.push(key)
+			} /* else {
+				delete _keys[_keys.indexOf(key)]
+				_keys.push(key)
+			}
+			*/
+		}
+
+		get = function(key) {
+			return _store.get(key)
+		}
+
+		clear = ->{
+			size = 0
+			_store = new Map()
+			_keys = []
+		}
+
+		delete = function(key) {
+			if (_store.delete(key) && size > 0) {
+				delete _keys[_keys.indexOf(key)]
+				size--
+			}
+		}
+
+		each = function(callback, scope) {
+			if (!size) { return; }
+			_keys.forEach(function(k){
+				if (typeof k == "undefined") { return; }
+				var v = _store.get(k)
+				if (typeof v != "undefined") {
+					callback.call(scope||null, k, v)
+				}
+			}, this)
+		}
+
+		escapingEach = function(callback, scope) {
+			if (!size) { return; }
+
+			var that = this
+			var kl = _keys.length
+			var context
+			for (var x = 0; x < kl; x++) {
+				if (typeof _keys[x] != "undefined") {
+					(function(k) {
+						var v = that._store.get(k)
+						if (typeof v != "undefined") {
+							context = callback.call(scope||null, k, v)
+						}
+					}(_keys[x])
+
+					if (context) {
+						if (context.retval !== undefined) {
+							return context
+						}
+						if (context.brk) {
+							break
+						}
+					}
+				}
+			}
+		}
+
+		clone = ->{
+			var n = new util.HashTable()
+			if (size) {
+				each(function(k, v) {
+					n.set(k, v)
+				}
+			}
+			return n
+		}
+	}
+} else {
+	// For escapingEach
+	var defaultContext = {}
+
+	HashTable extends Base{
+
+		make = ->{
+			size = 0
+			_store = {}
+			_keyStrMap = {}
+			_deleted = 0
+		}
+
+		set = function(key, value) {
+			var hash = key.hashCode
+
+			if (typeof _store[hash] == "undefined") {
+				// FIXME(slightlyoff) = if size gooes above the V8 property limit
+				// compact or go to a tree.
+				size++
+			}
+			_store[hash] = value
+			_keyStrMap[hash] = key
+		}
+
+		get = function(key) {
+			if(!size) { return null; }
+
+			key = key.hashCode
+
+			var v = _store[key]
+			if (typeof v != "undefined") {
+				return _store[key]
+			}
+			return null
+		}
+
+		clear = ->{
+			size = 0
+			_store = {}
+			_keyStrMap = {}
+		}
+
+		_compact = ->{
+			// console.time("HashTable = =_compact()")
+			var ns = {}
+			copyOwn(_store, ns)
+			_store = ns
+			// console.timeEnd("HashTable = =_compact()")
+		}
+
+		_compactThreshold = 100
+		_perhapsCompact = ->{
+			// If we have more properties than V8's fast property lookup limit, don't
+			// bother
+			if (_size > 30) return
+			if (_deleted > _compactThreshold) {
+				_compact()
+				_deleted = 0
+			}
+		}
+
+		delete = function(key) {
+			key = key.hashCode
+			if (!_store.hasOwnProperty(key)) {
+				return
+			}
+			_deleted++
+
+			// FIXME(slightlyoff) =
+			//    I hate this because it causes these objects to go megamorphic = (
+			//    Sadly, Cassowary is hugely sensitive to iteration order changes, and
+			//    "delete" preserves order when Object.keys() is called later.
+			delete _store[key]
+			// Note = we don't delete from _keyStrMap because we only get the
+			// Object.keys() from _store, so it's the only one we need to keep up-to-
+			// date.
+
+			if (size > 0) {
+				size--
+			}
+		}
+
+		each = function(callback, scope) {
+			if (!size) { return; }
+
+			_perhapsCompact()
+
+			var store = _store
+			var keyMap = _keyStrMap
+			for (var x in _store) {
+				if (_store.hasOwnProperty(x)) {
+					callback.call(scope||null, keyMap[x], store[x])
+				}
+			}
+		}
+
+		escapingEach = function(callback, scope) {
+			if (!size) { return; }
+
+			_perhapsCompact()
+
+			var that = this
+			var store = _store
+			var keyMap = _keyStrMap
+			var context = defaultContext
+			var kl = Object.keys(store)
+			for (var x = 0; x < kl.length; x++) {
+				(function(v) {
+					if (that._store.hasOwnProperty(v)) {
+						context = callback.call(scope||null, keyMap[v], store[v])
+					}
+				}(kl[x])
+
+				if (context) {
+					if (context.retval !== undefined) {
+						return context
+					}
+					if (context.brk) {
+						break
+					}
+				}
+			}
+		}
+
+		clone = ->{
+			var n = new util.HashTable()
+			if (size) {
+				n.size = size
+				copyOwn(_store, n._store)
+				copyOwn(_keyStrMap, n._keyStrMap)
+			}
+			return n
+		}
+
+		equals = function(other) {
+			if (other === this) {
+				return true
+			}
+
+			if (!(other instanceof util.HashTable) || other._size !== _size) {
+				return false
+			}
+
+			var codes = Object.keys(_store)
+			for (var i = 0; i < codes.length; i++) {
+				var code = codes[i]
+				if (_keyStrMap[code] !== other._keyStrMap[code] ||
+						_store[code] !== other._store[code]) {
+					return false
+				}
+			}
+
+			return true
+		}
+
+		toString = function(h) {
+			var answer = ""
+			each(function(k, v) { answer += k + " => " + v + "\n"; }
+			return answer
+		}
+	}
+}
+
+Point extends Base{
+	make = function(x, y, suffix) {
+		if (x instanceof util.Variable) {
+			_x = x
+		} else {
+			var xArgs = { value = x }
+			if (suffix) {
+				xArgs.name = "x" + suffix
+			}
+			_x = new util.Variable(xArgs)
+		}
+		if (y instanceof util.Variable) {
+			_y = y
+		} else {
+			var yArgs = { value = y }
+			if (suffix) {
+				yArgs.name = "y" + suffix
+			}
+			_y = new util.Variable(yArgs)
+		}
+	}
+
+	get x() { return _x; }
+	set x(x) {
+		if (x instanceof util.Variable) {
+			_x = x
+		} else {
+			_x.value = x
+		}
+	}
+
+	get y() { return _y; }
+	set y(y) {
+		if (y instanceof util.Variable) {
+			_y = y
+		} else {
+			_y.value = y
+		}
+	}
+
+	toString = ->{
+		return "(" + x + ", " + y + ")"
+	}
+}
+
+var weak = util.Strength.weak
+
+SimplexSolver extends Tableau{
+	make = function(){
+
+		util.Tableau.call(this)
+		_stayMinusErrorVars = []
+		_stayPlusErrorVars = []
+
+		_errorVars = new util.HashTable(); // cn -> Set of cv
+
+		_markerVars = new util.HashTable(); // cn -> Set of cv
+
+		// _resolve_pair = [0, 0]
+		_objective = new util.ObjectiveVariable({ name = "Z" }
+
+		_editVarMap = new util.HashTable(); // cv -> util.EditInfo
+		_editVarList = []
+
+		_slackCounter = 0
+		_artificialCounter = 0
+		_dummyCounter = 0
+		autoSolve = true
+		_needsSolving = false
+
+		_optimizeCount = 0
+
+		rows.set(_objective, util.Expression.empty())
+		_editVariableStack = [0]; // Stack
+		if (util.trace)
+			util.traceprint("objective expr == " + rows.get(_objective))
+	}
+
+	add = function(/*util.Constraint, ...*/) {
+		for (var x = 0; x < arguments.length; x++) {
+			addConstraint(arguments[x])
+		}
+		return this
+	}
+
+	_addEditConstraint = function(cn, eplus_eminus, prevEConstant) {
+			var i = _editVarMap.size
+			var cvEplus = /* util.SlackVariable */eplus_eminus[0]
+			var cvEminus = /* util.SlackVariable */eplus_eminus[1]
+			/*
+			if (!cvEplus instanceof util.SlackVariable) {
+				console.warn("cvEplus not a slack variable =", cvEplus)
+			}
+			if (!cvEminus instanceof util.SlackVariable) {
+				console.warn("cvEminus not a slack variable =", cvEminus)
+			}
+			util.debug && console.log("new util.EditInfo(" + cn + ", " + cvEplus + ", " +
+																	cvEminus + ", " + prevEConstant + ", " +
+																	i +")")
+			*/
+			var ei = new util.EditInfo(cn, cvEplus, cvEminus, prevEConstant, i)
+			_editVarMap.set(cn.variable, ei)
+			_editVarList[i] = { v = cn.variable, info = ei }
+	}
+
+	addConstraint = function(cn /*util.Constraint*/) {
+		util.trace && util.fnenterprint("addConstraint = " + cn)
+		var eplus_eminus = new Array(2)
+		var prevEConstant = new Array(1); // so it can be output to
+		var expr = newExpression(cn, /*output to*/ eplus_eminus, prevEConstant)
+		prevEConstant = prevEConstant[0]
+
+		if (!tryAddingDirectly(expr)) {
+			addWithArtificialVariable(expr)
+		}
+
+
+		_needsSolving = true
+		if (cn.isEditConstraint) {
+			_addEditConstraint(cn, eplus_eminus, prevEConstant)
+		}
+		if (autoSolve) {
+			optimize(_objective)
+			_setExternalVariables()
+		}
+		return this
+	}
+
+	addConstraintNoException = function(cn /*util.Constraint*/) {
+		util.trace && util.fnenterprint("addConstraintNoException = " + cn)
+		// FIXME(slightlyoff) = change this to enable chaining
+		try {
+			addConstraint(cn)
+			return true
+		} catch (e /*util.RequiredFailure*/){
+			return false
+		}
+	}
+
+	addEditVar = function(v /*util.Variable*/, strength /*util.Strength*/, weight /*double*/) {
+		util.trace && util.fnenterprint("addEditVar = " + v + " @ " + strength + " {" + weight + "}")
+		return addConstraint(
+				new util.EditConstraint(v, strength || util.Strength.strong, weight))
+	}
+
+	beginEdit = ->{
+		// FIXME(slightlyoff) = we shouldn't throw here. Log instead
+		util.assert(_editVarMap.size > 0, "_editVarMap.size > 0")
+		_infeasibleRows.clear()
+		_resetStayConstants()
+		_editVariableStack[_editVariableStack.length] = _editVarMap.size
+		return this
+	}
+
+	endEdit = ->{
+		// FIXME(slightlyoff) = we shouldn't throw here. Log instead
+		util.assert(_editVarMap.size > 0, "_editVarMap.size > 0")
+		resolve()
+		_editVariableStack.pop()
+		removeEditVarsTo(
+			_editVariableStack[_editVariableStack.length - 1]
+		)
+		return this
+	}
+
+	removeAllEditVars = ->{
+		return removeEditVarsTo(0)
+	}
+
+	removeEditVarsTo = function(n /*int*/) {
+		try {
+			var evll = _editVarList.length
+			// only remove the variable if it's not in the set of variable
+			// from a previous nested outer edit
+			// e.g., if I do =
+			// Edit x,y
+			// Edit w,h,x,y
+			// EndEdit
+			// The end edit needs to only get rid of the edits on w,h
+			// not the ones on x,y
+			for(var x = n; x < evll; x++) {
+				if (_editVarList[x]) {
+					removeConstraint(
+						_editVarMap.get(_editVarList[x].v).constraint
+					)
+				}
+			}
+			_editVarList.length = n
+			util.assert(_editVarMap.size == n, "_editVarMap.size == n")
+			return this
+		} catch (e /*ConstraintNotFound*/){
+			throw new util.InternalError("Constraint not found in removeEditVarsTo")
+		}
+	}
+
+	// Add weak stays to the x and y parts of each point. These have
+	// increasing weights so that the solver will try to satisfy the x
+	// and y stays on the same point, rather than the x stay on one and
+	// the y stay on another.
+	addPointStays = function(points /*[{ x = .., y = ..}, ...]*/) {
+		util.trace && console.log("addPointStays", points)
+		points.forEach(function(p, idx) {
+			addStay(p.x, weak, Math.pow(2, idx))
+			addStay(p.y, weak, Math.pow(2, idx))
+		}, this)
+		return this
+	}
+
+	addStay = function(v /*util.Variable*/, strength /*util.Strength*/, weight /*double*/) {
+		var cn = new util.StayConstraint(v
+																	strength || weak
+																	weight   || 1)
+		return addConstraint(cn)
+	}
+
+	// FIXME(slightlyoff) = add a removeStay
+
+	removeConstraint = function(cn /*util.Constraint*/) {
+		// console.log("removeConstraint('", cn, "')")
+		util.trace && util.fnenterprint("removeConstraintInternal = " + cn)
+		util.trace && util.traceprint(toString())
+		_needsSolving = true
+		_resetStayConstants()
+		var zRow = rows.get(_objective)
+		var eVars = /* Set */_errorVars.get(cn)
+		util.trace && util.traceprint("eVars == " + eVars)
+		if (eVars != null) {
+			eVars.each(function(cv) {
+				var expr = rows.get(cv)
+				if (expr == null) {
+					zRow.addVariable(cv
+													 -cn.weight * cn.strength.symbolicWeight.value
+													 _objective
+													 this)
+				} else {
+					zRow.addExpression(expr
+														 -cn.weight * cn.strength.symbolicWeight.value
+														 _objective
+														 this)
+				}
+				util.trace && util.traceprint("now eVars == " + eVars)
+			}, this)
+		}
+		var marker = _markerVars.get(cn)
+		_markerVars.delete(cn)
+		if (marker == null) {
+			throw new util.InternalError("Constraint not found in removeConstraintInternal")
+		}
+		util.trace && util.traceprint("Looking to remove var " + marker)
+		if (rows.get(marker) == null) {
+			var col = columns.get(marker)
+			// console.log("col is =", col, "from marker =", marker)
+			util.trace && util.traceprint("Must pivot -- columns are " + col)
+			var exitVar = null
+			var minRatio = 0
+			col.each(function(v) {
+				if (v.isRestricted) {
+					var expr = rows.get(v)
+					var coeff = expr.coefficientFor(marker)
+					util.trace && util.traceprint("Marker " + marker + "'s coefficient in " + expr + " is " + coeff)
+					if (coeff < 0) {
+						var r = -expr.constant / coeff
+						if (
+							exitVar == null ||
+							r < minRatio    ||
+							(util.approx(r, minRatio) && v.hashCode < exitVar.hashCode)
+						) {
+							minRatio = r
+							exitVar = v
+						}
+					}
+				}
+			}, this)
+			if (exitVar == null) {
+				util.trace && util.traceprint("exitVar is still null")
+				col.each(function(v) {
+					if (v.isRestricted) {
+						var expr = rows.get(v)
+						var coeff = expr.coefficientFor(marker)
+						var r = expr.constant / coeff
+						if (exitVar == null || r < minRatio) {
+							minRatio = r
+							exitVar = v
+						}
+					}
+				}, this)
+			}
+			if (exitVar == null) {
+				if (col.size == 0) {
+					removeColumn(marker)
+				} else {
+					col.escapingEach(function(v) {
+						if (v != _objective) {
+							exitVar = v
+							return { brk = true }
+						}
+					}, this)
+				}
+			}
+			if (exitVar != null) {
+				pivot(marker, exitVar)
+			}
+		}
+		if (rows.get(marker) != null) {
+			var expr = removeRow(marker)
+		}
+
+		if (eVars != null) {
+			eVars.each(function(v) {
+				if (v != marker) { removeColumn(v); }
+			}, this)
+		}
+
+		if (cn.isStayConstraint) {
+			if (eVars != null) {
+				for (var i = 0; i < _stayPlusErrorVars.length; i++) {
+					eVars.delete(_stayPlusErrorVars[i])
+					eVars.delete(_stayMinusErrorVars[i])
+				}
+			}
+		} else if (cn.isEditConstraint) {
+			util.assert(eVars != null, "eVars != null")
+			var cei = _editVarMap.get(cn.variable)
+			removeColumn(cei.editMinus)
+			_editVarMap.delete(cn.variable)
+		}
+
+		if (eVars != null) {
+			_errorVars.delete(eVars)
+		}
+
+		if (autoSolve) {
+			optimize(_objective)
+			_setExternalVariables()
+		}
+
+		return this
+	}
+
+	reset = ->{
+		util.trace && util.fnenterprint("reset")
+		throw new util.InternalError("reset not implemented")
+	}
+
+	resolveArray = function(newEditConstants) {
+		util.trace && util.fnenterprint("resolveArray" + newEditConstants)
+		var l = newEditConstants.length
+		_editVarMap.each(function(v, cei) {
+			var i = cei.index
+			if (i < l)
+				suggestValue(v, newEditConstants[i])
+		}, this)
+		resolve()
+	}
+
+	resolvePair = function(x /*double*/, y /*double*/) {
+		suggestValue(_editVarList[0].v, x)
+		suggestValue(_editVarList[1].v, y)
+		resolve()
+	}
+
+	resolve = ->{
+		util.trace && util.fnenterprint("resolve()")
+		dualOptimize()
+		_setExternalVariables()
+		_infeasibleRows.clear()
+		_resetStayConstants()
+	}
+
+	suggestValue = function(v /*util.Variable*/, x /*double*/) {
+		util.trace && console.log("suggestValue(" + v + ", " + x + ")")
+		var cei = _editVarMap.get(v)
+		if (!cei) {
+			throw new util.Error("suggestValue for variable " + v + ", but var is not an edit variable")
+		}
+		var delta = x - cei.prevEditConstant
+		cei.prevEditConstant = x
+		deltaEditConstant(delta, cei.editPlus, cei.editMinus)
+		return this
+	}
+
+	solve = ->{
+		if (_needsSolving) {
+			optimize(_objective)
+			_setExternalVariables()
+		}
+		return this
+	}
+
+	setEditedValue = function(v /*util.Variable*/, n /*double*/) {
+		if (!(columnsHasKey(v) || (rows.get(v) != null))) {
+			v.value = n
+			return this
+		}
+
+		if (!util.approx(n, v.value)) {
+			addEditVar(v)
+			beginEdit()
+
+			try {
+				suggestValue(v, n)
+			} catch (e) {
+				throw new util.InternalError("Error in setEditedValue")
+			}
+
+			endEdit()
+		}
+		return this
+	}
+
+	addVar = function(v /*util.Variable*/) {
+		if (!(columnsHasKey(v) || (rows.get(v) != null))) {
+			try {
+				addStay(v)
+			} catch (e /*util.RequiredFailure*/){
+				throw new util.InternalError("Error in addVar -- required failure is impossible")
+			}
+
+			util.trace && util.traceprint("added initial stay on " + v)
+		}
+		return this
+	}
+
+	getInternalInfo = ->{
+		var retstr = util.Tableau.prototype.getInternalInfo.call(this)
+		retstr += "\nSolver info =\n"
+		retstr += "Stay Error Variables = "
+		retstr += _stayPlusErrorVars.length + _stayMinusErrorVars.length
+		retstr += " (" + _stayPlusErrorVars.length + " +, "
+		retstr += _stayMinusErrorVars.length + " -)\n"
+		retstr += "Edit Variables = " + _editVarMap.size
+		retstr += "\n"
+		return retstr
+	}
+
+	getDebugInfo = ->{
+		return toString() + getInternalInfo() + "\n"
+	}
+
+	toString = ->{
+		var bstr = util.Tableau.prototype.getInternalInfo.call(this)
+		bstr += "\n_stayPlusErrorVars = "
+		bstr += '[' + _stayPlusErrorVars + ']'
+		bstr += "\n_stayMinusErrorVars = "
+		bstr += '[' + _stayMinusErrorVars + ']'
+		bstr += "\n"
+		bstr += "_editVarMap =\n" + _editVarMap
+		bstr += "\n"
+		return bstr
+	}
+
+	addWithArtificialVariable = function(expr /*util.Expression*/) {
+		util.trace && util.fnenterprint("addWithArtificialVariable = " + expr)
+		var av = new util.SlackVariable({
+			value = ++_artificialCounter
+			prefix = "a"
+		}
+		var az = new util.ObjectiveVariable({ name = "az" }
+		var azRow = /* util.Expression */expr.clone()
+		util.trace && util.traceprint("before addRows =\n" + this)
+		addRow(az, azRow)
+		addRow(av, expr)
+		util.trace && util.traceprint("after addRows =\n" + this)
+		optimize(az)
+		var azTableauRow = rows.get(az)
+		util.trace && util.traceprint("azTableauRow.constant == " + azTableauRow.constant)
+		if (!util.approx(azTableauRow.constant, 0)) {
+			removeRow(az)
+			removeColumn(av)
+			throw new util.RequiredFailure()
+		}
+		var e = rows.get(av)
+		if (e != null) {
+			if (e.isConstant) {
+				removeRow(av)
+				removeRow(az)
+				return
+			}
+			var entryVar = e.anyPivotableVariable()
+			pivot(entryVar, av)
+		}
+		util.assert(rows.get(av) == null, "rowExpression(av) == null")
+		removeColumn(av)
+		removeRow(az)
+	}
+
+	tryAddingDirectly = function(expr /*util.Expression*/) {
+		util.trace && util.fnenterprint("tryAddingDirectly = " + expr)
+		var subject = chooseSubject(expr)
+		if (subject == null) {
+			util.trace && util.fnexitprint("returning false")
+			return false
+		}
+		expr.newSubject(subject)
+		if (columnsHasKey(subject)) {
+			substituteOut(subject, expr)
+		}
+		addRow(subject, expr)
+		util.trace && util.fnexitprint("returning true")
+		return true
+	}
+
+	chooseSubject = function(expr /*util.Expression*/) {
+		util.trace && util.fnenterprint("chooseSubject = " + expr)
+		var subject = null
+		var foundUnrestricted = false
+		var foundNewRestricted = false
+		var terms = expr.terms
+		var rv = terms.escapingEach(function(v, c) {
+			if (foundUnrestricted) {
+				if (!v.isRestricted) {
+					if (!columnsHasKey(v)) {
+						return { retval = v }
+					}
+				}
+			} else {
+				if (v.isRestricted) {
+					if (!foundNewRestricted && !v.isDummy && c < 0) {
+						var col = columns.get(v)
+						if (col == null ||
+								(col.size == 1 && columnsHasKey(_objective))
+						) {
+							subject = v
+							foundNewRestricted = true
+						}
+					}
+				} else {
+					subject = v
+					foundUnrestricted = true
+				}
+			}
+		}, this)
+		if (rv && rv.retval !== undefined) {
+			return rv.retval
+		}
+
+		if (subject != null) {
+			return subject
+		}
+
+		var coeff = 0
+
+		// subject is nil.
+		// Make one last check -- if all of the variables in expr are dummy
+		// variables, then we can pick a dummy variable as the subject
+		var rv = terms.escapingEach(function(v,c) {
+			if (!v.isDummy)  {
+				return {retval =null}
+			}
+			if (!columnsHasKey(v)) {
+				subject = v
+				coeff = c
+			}
+		}, this)
+		if (rv && rv.retval !== undefined) return rv.retval
+
+		if (!util.approx(expr.constant, 0)) {
+			throw new util.RequiredFailure()
+		}
+		if (coeff > 0) {
+			expr.multiplyMe(-1)
+		}
+		return subject
+	}
+
+	deltaEditConstant = function(delta /*double*/
+															plusErrorVar /*util.AbstractVariable*/
+															minusErrorVar /*util.AbstractVariable*/) {
+		if (util.trace)
+			util.fnenterprint("deltaEditConstant  =" + delta + ", " + plusErrorVar + ", " + minusErrorVar)
+
+		var exprPlus = rows.get(plusErrorVar)
+		if (exprPlus != null) {
+			exprPlus.constant += delta
+			if (exprPlus.constant < 0) {
+				_infeasibleRows.add(plusErrorVar)
+			}
+			return
+		}
+		var exprMinus = rows.get(minusErrorVar)
+		if (exprMinus != null) {
+			exprMinus.constant += -delta
+			if (exprMinus.constant < 0) {
+				_infeasibleRows.add(minusErrorVar)
+			}
+			return
+		}
+		var columnVars = columns.get(minusErrorVar)
+		if (!columnVars) {
+			console.log("columnVars is null -- tableau is =\n" + this)
+		}
+		columnVars.each(function(basicVar) {
+			var expr = rows.get(basicVar)
+			var c = expr.coefficientFor(minusErrorVar)
+			expr.constant += (c * delta)
+			if (basicVar.isRestricted && expr.constant < 0) {
+				_infeasibleRows.add(basicVar)
+			}
+		}, this)
+	}
+
+	// We have set new values for the constants in the edit constraints.
+	// Re-Optimize using the dual simplex algorithm.
+	dualOptimize = ->{
+		util.trace && util.fnenterprint("dualOptimize =")
+		var zRow = rows.get(_objective)
+		// need to handle infeasible rows
+		while (_infeasibleRows.size) {
+			var exitVar = _infeasibleRows.values()[0]
+			_infeasibleRows.delete(exitVar)
+			var entryVar = null
+			var expr = rows.get(exitVar)
+			// exitVar might have become basic after some other pivoting
+			// so allow for the case of its not being there any longer
+			if (expr) {
+				if (expr.constant < 0) {
+					var ratio = Number.MAX_VALUE
+					var r
+					var terms = expr.terms
+					terms.each(function(v, cd) {
+						if (cd > 0 && v.isPivotable) {
+							var zc = zRow.coefficientFor(v)
+							r = zc / cd
+							if (r < ratio ||
+									(util.approx(r, ratio) && v.hashCode < entryVar.hashCode)
+							) {
+								entryVar = v
+								ratio = r
+							}
+						}
+					}
+					if (ratio == Number.MAX_VALUE) {
+						throw new util.InternalError("ratio == nil (MAX_VALUE) in dualOptimize")
+					}
+					pivot(entryVar, exitVar)
+				}
+			}
+		}
+	}
+
+	// Make a new linear Expression representing the constraint cn
+	// replacing any basic variables with their defining expressions.
+	// Normalize if necessary so that the Constant is non-negative.  If
+	// the constraint is non-required give its error variables an
+	// appropriate weight in the objective function.
+	newExpression = function(cn /*util.Constraint*/
+													/** outputs to **/ eplus_eminus /*Array*/
+													prevEConstant) {
+		if (util.trace) {
+			util.fnenterprint("newExpression = " + cn)
+			util.traceprint("cn.isInequality == " + cn.isInequality)
+			util.traceprint("cn.required == " + cn.required)
+		}
+
+		var cnExpr = cn.expression
+		var expr = util.Expression.fromConstant(cnExpr.constant)
+		var slackVar = new util.SlackVariable()
+		var dummyVar = new util.DummyVariable()
+		var eminus = new util.SlackVariable()
+		var eplus = new util.SlackVariable()
+		var cnTerms = cnExpr.terms
+		// console.log(cnTerms.size)
+
+		cnTerms.each(function(v, c) {
+			var e = rows.get(v)
+			if (!e) {
+				expr.addVariable(v, c)
+			} else {
+				expr.addExpression(e, c)
+			}
+		}, this)
+
+		if (cn.isInequality) {
+			// cn is an inequality, so Add a slack variable. The original constraint
+			// is expr>=0, so that the resulting equality is expr-slackVar=0. If cn is
+			// also non-required Add a negative error variable, giving =
+			//
+			//    expr - slackVar = -errorVar
+			//
+			// in other words =
+			//
+			//    expr - slackVar + errorVar = 0
+			//
+			// Since both of these variables are newly created we can just Add
+			// them to the Expression (they can't be basic).
+			util.trace && util.traceprint("Inequality, adding slack")
+			++_slackCounter
+			slackVar = new util.SlackVariable({
+				value = _slackCounter
+				prefix = "s"
+			}
+			expr.setVariable(slackVar, -1)
+
+			_markerVars.set(cn, slackVar)
+			if (!cn.required) {
+				++_slackCounter
+				eminus = new util.SlackVariable({
+					value = _slackCounter
+					prefix = "em"
+				}
+				expr.setVariable(eminus, 1)
+				var zRow = rows.get(_objective)
+				zRow.setVariable(eminus, cn.strength.symbolicWeight.value * cn.weight)
+				insertErrorVar(cn, eminus)
+				noteAddedVariable(eminus, _objective)
+			}
+		} else {
+			if (cn.required) {
+				util.trace && util.traceprint("Equality, required")
+				// Add a dummy variable to the Expression to serve as a marker for this
+				// constraint.  The dummy variable is never allowed to enter the basis
+				// when pivoting.
+				++_dummyCounter
+				dummyVar = new util.DummyVariable({
+					value = _dummyCounter
+					prefix = "d"
+				}
+				eplus_eminus[0] = dummyVar
+				eplus_eminus[1] = dummyVar
+				prevEConstant[0] = cnExpr.constant
+				expr.setVariable(dummyVar, 1)
+				_markerVars.set(cn, dummyVar)
+				util.trace && util.traceprint("Adding dummyVar == d" + _dummyCounter)
+			} else {
+
+				// cn is a non-required equality. Add a positive and a negative error
+				// variable, making the resulting constraint
+				//       expr = eplus - eminus
+				// in other words =
+				//       expr - eplus + eminus = 0
+				util.trace && util.traceprint("Equality, not required")
+				++_slackCounter
+				eplus = new util.SlackVariable({
+					value = _slackCounter
+					prefix = "ep"
+				}
+				eminus = new util.SlackVariable({
+					value = _slackCounter
+					prefix = "em"
+				}
+				expr.setVariable(eplus, -1)
+				expr.setVariable(eminus, 1)
+				_markerVars.set(cn, eplus)
+				var zRow = rows.get(_objective)
+				util.trace && console.log(zRow)
+				var swCoeff = cn.strength.symbolicWeight.value * cn.weight
+				if (swCoeff == 0) {
+					util.trace && util.traceprint("cn == " + cn)
+					util.trace && util.traceprint("adding " + eplus + " and " + eminus + " with swCoeff == " + swCoeff)
+				}
+				zRow.setVariable(eplus, swCoeff)
+				noteAddedVariable(eplus, _objective)
+				zRow.setVariable(eminus, swCoeff)
+				noteAddedVariable(eminus, _objective)
+
+				insertErrorVar(cn, eminus)
+				insertErrorVar(cn, eplus)
+
+				if (cn.isStayConstraint) {
+					_stayPlusErrorVars[_stayPlusErrorVars.length] = eplus
+					_stayMinusErrorVars[_stayMinusErrorVars.length] = eminus
+				} else if (cn.isEditConstraint) {
+					eplus_eminus[0] = eplus
+					eplus_eminus[1] = eminus
+					prevEConstant[0] = cnExpr.constant
+				}
+			}
+		}
+		// the Constant in the Expression should be non-negative. If necessary
+		// normalize the Expression by multiplying by -1
+		if (expr.constant < 0) expr.multiplyMe(-1)
+		util.trace && util.fnexitprint("returning " + expr)
+		return expr
+	}
+
+	// Minimize the value of the objective.  (The tableau should already be
+	// feasible.)
+	optimize = function(zVar /*util.ObjectiveVariable*/) {
+		util.trace && util.fnenterprint("optimize = " + zVar)
+		util.trace && util.traceprint(toString())
+		_optimizeCount++
+
+		var zRow = rows.get(zVar)
+		util.assert(zRow != null, "zRow != null")
+		var entryVar = null
+		var exitVar = null
+		var objectiveCoeff, terms
+
+		while (true) {
+			objectiveCoeff = 0
+			terms = zRow.terms
+
+			// Find the most negative coefficient in the objective function (ignoring
+			// the non-pivotable dummy variables). If all coefficients are positive
+			// we're done
+			terms.escapingEach(function(v, c) {
+				if (v.isPivotable && c < objectiveCoeff) {
+					objectiveCoeff = c
+					entryVar = v
+					// Break on success
+					return { brk = 1 }
+				}
+			}, this)
+
+			if (objectiveCoeff >= -epsilon)
+				return
+
+			util.trace && console.log("entryVar =", entryVar
+														 "objectiveCoeff =", objectiveCoeff)
+
+			// choose which variable to move out of the basis
+			// Only consider pivotable basic variables
+			// (i.e. restricted, non-dummy variables)
+			var minRatio = Number.MAX_VALUE
+			var columnVars = columns.get(entryVar)
+			var r = 0
+
+			columnVars.each(function(v) {
+				util.trace && util.traceprint("Checking " + v)
+				if (v.isPivotable) {
+					var expr = rows.get(v)
+					var coeff = expr.coefficientFor(entryVar)
+					util.trace && util.traceprint("pivotable, coeff = " + coeff)
+					// only consider negative coefficients
+					if (coeff < 0) {
+						r = -expr.constant / coeff
+						// Bland's anti-cycling rule =
+						// if multiple variables are about the same
+						// always pick the lowest via some total
+						// ordering -- I use their addresses in memory
+						//    if (r < minRatio ||
+						//              (util.approx(r, minRatio) &&
+						//               v.get_pclv() < exitVar.get_pclv()))
+						if (r < minRatio ||
+								(util.approx(r, minRatio) &&
+								 v.hashCode < exitVar.hashCode)
+						) {
+							minRatio = r
+							exitVar = v
+						}
+					}
+				}
+			}, this)
+
+			// If minRatio is still nil at this point, it means that the
+			// objective function is unbounded, i.e. it can become
+			// arbitrarily negative.  This should never happen in this
+			// application.
+			if (minRatio == Number.MAX_VALUE) {
+				throw new util.InternalError("Objective function is unbounded in optimize")
+			}
+
+			// console.time("SimplexSolver = =optimize pivot()")
+			pivot(entryVar, exitVar)
+			// console.timeEnd("SimplexSolver = =optimize pivot()")
+
+			util.trace && util.traceprint(toString())
+		}
+	}
+
+	// Do a Pivot.  Move entryVar into the basis (i.e. make it a basic variable)
+	// and move exitVar out of the basis (i.e., make it a parametric variable)
+	pivot = function(entryVar /*util.AbstractVariable*/, exitVar /*util.AbstractVariable*/) {
+		util.trace && console.log("pivot = ", entryVar, exitVar)
+		var time = false
+
+		time && console.time(" SimplexSolver = =pivot")
+
+		// the entryVar might be non-pivotable if we're doing a RemoveConstraint --
+		// otherwise it should be a pivotable variable -- enforced at call sites
+		// hopefully
+		if (entryVar == null) {
+			console.warn("pivot = entryVar == null")
+		}
+
+		if (exitVar == null) {
+			console.warn("pivot = exitVar == null")
+		}
+		// console.log("SimplexSolver = =pivot(", entryVar, exitVar, ")")
+
+		// expr is the Expression for the exit variable (about to leave the basis) --
+		// so that the old tableau includes the equation =
+		//   exitVar = expr
+		time && console.time("  removeRow")
+		var expr = removeRow(exitVar)
+		time && console.timeEnd("  removeRow")
+
+		// Compute an Expression for the entry variable.  Since expr has
+		// been deleted from the tableau we can destructively modify it to
+		// build this Expression.
+		time && console.time("  changeSubject")
+		expr.changeSubject(exitVar, entryVar)
+		time && console.timeEnd("  changeSubject")
+
+		time && console.time("  substituteOut")
+		substituteOut(entryVar, expr)
+		time && console.timeEnd("  substituteOut")
+		/*
+		if (entryVar.isExternal) {
+			// entry var is no longer a parametric variable since we're moving
+			// it into the basis
+			console.log("entryVar is external!")
+			_externalParametricVars.delete(entryVar)
+		}
+		*/
+
+		time && console.time("  addRow")
+		addRow(entryVar, expr)
+		time && console.timeEnd("  addRow")
+
+		time && console.timeEnd(" SimplexSolver = =pivot")
+	}
+
+	// Each of the non-required stays will be represented by an equation
+	// of the form
+	//     v = c + eplus - eminus
+	// where v is the variable with the stay, c is the previous value of
+	// v, and eplus and eminus are slack variables that hold the error
+	// in satisfying the stay constraint.  We are about to change
+	// something, and we want to fix the constants in the equations
+	// representing the stays.  If both eplus and eminus are nonbasic
+	// they have value 0 in the current solution, meaning the previous
+	// stay was exactly satisfied.  In this case nothing needs to be
+	// changed.  Otherwise one of them is basic, and the other must
+	// occur only in the Expression for that basic error variable.
+	// Reset the Constant in this Expression to 0.
+	_resetStayConstants = ->{
+		util.trace && console.log("_resetStayConstants")
+		var spev = _stayPlusErrorVars
+		var l = spev.length
+		for (var i = 0; i < l; i++) {
+			var expr = rows.get(spev[i])
+			if (expr === null) {
+				expr = rows.get(_stayMinusErrorVars[i])
+			}
+			if (expr != null) {
+				expr.constant = 0
+			}
+		}
+	}
+
+	_setExternalVariables = ->{
+		util.trace && util.fnenterprint("_setExternalVariables =")
+		util.trace && util.traceprint(toString())
+		var changed = {}
+
+		// console.log("_externalParametricVars =", _externalParametricVars)
+		_externalParametricVars.each(function(v) {
+			if (rows.get(v) != null) {
+				if (util.trace)
+					console.log("Error = variable" + v + " in _externalParametricVars is basic")
+			} else {
+				v.value = 0
+				changed[v.name] = 0
+			}
+		}, this)
+		// console.log("_externalRows =", _externalRows)
+		_externalRows.each(function(v) {
+			var expr = rows.get(v)
+			if (v.value != expr.constant) {
+				// console.log(v.toString(), v.value, expr.constant)
+				v.value = expr.constant
+				changed[v.name] = expr.constant
+			}
+			// util.trace && console.log("v == " + v)
+			// util.trace && console.log("expr == " + expr)
+		}, this)
+		_changed = changed
+		_needsSolving = false
+		_informCallbacks()
+		onsolved()
+	}
+
+	onsolved = ->{
+		// Lifecycle stub. Here for dirty, dirty monkey patching.
+	}
+
+	_informCallbacks = ->{
+		if(!_callbacks) return
+
+		var changed = _changed
+		_callbacks.forEach(function(fn) {
+			fn(changed)
+		}
+	}
+
+	_addCallback = function(fn) {
+		var a = (_callbacks || (_callbacks = []))
+		a[a.length] = fn
+	}
+
+	insertErrorVar = function(cn /*util.Constraint*/, aVar /*util.AbstractVariable*/) {
+		util.trace && util.fnenterprint("insertErrorVar =" + cn + ", " + aVar)
+		var constraintSet = /* Set */_errorVars.get(aVar)
+		if (!constraintSet) {
+			constraintSet = new util.HashSet()
+			_errorVars.set(cn, constraintSet)
+		}
+		constraintSet.add(aVar)
+	}
+}
+
+util.Strength extends Base{
+	make = function(name /*String*/, symbolicWeight, w2, w3) {
+		name = name
+		if (symbolicWeight instanceof util.SymbolicWeight) {
+			symbolicWeight = symbolicWeight
+		} else {
+			symbolicWeight = new util.SymbolicWeight(symbolicWeight, w2, w3)
+		}
+	}
+
+	get required() {
+		return (this === util.Strength.required)
+	}
+
+	toString = ->{
+		return name + (!isRequired ? (" =" + symbolicWeight)  = "")
+	}
+}
+
+/* public static final */
+util.Strength.required = new util.Strength("<Required>", 1000, 1000, 1000)
+/* public static final  */
+util.Strength.strong = new util.Strength("strong", 1, 0, 0)
+/* public static final  */
+util.Strength.medium = new util.Strength("medium", 0, 1, 0)
+/* public static final  */
+util.Strength.weak = new util.Strength("weak", 0, 0, 1)
+
+var multiplier = 1000
+
+util.SymbolicWeight extends Base{
+	_t = "util.SymbolicWeight"
+	make = function(/*w1, w2, w3*/) {
+		value = 0
+		var factor = 1
+		for (var i = arguments.length - 1; i >= 0; --i) {
+			value += arguments[i] * factor
+			factor *= multiplier
+		}
+	}
+
+	toJSON = ->{
+		return {
+			_t = _t
+			value = value
+		}
+	}
+}
+
+util.Tableau extends Base{
+	make = ->{
+		// columns is a mapping from variables which occur in expressions to the
+		// set of basic variables whose expressions contain them
+		// i.e., it's a mapping from variables in expressions (a column) to the
+		// set of rows that contain them
+		columns = new util.HashTable(); // values are sets
+
+		// _rows maps basic variables to the expressions for that row in the tableau
+		rows = new util.HashTable();    // values are util.Expressions
+
+		// the collection of basic variables that have infeasible rows
+		// (used when reoptimizing)
+		_infeasibleRows = new util.HashSet()
+
+		// the set of rows where the basic variable is external this was added to
+		// the C++ version to reduce time in setExternalVariables()
+		_externalRows = new util.HashSet()
+
+		// the set of external variables which are parametric this was added to the
+		// C++ version to reduce time in setExternalVariables()
+		_externalParametricVars = new util.HashSet()
+	}
+
+	// Variable v has been removed from an Expression.  If the Expression is in a
+	// tableau the corresponding basic variable is subject (or if subject is nil
+	// then it's in the objective function). Update the column cross-indices.
+	noteRemovedVariable = function(v /*util.AbstractVariable*/
+																subject /*util.AbstractVariable*/) {
+		util.trace && console.log("util.Tableau = =noteRemovedVariable = ", v, subject)
+		var column = columns.get(v)
+		if (subject && column) {
+			column.delete(subject)
+		}
+	}
+
+	noteAddedVariable = function(v /*util.AbstractVariable*/, subject /*util.AbstractVariable*/) {
+		// if (util.trace) console.log("util.Tableau = =noteAddedVariable =", v, subject)
+		if (subject) {
+			insertColVar(v, subject)
+		}
+	}
+
+	getInternalInfo = ->{
+		var retstr = "Tableau Information =\n"
+		retstr += "Rows = " + rows.size
+		retstr += " (= " + (rows.size - 1) + " constraints)"
+		retstr += "\nColumns = " + columns.size
+		retstr += "\nInfeasible Rows = " + _infeasibleRows.size
+		retstr += "\nExternal basic variables = " + _externalRows.size
+		retstr += "\nExternal parametric variables = "
+		retstr += _externalParametricVars.size
+		retstr += "\n"
+		return retstr
+	}
+
+	toString = ->{
+		var bstr = "Tableau =\n"
+		rows.each(function(clv, expr) {
+			bstr += clv
+			bstr += " <==> "
+			bstr += expr
+			bstr += "\n"
+		}
+		bstr += "\nColumns =\n"
+		bstr += columns
+		bstr += "\nInfeasible rows = "
+		bstr += _infeasibleRows
+		bstr += "External basic variables = "
+		bstr += _externalRows
+		bstr += "External parametric variables = "
+		bstr += _externalParametricVars
+		return bstr
+	}
+
+	/*
+	toJSON = ->{
+		// Creates an object representation of the Tableau.
+	}
+	*/
+
+	// Convenience function to insert a variable into
+	// the set of rows stored at columns[param_var]
+	// creating a new set if needed
+	insertColVar = function(param_var /*util.Variable*/
+												 rowvar /*util.Variable*/) {
+		var rowset = /* Set */ columns.get(param_var)
+		if (!rowset) {
+			rowset = new util.HashSet()
+			columns.set(param_var, rowset)
+		}
+		rowset.add(rowvar)
+	}
+
+	addRow = function(aVar /*util.AbstractVariable*/
+									 expr /*util.Expression*/) {
+		if (util.trace) util.fnenterprint("addRow = " + aVar + ", " + expr)
+		rows.set(aVar, expr)
+		expr.terms.each(function(clv, coeff) {
+			insertColVar(clv, aVar)
+			if (clv.isExternal) {
+				_externalParametricVars.add(clv)
+			}
+		}, this)
+		if (aVar.isExternal) {
+			_externalRows.add(aVar)
+		}
+		if (util.trace) util.traceprint(toString())
+	}
+
+	removeColumn = function(aVar /*util.AbstractVariable*/) {
+		if (util.trace) util.fnenterprint("removeColumn =" + aVar)
+		var rows = /* Set */ columns.get(aVar)
+		if (rows) {
+			columns.delete(aVar)
+			rows.each(function(clv) {
+				var expr = /* util.Expression */rows.get(clv)
+				expr.terms.delete(aVar)
+			}, this)
+		} else {
+			if (util.trace) console.log("Could not find var", aVar, "in columns")
+		}
+		if (aVar.isExternal) {
+			_externalRows.delete(aVar)
+			_externalParametricVars.delete(aVar)
+		}
+	}
+
+	removeRow = function(aVar /*util.AbstractVariable*/) {
+		if (util.trace) util.fnenterprint("removeRow =" + aVar)
+		var expr = /* util.Expression */rows.get(aVar)
+		util.assert(expr != null)
+		expr.terms.each(function(clv, coeff) {
+			var varset = columns.get(clv)
+			if (varset != null) {
+				if (util.trace) console.log("removing from varset =", aVar)
+				varset.delete(aVar)
+			}
+		}, this)
+		_infeasibleRows.delete(aVar)
+		if (aVar.isExternal) {
+			_externalRows.delete(aVar)
+		}
+		rows.delete(aVar)
+		if (util.trace) util.fnexitprint("returning " + expr)
+		return expr
+	}
+
+	substituteOut = function(oldVar /*util.AbstractVariable*/
+													expr /*util.Expression*/) {
+		if (util.trace) util.fnenterprint("substituteOut =" + oldVar + ", " + expr)
+		if (util.trace) util.traceprint(toString())
+
+		var varset = columns.get(oldVar)
+		varset.each(function(v) {
+			var row = rows.get(v)
+			row.substituteOut(oldVar, expr, v, this)
+			if (v.isRestricted && row.constant < 0) {
+				_infeasibleRows.add(v)
+			}
+		}, this)
+
+		if (oldVar.isExternal) {
+			_externalRows.add(oldVar)
+			_externalParametricVars.delete(oldVar)
+		}
+
+		columns.delete(oldVar)
+	}
+
+	columnsHasKey = function(subject /*util.AbstractVariable*/) {
+		return !!columns.get(subject)
+	}
+}
+
+AbstractVariable extends Base{
+	isDummy =      false
+	isExternal =   false
+	isPivotable =  false
+	isRestricted = false
+
+	_init = function(args, varNamePrefix) {
+		// Common mixin initialization.
+		hashCode = util._inc()
+		name = (varNamePrefix||"") + hashCode
+		if (args) {
+			if (typeof args.name != "undefined") {
+				name = args.name
+			}
+			if (typeof args.value != "undefined") {
+				value = args.value
+			}
+			if (typeof args.prefix != "undefined") {
+				_prefix = args.prefix
+			}
+		}
+	}
+
+	_prefix = ""
+	name = ""
+	value = 0
+
+	valueOf = ->{ return value; }
+
+	toString = ->{
+		return _prefix + "[" + name + " =" + value + "]"
+	}
+
+}
+
+Variable extends AbstractVariable{
+	make = function(args) {
+		_init(args, "v")
+		var vm = util.Variable._map
+		if (vm) { vm[name] = this; }
+	}
+	isExternal =     true
+}
+
+/* static */
+// util.Variable._map = []
+
+DummyVariable extends AbstractVariable{
+	make = function(args) {
+		_init(args, "d")
+	}
+	isDummy =        true
+	isRestricted =   true
+	value =         "dummy"
+}
+
+ObjectiveVariable extends AbstractVariable{
+	make = function(args) {
+		_init(args, "o")
+	}
+	value =         "obj"
+}
+
+SlackVariable extends AbstractVariable{
+	make = function(args) {
+		_init(args, "s")
+	}
+	isPivotable =    true
+	isRestricted =   true
+	value =         "slack"
+}

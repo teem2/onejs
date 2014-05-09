@@ -1,0 +1,56 @@
+load('testing')
+
+testing("ONE:Classes") do :->{
+
+	C1 extends Base{}
+	Der1 extends C1{ x = ../callOnce(1) }
+	Der2 extends C1{ x = ../callOnce(2) }
+	Der3 extends Der1{}
+
+	d1 = Der1.new()
+	d2 = Der2.new()
+	d3 = Der3.new()
+	d1.x()
+	d2.x()
+}
+out() do (:-10).toDump()
+testing("ONE:Roles") do :->{
+	Role1 = { a:20 }
+	Role2 extends Base{ a = 30 }
+	Role3 = ->{ a = 40, b = 50 }
+	C1 extends Base{ a = 10 }
+
+	var x = C1.new()
+	C1.learn(Role1)
+	C1.learn(Role2)
+	C1.learn(Role3)
+	x.a == 40
+
+	C1.forget(Role2)
+	x.a == 40
+
+	C1.forget(Role3)
+	x.a == 20
+
+	C1.forget(Role1)
+	x.a == 10
+
+	C1.learn(Role3)
+	x.a == 40
+	x.b == 50
+
+	C1.forget(Role3)
+	x.b == undefined
+
+	Proto1 extends Role1{}
+	proto = Proto1.new()
+	proto.a == 20
+	proto.hasOwnProperty('a') == false
+	var p = Object.getPrototypeOf(proto)
+	p.hasOwnProperty('a') == false
+	p = Object.getPrototypeOf(p)
+	p.hasOwnProperty('a') == true
+
+	trace()
+
+}
