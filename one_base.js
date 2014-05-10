@@ -28,7 +28,7 @@ ONE.base_ = function(){
 		var obj = Object.create( proto )
 		obj.$ = this.$
 		obj._ = this
-		obj.__onename__ = 'unknown-class'
+		obj.__onename__ = setter?setter:'unknown-class'
 		if(! obj.load ){
 			obj.load = this.load
 			obj.extends = this.extends
@@ -86,6 +86,7 @@ ONE.base_ = function(){
 	// create a new object
 
 	this.new = function(){
+
 		var obj = Object.create( this )
 
 		var arg

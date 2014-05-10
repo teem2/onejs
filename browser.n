@@ -7,338 +7,315 @@
  * 
  */
 
-ONE.browser_input_ = function(){
+var browserKeyTable = { // slap a usable name on keys
+	8:'backspace',9:'tab',13:'enter',16:'shift',17:'ctrl',18:'alt',
+	19:'pause',20:'caps',27:'escape',
+	32:'space',33:'pgup',34:'pgdn',
+	35:'end',36:'home',37:'left',38:'up',39:'right',40:'down',
+	45:'insert',46:'delete',
+	48:'num0',49:'num1',50:'num2',51:'num3',52:'num4',
+	53:'num5',54:'num6',55:'num7',56:'num8',57:'num9',
+	65:'a',66:'b',67:'c',68:'d',69:'e',70:'f',71:'g',
+	72:'h',73:'i',74:'j',75:'k',76:'l',77:'m',78:'n',
+	79:'o',80:'p',81:'q',82:'r',83:'s',84:'t',85:'u',
+	86:'v',87:'w',88:'x',89:'y',90:'z',
+	91:'leftmeta',92:'rightmeta',
+	96:'pad0',97:'pad1',98:'pad2',99:'pad3',100:'pad4',101:'pad5',
+	102:'pad6',103:'pad7',104:'pad8',105:'pad9',
+	106:'multiply',107:'add',109:'subtract',110:'decimal',111:'divide',
+	112:'f1',113:'f2',114:'f3',115:'f4',116:'f5',117:'f6',
+	118:'f7',119:'f8',120:'f9',121:'f10',122:'f11',123:'f12',
+	144:'numlock',145:'scrollock',186:'semicolon',187:'equals',188:'comma',
+	189:'dash',190:'period',191:'slash',192:'accent',219:'openbracket',
+	220:'backslash',221:'closebracket',222:'singlequote'
+}
+var mouse, key
 
-	var browserKeyTable = { // slap a usable name on keys
-		8:'backspace',9:'tab',13:'enter',16:'shift',17:'ctrl',18:'alt',
-		19:'pause',20:'caps',27:'escape',
-		32:'space',33:'pgup',34:'pgdn',
-		35:'end',36:'home',37:'left',38:'up',39:'right',40:'down',
-		45:'insert',46:'delete',
-		48:'num0',49:'num1',50:'num2',51:'num3',52:'num4',
-		53:'num5',54:'num6',55:'num7',56:'num8',57:'num9',
-		65:'a',66:'b',67:'c',68:'d',69:'e',70:'f',71:'g',
-		72:'h',73:'i',74:'j',75:'k',76:'l',77:'m',78:'n',
-		79:'o',80:'p',81:'q',82:'r',83:'s',84:'t',85:'u',
-		86:'v',87:'w',88:'x',89:'y',90:'z',
-		91:'leftmeta',92:'rightmeta',
-		96:'pad0',97:'pad1',98:'pad2',99:'pad3',100:'pad4',101:'pad5',
-		102:'pad6',103:'pad7',104:'pad8',105:'pad9',
-		106:'multiply',107:'add',109:'subtract',110:'decimal',111:'divide',
-		112:'f1',113:'f2',114:'f3',115:'f4',116:'f5',117:'f6',
-		118:'f7',119:'f8',120:'f9',121:'f10',122:'f11',123:'f12',
-		144:'numlock',145:'scrollock',186:'semicolon',187:'equals',188:'comma',
-		189:'dash',190:'period',191:'slash',192:'accent',219:'openbracket',
-		220:'backslash',221:'closebracket',222:'singlequote'
-	}
-  
-	function mouse_toString(){
-		return 1
-	}
-	
-	function makeMouseSignal( dom, x, y ){
-		var _dom = dom
-		var px = 0
-		var py = 0
-		do {
-			px += _dom.offsetLeft || 0
-			py += _dom.offsetTop  || 0
-			_dom = _dom.offsetParent
-		} while( _dom )
-		var rel = [ ]
-		var abs = [ ]
-		rel.abs = abs
-		rel.rel = rel
-		abs[0] = x
-		abs[1] = y
-		rel[0] = x - px
-		rel[1] = y - py
-		var c
-		if(c = mouse.cap_this){
-			var start = mouse.cap_start
-			rel.cap = [ abs[0] - start[0], abs[1] - start[1] ]
-		}
-		rel.toString = mouse_toString 
-		return rel
-	}
-	
-	function makeAbsMouseSignal( dom, x, y ){
-		var pos = [x, y]
-		pos.toString = mouse_toString
-		if( dom && dom._oneNode ) pos.tgt = dom._oneNode
-		return pos
-	}
-
-	window.addEventListener('click', function(e){
-		var t = e.toElement || e.target
-		mouse.click = makeAbsMouseSignal( t, e.pageX, e.pageY )
-		if( !t || !t._oneNode ) return
-		t._oneNode.click = makeMouseSignal( t, e.pageX, e.pageY )
-	})
-
-	window.addEventListener('dblclick', function(e){
-		var t = e.toElement || e.target
-		mouse.dblclick = makeAbsMouseSignal( t, e.pageX, e.pageY )
-		if( !t || !t._oneNode ) return
-		t._oneNode.dblclk = makeMouseSignal( t, e.pageX, e.pageY )
-	})
-
-	window.addEventListener('mousedown', function(e){
-		var t = e.toElement || e.target
-
-		if(e.button === 0 ) mouse.left = 1
-		if(e.button === 1 ) mouse.middle = 1
-		if(e.button === 2 ) mouse.right = 1
-		mouse.isdown = makeAbsMouseSignal( t, e.pageX, e.pageY )
-		mouse.cap_canset = e.button + 1
-		if( !t || !t._oneNode ) return
-		// lets build a mouse event.
-		t._oneNode.isdown = 1
-		t._oneNode.mousedown = makeMouseSignal( t, e.pageX, e.pageY )
-		mouse.cap_canset = 0
-
-	})
-
-
-	window.addEventListener('mouseup', function(e){
-		if(e.button === 0 ) mouse.left = 0
-		if(e.button === 1 ) mouse.middle = 0
-		if(e.button === 2 ) mouse.right = 0
-		mouse.isdown = 0
-		
-		var t = e.toElement || e.target
-		if( mouse.cap_this && mouse.cap_btn == e.button ){
-			mouse._capEnd( e )
-		} 
-		else {
-			if( !t || !t._oneNode ) return
-			t._oneNode.isdown = 0
-			t._oneNode.mouseup = makeMouseSignal( t, e.pageX, e.pageY )
-		}
-	})
-	
-	// Fancy mouse interpolation mousemove 
-	var move_last = Date.now()
-	window.addEventListener('mousemove', function(e){
-		
-		var px = e.pageX
-		var py = e.pageY
-
-		// send mouse signals
-		mouse.x = px
-		mouse.y = py
-		mouse.xy = [ px, py ]
-		
-		// used for animation time-skewing in mouse interp
-		var time = Date.now( )
-		var delta = time - move_last
-		move_last = time
-
-		var cap_this = mouse.cap_this
-		if( cap_this ){
-			mouse._capMove( e )
-			return
-		}
-
-		if( delta > 100 ) {
-			var t = e.toElement || e.target
-			if(! t || !t._oneNode) return
-			var node = t._oneNode
-			node.mousemove = makeMouseSignal( t, px, py)
-			return
-		} 
-		// interpolate all 
-		var dx = px - mouse._px
-		var dy = py - mouse._py
-		var x1 = px
-		var y1 = py
-		var dist = Math.sqrt(dx * dx + dy * dy )
-		var step = parseInt(dist / 4) // pixel stepsize
-		if( step == 0 ) step = 1
-		dx = dx / step
-		dy = dy / step
-		var last = null
-		for(var i = step - 1; i >= 0; i--){
-			var t = document.elementFromPoint(x1, y1)
-			if(last != t && t && t._oneNode){
-				last = t
-				ONE.mouseinterp = - (delta / (1000 * step)) * (step - i)
-				t._oneNode.mousemove = makeMouseSignal( t, x1, y1 )
-			}
-			x1 -= dx
-			y1 -= dy
-		}
-		mouse._px = px
-		mouse._py = py
-	})
-
-	function keyupdown_toString(){
-		return browserKeyTable[ this.code ]
-	}
-
-	function makeKeyUpDownSignal( repeat, code ){
-		return {
-			repeat: repeat,
-			code: code,
-			toString: keyupdown_toString
-		}
-	}
-	function press_toString(){
-		return String.fromCharCode( this.code )
-	}
-	
-	window.addEventListener('keydown', function(e){
-		var t = e.toElement || e.target
-		var k = browserKeyTable[ e.keyCode ]
-		if( k ) key[ k ] = 1
-		var sig = makeKeyUpDownSignal( e.repeat, e.keyCode )
-		key.key = sig
-		if( !t || !t._oneNode ) return
-		t._oneNode.keydown = sig
-	})
-	
-	window.addEventListener('keyup', function(e){
-		var t = e.toElement || e.target
-		var k = browserKeyTable[ e.keyCode ]
-		if( k ) key[ k ] = 0
-		var sig = makeKeyUpDownSignal( e.repeat, e.keyCode )
-
-		if( !t || !t._oneNode ) return
-		t._oneNode.keyup = sig
-	})
-
-	window.addEventListener('keypress', function(e){
-		var t = e.toElement || e.target
-		var sig = {
-			repeat: e.repeat,
-			code: e.charCode,
-			toString: press_toString
-		}
-		key.press = sig
-		if( !t || !t._oneNode ) return
-		t._oneNode.keypress = sig
-	})
-	
-	var mouse = this.mouse = this.extends( function(){
-		this.__onename__ = 'Mouse'
-	
-		this.signals('x','y','xy','isdown','left','right','middle')
-		
-		this.capture = function( obj, move, end ){
-			if( this.cap_this && this.cap_end ){
-				this._capEnd( {pageX:this.cap_start[0],pageY:this.cap_start[1]})
-			}
-			if( this.cap_canset ){
-				this.cap_btn = this.cap_canset - 1
-				this.cap_this = obj
-				this.cap_move = move
-				this.cap_end = end
-				this.cap_start = this.xy
-				if(document.setCapture) document.setCapture()
-			}
-		}
-		
-		this._capMove = function( e ){
-			var sig = makeMouseSignal( this.cap_this.dom, e.pageX, e.pageY )
-			
-			if( typeof this.cap_move == 'function'){
-				this.cap_move.call( this.cap_this, sig )
-			}
-			else this.cap_this[this.cap_move] = sig
-		}
-		
-		this._capEnd = function( e ){
-			var sig = makeMouseSignal( this.cap_this.dom, e.pageX, e.pageY )
-			if( typeof this.cap_end == 'function'){
-				this.cap_end.call( mouse.cap_this, sig )
-			} 
-			else this.cap_this[mouse.cap_end] = sig
-			if(document.releaseCapture) document.releaseCapture()
-			this.cap_this = undefined
-		}
-		// called by DOM
-		
-		this._mouseover = function( node, e) {
-			if( this.cap_this ) return
-			node.mouseover = makeMouseSignal( this, e.pageX, e.pageY )
-		}
-		
-		this._mouseout = function( node, e) {
-			if( this.cap_this ) return
-			node.mouseout = makeMouseSignal( this, e.pageX, e.pageY )
-		}    
-		
-	}).new()
-	mouse.init = 1
-
-	var key = this.key = this.extends( function(){
-		this.__onename__ = 'Key'
-		for(var k in browserKeyTable){
-			// turn it into a signal
-			var key = browserKeyTable[ k ]
-			this[ k ] = key
-			this.signal( key, 0 )
-			//this[ key ] = 0
-		}
-		this.signals( 'cmd','meta','wasd','arrows','press','key' )
-		this.cmd = 'leftmeta || rightmeta'
-		this.meta = 'leftmeta || rightmeta'
-		
-		this.wasd = ['a?-1:d?1:0','w?-1:s?1:0']
-		this.arrows = ['left?-1:right?1:0','up?-1:down?1:0']
-
-	}).new()
-	key.init = 1
-
-	window.addEventListener('resize', function(event){
-		var w = window.innerWidth
-		var h = window.innerHeight
-		screen.w = w
-		screen.h = h
-		screen.wh = [w,h]
-	});
-	
-	var screen = this.screen = this.extends( function(){
-		this.__onename__ = 'Screen'
-		this.signals('wh','w','h')
-		var w = window.innerWidth
-		var h = window.innerHeight        
-		this.w = w
-		this.h = h
-		this.wh = [w,h]
-	}).new()
-
-	this.HttpRequest = this.extends(function(){
-
-	})
+function mouse_toString(){
+	return 1
 }
 
-ONE.animframe_ = function(){
-	this.__onename__ = 'animframe'
+function makeMouseSignal( dom, x, y ){
+	var _dom = dom
+	var px = 0
+	var py = 0
+	do {
+		px += _dom.offsetLeft || 0
+		py += _dom.offsetTop  || 0
+		_dom = _dom.offsetParent
+	} while( _dom )
+	var rel = [ ]
+	var abs = [ ]
+	rel.abs = abs
+	rel.rel = rel
+	abs[0] = x
+	abs[1] = y
+	rel[0] = x - px
+	rel[1] = y - py
+	var c
+	if(c = mouse.cap_this){
+		var start = mouse.cap_start
+		rel.cap = [ abs[0] - start[0], abs[1] - start[1] ]
+	}
+	rel.toString = mouse_toString 
+	return rel
+}
 
-	var Handle = ONE.extends(function(){
-		this.__onename__ = 'to_animframe>Handle'
-		
-		this.make = function( _this, cb ){
-			var handle = this
-			this.reqframe = function( time ){
-				handle.running = false
-				cb.call( _this, time, handle )
-			}
+function makeAbsMouseSignal( dom, x, y ){
+	var pos = [x, y]
+	pos.toString = mouse_toString
+	if( dom && dom._oneNode ) pos.tgt = dom._oneNode
+	return pos
+}
+
+window.addEventListener('click', function(e){
+	var t = e.toElement || e.target
+	mouse.click = makeAbsMouseSignal( t, e.pageX, e.pageY )
+	if( !t || !t._oneNode ) return
+	t._oneNode.click = makeMouseSignal( t, e.pageX, e.pageY )
+})
+
+window.addEventListener('dblclick', function(e){
+	var t = e.toElement || e.target
+	mouse.dblclick = makeAbsMouseSignal( t, e.pageX, e.pageY )
+	if( !t || !t._oneNode ) return
+	t._oneNode.dblclk = makeMouseSignal( t, e.pageX, e.pageY )
+})
+
+window.addEventListener('mousedown', function(e){
+	var t = e.toElement || e.target
+
+	if(e.button === 0 ) mouse.left = 1
+	if(e.button === 1 ) mouse.middle = 1
+	if(e.button === 2 ) mouse.right = 1
+	mouse.isdown = makeAbsMouseSignal( t, e.pageX, e.pageY )
+	mouse.cap_canset = e.button + 1
+	if( !t || !t._oneNode ) return
+	// lets build a mouse event.
+	t._oneNode.isdown = 1
+	t._oneNode.mousedown = makeMouseSignal( t, e.pageX, e.pageY )
+	mouse.cap_canset = 0
+
+})
+
+
+window.addEventListener('mouseup', function(e){
+	if(e.button === 0 ) mouse.left = 0
+	if(e.button === 1 ) mouse.middle = 0
+	if(e.button === 2 ) mouse.right = 0
+	mouse.isdown = 0
+	
+	var t = e.toElement || e.target
+	if( mouse.cap_this && mouse.cap_btn == e.button ){
+		mouse._capEnd( e )
+	} 
+	else {
+		if( !t || !t._oneNode ) return
+		t._oneNode.isdown = 0
+		t._oneNode.mouseup = makeMouseSignal( t, e.pageX, e.pageY )
+	}
+})
+
+// Fancy mouse interpolation mousemove 
+var move_last = Date.now()
+window.addEventListener('mousemove', function(e){
+	
+	var px = e.pageX
+	var py = e.pageY
+
+	// send mouse signals
+	mouse.x = px
+	mouse.y = py
+	mouse.xy = [ px, py ]
+	
+	// used for animation time-skewing in mouse interp
+	var time = Date.now( )
+	var delta = time - move_last
+	move_last = time
+
+	var cap_this = mouse.cap_this
+	if( cap_this ){
+		mouse._capMove( e )
+		return
+	}
+
+	if( delta > 100 ) {
+		var t = e.toElement || e.target
+		if(! t || !t._oneNode) return
+		var node = t._oneNode
+		node.mousemove = makeMouseSignal( t, px, py)
+		return
+	} 
+	// interpolate all 
+	var dx = px - mouse._px
+	var dy = py - mouse._py
+	var x1 = px
+	var y1 = py
+	var dist = Math.sqrt(dx * dx + dy * dy )
+	var step = parseInt(dist / 4) // pixel stepsize
+	if( step == 0 ) step = 1
+	dx = dx / step
+	dy = dy / step
+	var last = null
+	for(var i = step - 1; i >= 0; i--){
+		var t = document.elementFromPoint(x1, y1)
+		if(last != t && t && t._oneNode){
+			last = t
+			ONE.mouseinterp = - (delta / (1000 * step)) * (step - i)
+			t._oneNode.mousemove = makeMouseSignal( t, x1, y1 )
 		}
-		
-		this.request = function(){
-			if(this.running) return
-			this.running = true
-			window.requestAnimationFrame( this.reqframe )
-		}
-	})    
+		x1 -= dx
+		y1 -= dy
+	}
+	mouse._px = px
+	mouse._py = py
+})
 
-	this.animframe = function( cb ){
-		// lets keep a global timer set?..
-		if(this._initInstance || this._classId) throw new Error("Cant set animframe on class")
-		if(! cb ) throw new Error("Null callback in animframe")
+function keyupdown_toString(){
+	return browserKeyTable[ this.code ]
+}
 
-		return Handle.new( null, this, this.__wrapper__ ? this.__wrapper__( cb )() : cb )
+function makeKeyUpDownSignal( repeat, code ){
+	return {
+		repeat: repeat,
+		code: code,
+		toString: keyupdown_toString
 	}
 }
+function press_toString(){
+	return String.fromCharCode( this.code )
+}
+
+window.addEventListener('keydown', function(e){
+	var t = e.toElement || e.target
+	var k = browserKeyTable[ e.keyCode ]
+	if( k ) key[ k ] = 1
+	var sig = makeKeyUpDownSignal( e.repeat, e.keyCode )
+	key.key = sig
+	if( !t || !t._oneNode ) return
+	t._oneNode.keydown = sig
+})
+
+window.addEventListener('keyup', function(e){
+	var t = e.toElement || e.target
+	var k = browserKeyTable[ e.keyCode ]
+	if( k ) key[ k ] = 0
+	var sig = makeKeyUpDownSignal( e.repeat, e.keyCode )
+
+	if( !t || !t._oneNode ) return
+	t._oneNode.keyup = sig
+})
+
+window.addEventListener('keypress', function(e){
+	var t = e.toElement || e.target
+	var sig = {
+		repeat: e.repeat,
+		code: e.charCode,
+		toString: press_toString
+	}
+	key.press = sig
+	if( !t || !t._oneNode ) return
+	t._oneNode.keypress = sig
+})
+
+Mouse extends Base{
+	signal x, y, xy, isdown, left, right, middle
+	
+	capture = function( obj, move, end ){
+		if( cap_this && cap_end ){
+			_capEnd( {pageX:cap_start[0],pageY:cap_start[1]})
+		}
+		if( cap_canset ){
+			cap_btn = cap_canset - 1
+			cap_this = obj
+			cap_move = move
+			cap_end = end
+			cap_start = xy
+			if(document.setCapture) document.setCapture()
+		}
+	}
+	
+	_capMove = function( e ){
+		var sig = makeMouseSignal( cap_dom, e.pageX, e.pageY )
+		
+		if( typeof cap_move == 'function'){
+			cap_move.call( cap_this, sig )
+		}
+		else cap_this[cap_move] = sig
+	}
+	
+	_capEnd = function( e ){
+		var sig = makeMouseSignal( cap_dom, e.pageX, e.pageY )
+		if( typeof cap_end == 'function'){
+			cap_end.call( mouse.cap_this, sig )
+		} 
+		else cap_this[mouse.cap_end] = sig
+		if(document.releaseCapture) document.releaseCapture()
+		cap_this = undefined
+	}
+	// called by DOM
+	
+	_mouseover = function( node, e) {
+		if( cap_this ) return
+		node.mouseover = makeMouseSignal( this, e.pageX, e.pageY )
+	}
+	
+	_mouseout = function( node, e) {
+		if( cap_this ) return
+		node.mouseout = makeMouseSignal( this, e.pageX, e.pageY )
+	}    
+}
+mouse = this.mouse = Mouse.new()
+mouse.bind_signals()
+
+Key extends Base{
+
+	for(var k in browserKeyTable){
+		// turn it into a signal
+		var tab = browserKeyTable[ k ]
+		this[ k ] = tab
+		this.signal( tab, 0 )
+	}
+	signal press, key
+	signal cmd =: leftmeta || rightmeta
+	signal meta =: leftmeta || rightmeta
+	signal wasd = [: a?-1:d?1:0, : w?-1:s?1:0 ]
+	signal arrows = [: left?-1:right?1:0, : up?-1:down?1:0]
+}
+key = this.key = Key.new()
+key.bind_signals()
+
+window.addEventListener('resize', function(event){
+	var w = window.innerWidth
+	var h = window.innerHeight
+	screen.w = w
+	screen.h = h
+	screen.wh = [w,h]
+});
+
+Screen extends Base{
+	var _w = window.innerWidth
+	var _h = window.innerHeight        
+	signal w = _w
+	signal h = _h
+	signal wh = [_w,_h]
+}
+var screen = this.screen = Screen.new()
+screen.bind_signals()
+
+
+Http extends Base{
+
+	get = url -> promise{
+		var req = new XMLHttpRequest()
+		req.open("GET", url, true)
+		req.onreadystatechange = ->{
+			if(req.readyState == 4){
+				if(req.status != 200) reject(req)
+				else resolve( req.responseText )
+			}
+		}
+		req.send()
+	}
+}
+

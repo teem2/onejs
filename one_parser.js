@@ -255,43 +255,45 @@ ONE.parser_strict_ = function(){
 	this._new = {keyword: "new", beforeExpr: true}
 	this._this = {keyword: "this"}
 
-	// glsl keywords
-	this._float = {keyword: "float", isType:1}
-	this._double = {keyword: "double", isType:1}
-	this._bool = {keyword:"bool", isType:1}
-	this._int = {keyword:"int", isType:1}
-	this._uint = {keyword:"uint"}
-
-	this._bvec2 = {keyword:"bvec2", isType:1}
-	this._bvec3 = {keyword:"bvec3", isType:1}
-	this._bvec4 = {keyword:"bvec4", isType:1}
-	this._ivec2 = {keyword:"ivec2", isType:1}
-	this._ivec3 = {keyword:"ivec3", isType:1}
-	this._ivec4 = {keyword:"ivec4", isType:1}
-	this._uvec2 = {keyword:"uvec2", isType:1}
-	this._uvec3 = {keyword:"uvec3", isType:1}
-	this._uvec4 = {keyword:"uvec4", isType:1}
-	this._dvec2 = {keyword:"dvec2", isType:1}
-	this._dvec3 = {keyword:"dvec3", isType:1}
-	this._dvec4 = {keyword:"dvec4", isType:1}
-	this._vec2 = {keyword:"vec2", isType:1}
-	this._vec3 = {keyword:"vec3", isType:1}
-	this._vec4 = {keyword:"vec4", isType:1}
-	this._mat2x2 = {keyword:"mat2x2", isType:1}
-	this._mat2x3 = {keyword:"mat2x3", isType:1}
-	this._mat2x4 = {keyword:"mat2x4", isType:1}
-	this._mat3x2 = {keyword:"mat3x2", isType:1}
-	this._mat3x3 = {keyword:"mat3x3", isType:1}
-	this._mat3x4 = {keyword:"mat3x4", isType:1}
-	this._mat4x2 = {keyword:"mat4x2", isType:1}
-	this._mat4x3 = {keyword:"mat4x3", isType:1}
-	this._mat4x4 = {keyword:"mat4x4", isType:1}
-	this._mat2 = {keyword:"mat2", isType:1}
-	this._mat3 = {keyword:"mat3", isType:1}
-	this._mat4 = {keyword:"mat4", isType:1}
-
-	// struct
-	this._struct = {keyword:"struct", isType:1}
+	// allow for type defs
+	this.typeKeywords = {
+		float:1,
+		double:1,
+		bool:1,
+		int:1,
+		uint:1,
+		bvec2:1,
+		bvec3:1,
+		bvec4:1,
+		ivec2:1,
+		ivec3:1,
+		ivec4:1,
+		uvec2:1,
+		uvec3:1,
+		uvec4:1,
+		dvec2:1,
+		dvec3:1,
+		dvec4:1,
+		vec2:1,
+		vec3:1,
+		vec4:1,
+		mat2x2:1,
+		mat2x3:1,
+		mat2x4:1,
+		mat3x2:1,
+		mat3x3:1,
+		mat3x4:1,
+		mat4x2:1,
+		mat4x3:1,
+		mat4x4:1,
+		mat2:1,
+		mat3:1,
+		mat4:1,
+		signal:1,
+		struct:1,
+		get:1,
+		set:1
+	}
 
 	// class extends 
 	this._extends = {keyword:"extends"}
@@ -332,6 +334,7 @@ ONE.parser_strict_ = function(){
 	this._question = {type: "?", beforeExpr: true}
 	this._thinArrow = {type:"->"}
 	this._fatArrow = {type:"=>"}
+	this._wavyArrow = {type:"~>"}
 	
 	// Operators. These carry several kinds of properties to help the
 	// parser use them properly (the presence of these properties is
@@ -353,7 +356,7 @@ ONE.parser_strict_ = function(){
 	this._eq = {isAssign: true, beforeExpr: true}
 	this._assign = {isAssign: true, binop:0, beforeExpr: true}
 	this._incDec = {postfix: true, prefix: true, isUpdate: true}
-	this._prefix = {prefix: true, beforeExpr: true}
+	this._notxor = {prefix: true, postfix:true, beforeExpr: true}
 	this._logicalOR = {binop: 1, beforeExpr: true}
 	this._logicalAND = {binop: 2, beforeExpr: true}
 	this._bitwiseOR = {binop: 3, beforeExpr: true}
@@ -515,6 +518,7 @@ ONE.parser_strict_ = function(){
 	this.finishToken = function(type, val) {
 		this.tokEnd = this.tokPos
 		this.tokType = type
+		this.tokIsType = this.typeKeywords[val]
 		this.skipSpace()
 		this.tokVal = val
 		this.tokRegexpAllowed = type.beforeExpr
@@ -682,7 +686,7 @@ ONE.parser_strict_ = function(){
 	this.readToken_eq_excl = function(code) { // '=!'
 		var next = this.input.charCodeAt(this.tokPos + 1)
 		if (next === 61) return this.finishOp(this._equality, this.input.charCodeAt(this.tokPos + 2) === 61 ? 3 : 2)
-		return this.finishOp(code === 61 ? this._eq : this._prefix, 1)
+		return this.finishOp(code === 61 ? this._eq : this._notxor, 1)
 	}
 
 	this.getTokenFromCode = function(code) {
@@ -758,7 +762,13 @@ ONE.parser_strict_ = function(){
 			return this.readToken_eq_excl(code)
 
 		case 126: // '~'
-			return this.finishOp(this._prefix, 1)
+			var next = this.input.charCodeAt(this.tokPos + 1)
+			if( next == 62 ){
+
+				this.tokPos += 2
+				return this.finishToken(this._wavyArrow, '~>')
+			}		
+			return this.finishOp(this._notxor, 1)
 		}
 
 		return false
@@ -994,12 +1004,6 @@ ONE.parser_strict_ = function(){
 			first = false
 		}
 		var ret = this.containsEsc ? word : this.input.slice(start, this.tokPos)
-		
-		if(start != this.tokPos && (ch == 126 || ch == 33 ) ){ // add the flag
-			if(this.containsFlag ) throw new Error("Cannot have # @ prefix and ! ~ postfix")
-			this.containsFlag = ch
-			++this.tokPos
-		}
 
 		return ret
 	}
@@ -1246,6 +1250,7 @@ ONE.parser_strict_ = function(){
 		for (;;) {
 			if(this.tokType == this._parenR) break
 			if(this.tokType == this._dot) break
+			if(this.tokType !== this._name)break
 			var def = this.startNode()
 			def.id = this.parseIdent()
 			if (this.strict && this.isStrictBadIdWord(def.id.name))
@@ -1262,16 +1267,17 @@ ONE.parser_strict_ = function(){
 
 	this.parseTypeVar = function( noIn, noSemi ) {
 
-		var kind = this.tokType
+		var kind = this.tokVal
 		var kind_node = this.startNode()
-		kind_node.name = kind.keyword
+		kind_node.name = kind
 		var node = this.startNode()
 		var type = 'TypeVar'
 		this.next()
+
 		node.kind = this.finishNode(kind_node, 'Type')
 
 		// if we are a struct, we can this.eat a struct identifier or a {
-		if( kind === this._struct ){
+		if( kind === "struct"){
 			if( this.tokType !== this._name ) this.unexpected()
 			node.id = this.parseIdent()
 			if( this.tokType === this._braceL ){
@@ -1281,9 +1287,12 @@ ONE.parser_strict_ = function(){
 			type = "Struct"
 		}
 
-		this.parseDims(node)
-	 
+		//this.parseDims(node)
 		node.defs = this.parseDefs( noIn, node )
+
+		if(node.defs.length == 0){ // someone is using our type as a normal value, fine.
+
+		}
 
 		if(!noSemi) this.semicolon()
 		return this.finishNode(node, type)
@@ -1300,7 +1309,13 @@ ONE.parser_strict_ = function(){
 		if (this.tokType === this._slash || this.tokType === this._assign && this.tokVal == "/=")
 			this.readToken(true)
 
-		if( this.tokType.isType ) return this.parseTypeVar()
+		if( this.tokIsType ){
+			// allow the types to fall back to being an identifier if they are not used
+			// as a type definition
+			if(this.isIdentifierStart( this.input.charCodeAt(this.tokPos) ) ){
+				return this.parseTypeVar()
+			}
+		}
 
 		var starttype = this.tokType, node = this.startNode()
 
@@ -1814,29 +1829,44 @@ ONE.parser_strict_ = function(){
 			if( this.lastSkippedNewlines ) return base
 			var node = this.startNodeFrom(base)
 			node.call = base
-			node.body = this.parseBlock(true)
-			return this.finishNode(node, "Callback")
-		} else if( this.tokType == this._thinArrow ){
-			// you cant separate an arrow from its args with a this.newline
-			if( this.lastSkippedNewlines ) return base
-			this.next()
-			var node = this.startNodeFrom(base)
 			node.arrow = '->'
-			return this.parseArrowFunction(node, base)
-		} else if( this.tokType == this._fatArrow ){
+			node.body = this.parseBlock(true)
+			
+			return this.parseSubscripts(this.finishNode(node, "Callback"), noCalls)
+
+		} else if( this.tokType == this._thinArrow || this.tokType == this._fatArrow || this.tokType == this._wavyArrow ){
 			// you cant separate an arrow from its args with a this.newline
 			if( this.lastSkippedNewlines ) return base
-			this.next()
 			var node = this.startNodeFrom(base)
-			node.arrow = '=>'
-			return this.parseArrowFunction( node, base )
+			node.arrow = this.tokType.type
+			this.next()
+			return this.parseArrowFunction(node, base)
 		} else if( this.tokType == this._do ){
 			// do cant be on the next line or it can be a do while
-			if( this.lastSkippedNewlines )return base
-			this.next()
+			if( this.lastSkippedNewlines && this.input.charCodeAt(this.tokPos) == 123)return base
+			// if we are a catch, we must scan up to
+			// the last do
 			var node = this.startNodeFrom(base)
 			node.call = base
+			node.kind = this.tokVal
+			this.next()
 			node.arg = this.parseExpression()
+			// we can parse other _do's or catch's
+			if(this.eat(this._catch)){
+				node.catch = this.parseExpression()
+			}
+
+			if(this.tokType == this._name && this.tokVal == 'then'){
+				node = this.finishNode( node, 'Do')
+				var ident = this.parseIdent()
+				if(this.tokType == this._parenL){
+					this.eat(this._parenL)
+					this.expect(this._parenR)
+				}
+				node.then = this.parseSubscripts(ident, noCalls)
+				return node
+				//eat(this._ident)
+			}
 			return this.finishNode( node, 'Do')
 		} else if (!noCalls && this.tokType == this._parenL) {
 			// we dont do calls on the next line. Never seen one that wasnt a bug. Just say no.
@@ -1886,7 +1916,7 @@ ONE.parser_strict_ = function(){
 
 			if( this.tokType == this._parenR){// this.empty parens
 				this.eat(this._parenR)
-				if( this.tokType !== this._thinArrow && this.tokType !== this._fatArrow ) this.unexpected()
+				if( this.tokType !== this._thinArrow && this.tokType !== this._fatArrow  && this.tokType !== this._wavyArrow) this.unexpected()
 				var val = this.startNode()
 				val.start = tokStart1
 				return this.finishNode(val, "Empty" )
@@ -1916,17 +1946,12 @@ ONE.parser_strict_ = function(){
 			return this.parseNew()
 		
 		case this._thinArrow:
-			var node = this.startNode()
-			node.arrow = '->'
-			this.next()
-			return this.parseArrowFunction(node)
-		
 		case this._fatArrow:
+		case this._wavyArrow:
 			var node = this.startNode()
-			node.arrow = '=>'
+			node.arrow = this.tokType.type
 			this.next()
 			return this.parseArrowFunction(node)
-
 		case this._dot:
 			return this.parseDots()
 
@@ -2141,6 +2166,7 @@ ONE.parser_strict_ = function(){
 
 	this.parseIdent = function(liberal) {
 		var node = this.startNode()
+		if(this.tokIsType) node.isType = this.tokVal
 		if (liberal && this.forbidReserved == "everywhere") liberal = false
 		if (this.tokType === this._name) {
 			if (!liberal &&

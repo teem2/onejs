@@ -2,7 +2,7 @@ Interval extends Base{
 
 	make = ( _time, cb )->{
 		time = _time
-		interval = ->{
+		interval = =>{
 			cb.call( __maker__, time, this )
 		}
 	}
@@ -11,6 +11,7 @@ Interval extends Base{
 		if(isClass()) return this.new(_time, cb).start()
 		if(running) return
 		running = setInterval( this.interval, this.time )
+		return this
 	}
 		
 	stop = ->{
@@ -33,6 +34,7 @@ Timeout extends Base{
 		if(isClass()) return this.new(_time, cb).start()
 		if(running) return
 		running = setTimeout( timeout, time )
+		return this
 	}
 		
 	stop = ->{

@@ -82,28 +82,25 @@ ONE.ast_ = function(){
 		js.line = 0
 		js.comments = comments
 		// if passing a function we return that
-		if(ast.type == 'Arrow' || ast.type == 'Function'){
+		if(ast.type == 'Function'){
 			var steps = ast.body.steps
 
 			if(steps && steps[0] && steps[0].expr && steps[0].expr.flag == 35){
-				var dump = 'js'///steps[0].expr.name
+				var dump = steps[0].expr.name
 				steps.splice(0,1)
-				if(dump.indexOf('ast')!= -1)
-					ONE.out( ast.toDump() )
-			}
-			// name anonmous function with a filename if possible
-			var nametag
-			if(filename) nametag = 'file__'+filename.replace(/[\.\/]/g,'_')
-			var code = 'return ' + js.Function( ast, 0, nametag )
-			if( dump ){
+				if(dump.indexOf('ast')!= -1) ONE.out( ast.toDump() )
 				if(dump.indexOf('code')!=-1){
 					var code = this.AST.code_serialize
 					code.comments = comments
 					ONE.out( code.Function(ast) )
 				}
-				else if(dump.indexOf('js')!=-1)
-					ONE.out( code )
 			}
+			// name anonmous function with a filename if possible
+			var nametag
+			if(filename) nametag = 'file__'+filename.replace(/[\.\/]/g,'_')
+			var code = 'return ' + js.Function( ast, false, nametag )
+			if(dump && dump.indexOf('js')!=-1) ONE.out( code )
+
 			try{
 				var fn = Function.call(null, code)()
 			} catch(e){
@@ -195,7 +192,7 @@ ONE.ast_ = function(){
 			Program:{ steps:2 },
 			Empty:{},
 
-			Id: { name:0, flag:0 },
+			Id: { name:0, flag:0, isType:0 },
 			Type: { name:0 },
 			Value: { value:0, raw:0, kind:0 },
 			This: { },
@@ -250,8 +247,9 @@ ONE.ast_ = function(){
 			Rest: { id:1, dots:0 },
 			Path: { dots:0, op:0, id:1 },
 			Extends: { id:1, extend:1 },
-			Do: { call:1, arg:1 },
-			Callback: { call:1, body:1 },
+			Do: { call:1, arg:1, catch:1, then:1, kind:0 },
+			Then: { name:1, do:1 },
+			Callback: { call:1, body:1, arrow:0 },
 
 			Debugger: { },
 			With: { object:1, body:1 }
@@ -400,11 +398,11 @@ ONE.ast_ = function(){
 			line:0,
 			array_fix:0, //!TODO do this nicely
 
-			// flag can be -1 0 or 1 meaning 'need parenthes, nothing, is statement'
-			expand:function( n, term, flag ){ // recursive expansion
+			expand:function( n, parent, parens, term ){ // recursive expansion
 				if( !n || !n.type ) return ''
+				n.parent = parent
 				n.genstart = this.line
-				var ret = this[ n.type ]( n, flag )
+				var ret = this[ n.type ]( n, parens )
 				n.genend = this.line
 				// do some comments restoration
 				var comments = n.comments
@@ -440,13 +438,13 @@ ONE.ast_ = function(){
 				}
 				return this.newline
 			},
-			block:function( n, noindent ){ // term split array
+			block:function( n, parent, noindent ){ // term split array
 				var old_depth = this.depth
 				if(!noindent) this.depth += this.indent
 				var out = ''
 				for( var i = 0; i < n.length; i++ ){
 					var b = n[ i ]
-					var ret = this.expand( b, null, 1 ) 
+					var ret = this.expand( b, parent )
 					if(ret[0] == '(' || ret[0] == '[') out += this.depth + this.semi + ret
 					else out += this.depth + ret
 					var ch = out[out.length - 1]
@@ -458,17 +456,17 @@ ONE.ast_ = function(){
 				this.depth = old_depth
 				return out
 			},
-			flat:function( n ){
+			flat:function( n, parent ){
 				if(n.length == 0) return ''
 				var out = ''
 				var len = n.length
 				for( var i = 0; i < len; i++ ){
 					if(i) out += ',' + this.space
-					out += this.expand( n[ i ] )
+					out += this.expand( n[ i ], parent )
 				}
 				return out
 			},			
-			list:function( n ){
+			list:function( n, parent ){
 				if(n.length == 0) return ''
 				//var old_depth = this.depth
 				//this.depth += this.indent
@@ -476,14 +474,14 @@ ONE.ast_ = function(){
 				var len = n.length
 				var term = ',' + this.space
 				for( var i = 0; i < len; i++ ){
-					out += this.expand( n[ i ], i<len-1?term:'' )
+					out += this.expand( n[ i ], parent, false, i<len-1?term:'' )
 					if( out[ out.length - 1 ] == '\n' ) out += i == len - 1? old_depth:this.depth
 				}
 				//this.depth = old_depth
 				return out
 			},
 			Program: function( n ){ 
-				return this.block( n.steps, true )
+				return this.block( n.steps, n, true )
 			},
 			Empty: function( n ){ 
 				return ''
@@ -515,7 +513,7 @@ ONE.ast_ = function(){
 				if(this.array_fix++>0) this.comments = 0
 				var ret = '['+ 
 					(n.comments&&this.comments?this.comments_flush( n.comments )+this.depth+(n.elems.length?this.indent:''):'') + 
-					this.list( n.elems ) + 
+					this.list( n.elems, n ) + 
 				']' 
 				this.array_fix--
 				this.comments = old_cmt
@@ -539,7 +537,7 @@ ONE.ast_ = function(){
 					if( i ) out += ','
 					if( ch == '\n' ) out += this.depth
 					else if( ch == '}' ) out +=  this.newline + this.depth
-					out += (k[i].key.name || k[i].key.raw) + ':' + this.expand( k[i].value )
+					out += (k[i].key.name || k[i].key.raw) + ':' + this.expand( k[i].value, n )
 				}
 				var ch = out[ out.length - 1 ]
 				if( ch == '\n') out += old_depth +'}'
@@ -554,111 +552,111 @@ ONE.ast_ = function(){
 				return out
 			},
 			Index: function( n ){
-				return this.expand( n.object, null, -1 ) + '[' + this.expand( n.index ) + ']'
+				return this.expand( n.object, n, true ) + '[' + this.expand( n.index, n ) + ']'
 			},
 			Key: function( n ){
-				return this.expand( n.object, null, -1 ) + '.' + this.expand( n.key )
+				return this.expand( n.object, n, true ) + '.' + this.expand( n.key, n )
 			},
 
 			Block: function( n ){
-				var ret = '{' + this.comments_or_newline( n ) + this.block( n.steps ) + this.depth + '}'
+				var ret = '{' + this.comments_or_newline( n ) + this.block( n.steps, n ) + this.depth + '}'
 				this.cignore =1 
 				return ret
 			},
-			Expr: function( n, flag ){ 
-				return this.expand( n.expr, null, flag )
+			Expr: function( n, parens ){
+				return this.expand( n.expr, n, parens )
 			},
-			List: function( n, flag ){
-				if( flag>0 ) return this.list( n.items )
-				return '('+this.list( n.items ) +')'
+			List: function( n, parens ){
+				if( parens ) '('+this.list( n.items, n ) +')'
+				return this.list( n.items, n )
 			},
 
 			Break: function( n ){ 
-				return 'break'+(n.label?' '+this.expand( n.label ):'')
+				return 'break'+(n.label?' '+this.expand( n.label, n ):'')
 			},
 			Continue: function( n ){
-				return 'continue'+(n.label?' '+this.expand( n.label ):'')
+				return 'continue'+(n.label?' '+this.expand( n.label, n ):'')
 			},
 			Label: function( n ){
-				return this.expand( n.label )+':'+this.expand( n.body )
+				return this.expand( n.label, n )+':'+this.expand( n.body, n )
 			},
 
 			If: function( n ) {
 				var out = 'if('
-				out += this.expand( n.test )
+				out += this.expand( n.test, n )
 				if( out[out.length - 1] == '\n') out += this.depth + this.indent
-				out += ')' + this.space + this.expand( n.then, null, true )
+				out += ')' + this.space + this.expand( n.then, n, true )
 				if(n.else){
 					var ch = out[out.length - 1]
 					if( ch !== '\n' ) out += this.newline
-					out += this.depth + 'else ' + this.expand( n.else, null, true )
+					out += this.depth + 'else ' + this.expand( n.else, n, true )
 				}
 				return out
 			},
 			Switch: function( n ){
 				var old_cmt = this.comments
 				this.comments = 0 // dont allow comments in the switch on
-				var out = 'switch('+this.expand( n.on )+'){'
+				var out = 'switch('+this.expand( n.on, n )+'){'
 				this.comments = old_cmt
 				out += this.comments_or_newline( n.on )
 				var old = this.depth
 				this.depth += this.indent				
 				var cases = n.cases
-				if(cases) for( var i = 0; i < cases.length; i++ ) out += this.depth + this.expand( cases[ i ] )
+				if(cases) for( var i = 0; i < cases.length; i++ ) out += this.depth + this.expand( cases[ i ], n )
 				this.depth = old
 				out += this.depth + '}'
 				return out
 			},
 			Case: function( n ){
-				if( !n.test) return 'default:'+( n.then.length ? this.newline+this.block( n.then ) : this.newline )
+				if( !n.test) return 'default:'+( n.then.length ? this.newline+this.block( n.then, n ) : this.newline )
 				var out = 'case '
 				var old_cmt = this.comments
 				this.comments = 0
-				out += this.expand( n.test ) + ':' 
+				out += this.expand( n.test, n ) + ':' 
 				this.comments = old_cmt
 				out += this.comments_or_newline(n.test)
-				if (n.then.length) out += this.block( n.then )
+				if (n.then.length) out += this.block( n.then, n )
 				return out
 			},
 
 			Throw: function( n ){
-				return 'throw ' + this.expand( n.arg )
+				return 'throw ' + this.expand( n.arg, n )
 			},
 			Try: function( n ){
-				return 'try' + this.expand( n.try ) +
-						(n.catch?'catch('+this.expand( n.arg )+')'+this.expand( n.catch ):'')+
-						(n.finally?'finally'+this.expand( n.finally ):'')
+				return 'try' + this.expand( n.try, n ) +
+						(n.catch?'catch('+this.expand( n.arg, n )+')'+this.expand( n.catch, n ):'')+
+						(n.finally?'finally'+this.expand( n.finally, n ):'')
 			},
 
 			While: function( n ){
-				return 'while(' + this.expand( n.test ) + ')' + 
-					this.expand( n.loop )
+				return 'while(' + this.expand( n.test, n ) + ')' + 
+					this.expand( n.loop, n )
 			},
 			DoWhile: function( n ){
-				return 'do' + this.expand( n.loop ) + 
-					'while(' + this.expand( n.test ) + ')'
+				return 'do' + this.expand( n.loop, n ) + 
+					'while(' + this.expand( n.test, n ) + ')'
 			},
 			For: function( n ){
-				return 'for(' + this.expand( n.init )+';'+
-						this.expand( n.test ) + ';' +
-						this.expand( n.update ) + ')' + 
-						this.expand( n.loop )
+				return 'for(' + this.expand( n.init, n )+';'+
+						this.expand( n.test, n ) + ';' +
+						this.expand( n.update, n ) + ')' + 
+						this.expand( n.loop, n )
 			},
 			ForIn: function( n ){
-				return 'for(' + this.expand( n.left ) + ' in ' +
-					this.expand( n.right ) + ')' + 
-					this.expand( n.loop )
+				return 'for(' + this.expand( n.left, n ) + ' in ' +
+					this.expand( n.right, n ) + ')' + 
+					this.expand( n.loop, n )
 			},
 			ForOf: function( n ){
-				return 'for(' + this.expand( n.left ) + ' of ' +
-					this.expand( n.right ) + ')' + 
-					this.expand( n.loop )
+				return 'for(' + this.expand( n.left, n ) + ' of ' +
+					this.expand( n.right, n ) + ')' + 
+					this.expand( n.loop, n )
 			},
 			ForTo: function( n ){
-				return 'for(' + this.expand( n.left ) + ' to ' +
-					this.expand( n.right ) + 
-					(n.in?' in ' + this.expand( n.in ):'') + ')' + 
-					this.expand( n.loop )
+				return 'for(' + this.expand( n.left, n ) + ' to ' +
+					this.expand( n.right, n ) + 
+					(n.in?' in ' + this.expand( n.in, n ):'') + ')' + 
+					this.expand( n.loop, n )
 			},
 
 			Var: function( n ){
@@ -668,140 +666,153 @@ ONE.ast_ = function(){
 				return 'const ' + this.flat( n.defs )
 			},
 			TypeVar: function( n ){
-				return this.expand(n.kind) + 
+				return this.expand(n.kind, n) + 
 					( n.dim !== undefined ? '[' + 
-						( n.dim ? this.expand(n.dim):'') + 
+						( n.dim ? this.expand(n.dim, n):'') + 
 						']': '') + ' ' + 
-					this.flat( n.defs )
+					this.flat( n.defs, n )
 			},
 			Def: function( n ){
-				return this.expand( n.id ) + 
+				return this.expand( n.id, n ) + 
 					( n.dim !== undefined ? '[' + 
-						(n.dim?this.expand(n.dim):'') + 
+						(n.dim?this.expand(n.dim, n):'') + 
 						']':'') +
-					(n.init ? this.space + '=' + this.space + this.expand(n.init) : '')
+					(n.init ? this.space + '=' + this.space + this.expand(n.init, n) : '')
 			},
 			Struct: function( n ){
-				return 'struct ' + this.expand( n.id ) + 
-					(n.struct ? this.expand( n.struct): ' '+this.list( n. defs ) )
+				return 'struct ' + this.expand( n.id, n) + 
+					(n.struct ? this.expand( n.struct, n): ' '+this.list( n.defs, n ) )
 			},
 
-			Function: function( n, flag ){
+			Function: function( n, parens ){
 				if(n.arrow){
 					var arrow = n.arrow
 					// if an arrow has just one Id as arg leave off ( )
 					if( !n.rest && n.params && n.params.length == 1 && !n.params[0].init && n.params[0].id.type == 'Id' ){
-						return this.expand( n.params[0].id ) + arrow + this.expand( n.body )
+						return this.expand( n.params[0].id, n ) + arrow + this.expand( n.body, n )
 					}
-					var ret = '(' +(n.params?this.list( n.params ):'') + (n.rest ? ',' + this.space + this.expand( n.rest ) : '' )+ ')' +
-						arrow + this.expand( n.body )
+					var ret = '(' +(n.params?this.list( n.params, n ):'') + (n.rest ? ',' + this.space + this.expand( n.rest, n ) : '' )+ ')' +
+						arrow + this.expand( n.body, n )
 					this.cignore = 1
 					return ret
 				}
-				var ret = 'function'+(n.id?' '+this.expand( n.id ):'') +
-							'('+this.list( n.params )+(n.rest ? ',' + this.expand(n.rest) : '' ) + ')' +
-							this.expand( n.body )
+				var ret = 'function'+(n.id?' '+this.expand( n.id, n ):'') +
+							'('+this.list( n.params, n )+(n.rest ? ',' + this.expand(n.rest, n) : '' ) + ')' +
+							this.expand( n.body, n )
 				this.cignore = 1
-				if( flag < 0) return '(' +ret + ')'
+				if( parens ) return '(' +ret + ')'
 				return ret
 			},
 			Return: function( n ){
-				return 'return' + (n.arg ? ' ' + this.expand( n.arg ):'')
+				return 'return' + (n.arg ? ' ' + this.expand( n.arg, n ):'')
 			},
-
 			Unary: function( n ){
-				if( n.prefix )return n.op + this.space + this.expand( n.arg )
-				return this.expand ( n.arg ) + n.op
+				if( n.prefix )return n.op + this.space + this.expand( n.arg, n )
+				return this.expand ( n.arg, n ) + n.op
 			},
-			Binary: function( n, flag ){
+			Binary: function( n, parens ){
 				var ret
 				if( n.left.op && n.left.prio < n.prio ){
-					ret = '(' + this.expand( n.left ) + ')' + this.space + n.op + this.space + this.expand( n.right )
+					ret = '(' + this.expand( n.left, n ) + ')' + this.space + n.op + this.space + this.expand( n.right, n )
 				} 
 				else {
-					ret = this.expand( n.left, this.space + n.op )
+					ret = this.expand( n.left, n, false, this.space + n.op )
 					if(ret[ ret.length - 1 ] == '\n') ret += this.indent + this.depth
-					ret += this.space + this.expand( n.right )
+					ret += this.space + this.expand( n.right, n )
 				}
-				if( flag < 0 ) return '(' + ret + ')'
+				if( parens ) return '(' + ret + ')'
 				return ret
 			},
-			Logic: function( n, flag ){
+			Logic: function( n, parens ){
 				var ret
 				if( n.left.op && n.left.prio < n.prio ){
-					ret = '(' + this.expand( n.left ) + ')' + this.space + n.op + this.space + this.expand( n.right )
+					ret = '(' + this.expand( n.left, n ) + ')' + this.space + n.op + this.space + this.expand( n.right, n )
 				} 
 				else {
-					ret = this.expand( n.left, this.space + n.op )
+					ret = this.expand( n.left, n, false, this.space + n.op )
 					if(ret[ ret.length - 1 ] == '\n') ret += this.indent + this.depth
-					ret += this.space + this.expand( n.right )
+					ret += this.space + this.expand( n.right, n )
 				}
-				if( flag < 0 ) return '(' + ret + ')'
+				if( parens ) return '(' + ret + ')'
 				return ret
 			},
-			Assign: function( n, flag ){
+			Assign: function( n, parens ){
 				var ret
 				if( n.left.op && n.left.prio < n.prio ){
-					ret = '(' + this.expand( n.left ) + ')' + this.space + n.op + this.space + this.expand( n.right )
+					ret = '(' + this.expand( n.left, n ) + ')' + this.space + n.op + this.space + this.expand( n.right, n )
 				} 
 				else {
-					ret = this.expand( n.left, this.space + n.op )
+					ret = this.expand( n.left, n, false, this.space + n.op )
 					if(ret[ ret.length - 1 ] == '\n') ret += this.indent + this.depth
-					ret += this.space + this.expand( n.right )
+					ret += this.space + this.expand( n.right, n )
 				}
-				if( flag < 0 ) return '(' + ret + ')'
+				if( parens ) return '(' + ret + ')'
 				return ret
 
 			},
-			Update: function( n, flag ){
+			Update: function( n, parens ){
 				var ret 
-				if( n.prefix ) ret = n.op + this.expand( n.arg )
-				else ret = this.expand ( n.arg ) + n.op
-				if( flag < 0 ) return '(' + ret + ')'
+				if( n.prefix ) ret = n.op + this.expand( n.arg, n )
+				else ret = this.expand ( n.arg, n ) + n.op
+				if( parens ) return '(' + ret + ')'
 				return ret
 			},
 			Condition: function( n ){
-				return this.expand( n.test )+ this.space +'?'+ this.space +this.expand( n.then )+ this.space +':'+ this.space +this.expand( n.else )
+				return this.expand( n.test, n )+ this.space +'?'+ this.space +this.expand( n.then, n )+ this.space +':'+ this.space +this.expand( n.else, n )
 			},
 
 			New: function( n ){
-				return 'new ' + this.expand( n.fn, null, -1 ) + '(' + this.list( n.args ) + ')'
+				return 'new ' + this.expand( n.fn, n, true ) + '(' + this.list( n.args, n ) + ')'
 			},
 			Call: function( n ){
-				return this.expand( n.fn, null, -1 ) + '(' + this.list( n.args ) + ')'
+				return this.expand( n.fn, n, true ) + '(' + this.list( n.args, n ) + ')'
 			},
 
-			Quote: function( n, flag ){
-				var ret = ':' + this.expand( n.quote )
-				if( flag < 0) return '(' +ret + ')'
+			Quote: function( n, parens ){
+				var ret = ':' + this.expand( n.quote, n )
+				if( parens ) return '(' +ret + ')'
 				return ret
 			},
 			Rest: function( n ){
 				var out = ''
 				for(var i = 0;i< n.dots;i++) out += '.'
-				out += this.expand( n.id )
+				out += this.expand( n.id, n )
 				return out
 			},
 			Path: function( n ){
 				var out = ''
 				for(var i = 0;i< n.dots;i++) out += '.'
-				out += n.op + this.expand( n.id )
+				out += n.op + this.expand( n.id, n )
 				return out
 			},
 			Extends: function( n ){
-				return this.expand( n.id ) + ' extends '+this.expand( n.extend )
+				return this.expand( n.id, n ) + ' extends '+this.expand( n.extend, n )
 			},
 			Do: function( n ){
-				return this.expand( n.call ) + ' do ' + this.expand( n.arg )
+				var ret = ''
+				ret += this.expand( n.call, n ) 
+				if(ret[ ret.length -1 ] == '\n') ret += this.depth + 'do '
+				else ret += ' do '
+				ret += this.expand( n.arg, n )
+				if( n.catch ){
+					if( ret[ ret.length -1 ] == '\n') ret += this.depth
+					ret += 'catch ' + this.expand( n.catch )
+				}
+				if( n.then ){
+					if(ret[ ret.length - 1] == '}') ret += this.newline + this.depth
+					if(ret[ ret.length -1 ] == '\n') ret += this.depth
+					ret += this.expand( n.then )
+				}
+				return ret
 			},
 			Callback: function( n ){
-				return this.expand( n.call ) + this.expand( n.body )
+				return this.expand( n.call, n ) + this.expand( n.body, n )
 			},
 			Debugger: function( n ){
 				return 'debugger'
 			},
 			With: function( n ){
-				return 'with(' + this.expand( n.object ) + ')' + this.expand( n.body )
+				return 'with(' + this.expand( n.object, n ) + ')' + this.expand( n.body, n )
 			}
 		}
 
@@ -814,9 +825,9 @@ ONE.ast_ = function(){
 						if(n.arg.type != 'Id') throw new Error("Unknown template & variable type")
 						this.templates[n.arg.name] = 1
 					}
-					return n.op + this.expand( n.arg )
+					return n.op + this.expand( n.arg, n )
 				}
-				return this.expand ( n.arg ) + n.op
+				return this.expand ( n.arg, n ) + n.op
 			},			
 			Value: function( n ){
 				if(n.kind == 'string' || n.kind == 'regexp'){
@@ -832,7 +843,7 @@ ONE.ast_ = function(){
 			newline:'\n',
 			semi:';',
 			scope:{},
-			signals:[],
+			promise_catch:1,
 			globals:{
 				Object:1,
 				Array:1, 
@@ -862,6 +873,7 @@ ONE.ast_ = function(){
 				Iterator:1,
 				Generator:1,
 				Promise:1,
+				XMLHttpRequest:1,
 				Intl:1,
 				arguments:1,
 				isNaN:1,
@@ -878,17 +890,13 @@ ONE.ast_ = function(){
 				clearInterval:1,
 				setTimeout:1,
 				clearTimeout:1,
-				console:1
+				console:1,
+				window:1
 			},
 
 			Id: function( n ){
 				var flag = n.flag
 				if( flag ){
-					if( flag == 126 ){
-						if(n.name in this.scope) throw new Error('Signal '+n.name+' defined but also in scope')
-						this.signals.push( n.name )
-					} else 
-					if(flag === 33) throw new Error("! postfix not implemented")
 					if(flag === 64) throw new Error("@ Unresolved template vars in AST")
 					if(flag === 35) return 'this.color("'+n.name+'")'
 				}
@@ -898,7 +906,7 @@ ONE.ast_ = function(){
 			},
 
 			Index: function( n ){
-				return this.expand( n.object, null, -1 ) + '[' + this.expand( n.index ) + ']'
+				return this.expand( n.object, n, true ) + '[' + this.expand( n.index, n ) + ']'
 			},
 			Key: function( n ){
 				if( n.key.type !== 'Id' ) throw new Error('Unknown key type')
@@ -906,7 +914,7 @@ ONE.ast_ = function(){
 				var comments = key.comments
 				var cmt = ''
 				if( comments ) cmt = this.comments_flush( comments )
-				return this.expand( n.object, null, -1 ) + '.' + n.key.name + cmt
+				return this.expand( n.object, n, true ) + '.' + n.key.name + cmt
 			},
 
 			ForTo: function( n ){
@@ -914,6 +922,37 @@ ONE.ast_ = function(){
 			},
 
 			TypeVar: function( n ){
+				var name = n.kind.name
+				if(name == 'signal'){
+					var out = ''
+					var defs = n.defs
+					var len = defs.length
+					for( var i = 0; i < len; i++ ){
+						var def = defs[i]
+						def.parent = n
+						if(i) out += this.newline + this.depth
+						out += 'this.signal("' + def.id.name + '"'
+						if(def.init) out += ',' + this.expand( def.init, def )
+						out += ')'
+					}
+					return out
+				}else 
+				if(name == 'get' || name == 'set'){
+					var fn = name == 'get' ? '__defineGetter__' : '__defineSetter__'
+					var out = ''
+					var defs = n.defs
+					var len = defs.length
+					for( var i = 0; i < len; i++ ){
+						var def = defs[i]
+						def.parent = n
+						if(i) out += this.newline + this.depth
+						if(!def.init || def.init.type !== 'Function') throw new Error('Cannot define non function getter/setter')
+						out += 'this.'+fn+'("' + def.id.name + '",'+
+							this.expand( def.init, def) + ')'
+					}
+					return out
+				}
+				
 				throw new Error("implement TypeVar")
 			},
 
@@ -923,15 +962,15 @@ ONE.ast_ = function(){
 
 				this.scope[ n.id.name ] = 1
 
-				return this.expand( n.id ) + 
-					(n.init ? this.space+'='+this.space + this.expand(n.init) : '')
+				return this.expand( n.id, n ) + 
+					(n.init ? this.space+'='+this.space + this.expand(n.init, n) : '')
 			},
 
 			Struct: function( n ){
 				throw new Error("implement Struct")
 			},
 
-			Function: function( n, flag, nametag ){
+			Function: function( n, parens, nametag, extparams ){
 				if( n.id ) this.scope[ n.id.name ] = 1
 				// make a new scope
 				var scope = this.scope
@@ -962,67 +1001,133 @@ ONE.ast_ = function(){
 					var split = ','+this.space
 					for(var i = 0;i<plen;i++){
 						var param = params[i]
+						param.parent = n
 						var name = param.id.name
 						this.scope[ name ] = 1
-						str_param += this.expand( param.id, i == plen - 1?'':split )//name
+						str_param += this.expand( param.id, param, false, i == plen - 1?'':split )//name
 						if( str_param[str_param.length - 1] == '\n' ) str_param += this.depth
 						if(param.init){
-							str_body += this.depth + 'if('+name+'===undefined)' +name+'='+this.expand( param.init ) + this.newline 
+							str_body += this.depth + 'if('+name+'===undefined)' +name+'='+this.expand( param.init, param ) + this.newline 
 						}
+					}
+				}
+				if( extparams ){
+					var split = ','+this.space
+					var elen = extparams.length
+					for(var i = 0;i<elen;i++){
+						var name = extparams[i]
+						this.scope[name] = 1
+						if(i) str_param += split
+						str_param += name
 					}
 				}
 
 				// expand the function
 				if( n.body.type == 'Block' ){
 					var steps = n.body.steps
-					str_body += this.block( n.body.steps, 1 )
+
+					// we can do a simple wait transform
+					str_body += this.block( n.body.steps, n.body, 1 )
 					//for( var i = 0; i < steps.length; i++ ){
 					//	str_body += this.depth + this.expand( steps[ i ] ) + this.semi + this.newline
 					//}
-				} else str_body += this.depth + 'return ' + this.expand( n.body ) + this.semi + this.newline
+				} else str_body += this.depth + 'return ' + this.expand( n.body, n ) //+ this.semi + this.newline
 
-				var sig = this.signals
-				var str_sig = sig.length?this.depth + "this.signals('"+sig.join("','")+"')" + this.semi + this.newline : ''
-
+				// Auto function to this bind detection
+				var bind = false
+				var trywrap = false
+				if(n.arrow === '=>') bind = true
+				else if( n.arrow === '->' && n.parent){ // only auto figure out the straight arrow
+					var lhs
+					var ptype = n.parent.type
+					if(n.type === 'Callback'){
+						if(n.call.name == 'promise') trywrap = true
+						lhs = n.call 
+						if(lhs.type == 'Call') lhs = lhs.fn
+					}
+					else if(ptype === 'Assign') lhs = n.parent.left 
+					else if(ptype === 'Call') lhs = n.parent.fn
+					else if(ptype === 'Do' && n.parent.call.type == 'Call'){
+						lhs = n.parent.call.fn
+					}
+					else if(ptype === 'Do'){
+						if(n.parent.call.key && n.parent.call.key.name == 'then') trywrap = true
+						lhs = n.parent.call
+					} 
+					else if(ptype === 'Def') bind = true
+					else if(ptype == 'Return') bind = true
+					if(lhs){
+						if( (lhs.type === 'Index' || lhs.type  === 'Key') ){
+							if((!lhs.key || (lhs.key.name !== 'new' && lhs.key.name !== 'extend')) && 
+								lhs.object.type !== 'This') bind = true
+						}else 
+						if(lhs.type !== 'Id' && lhs.type !== 'Value') bind = true
+						if(lhs.type == 'Id'){
+							if(lhs.name == 'then') bind = true, trywrap = true
+							else if(this.scope[ lhs.name ]) bind = true
+						}
+					} 
+				}
+				if(!this.promise_catch) trywrap = false
 				this.depth = olddepth
 				this.scope = scope
-				this.signals = signals
 
-				var ret = 'function'+(nametag?' '+nametag:(n.id?' '+this.expand( n.id ):'')) +
-							'(' + str_param + '){'  + this.comments_or_newline(n.body) + str_sig + str_body + this.depth + '}' +
-							(n.arrow=='=>'?'.bind(this)':'')
+				var ret = 'function'
+				if( nametag ) ret += ' '+nametag
+				else if(n.id) ret += ' '+this.expand( n.id, n )
+
+				if( !str_param ) str_param = '_'
+				ret += '(' + str_param + '){' 
+				if( trywrap ) ret += 'try{'
+				ret += this.comments_or_newline(n.body) + str_body + this.depth 
+				if( trywrap ) ret += '}catch(_){console.log(_);throw(_)}'
+				ret += '}'
+				if( bind )ret += '.bind(this)'
+
 				this.cignore = 1
-				if( flag < 0 ) return '('+ret+')'
+				if( parens ) return '('+ret+')'
 				return ret
 			},
 
-			Assign: function( n, flag ){
+			Update: function( n, parens ){
+				var ret 
+				if( n.prefix ) ret = n.op + this.expand( n.arg, n )
+				else {
+					if( n.op === '~' || n.op === '!') throw new Error("Postfix ~ or ! not implemented")					
+					ret = this.expand ( n.arg, n ) + n.op
+				}
+				if( parens ) return '(' + ret + ')'
+				return ret
+			},
+			Assign: function( n, parens ){
 				if(n.left.type == 'Array' || n.left.type == 'Object'){
 					throw new Error("Destructuring not implemented")
 				}
 				var ret 
 				if(n.left.type == 'Id' || n.left.type == 'Key' || n.left.type == 'Index'){
-					ret = this.expand( n.left, this.space + n.op )
+					ret = this.expand( n.left, n, false, this.space + n.op )
 					if(ret[ ret.length - 1 ] == '\n') ret += this.indent + this.depth
-					ret += this.space + this.expand( n.right )
+					ret += this.space + this.expand( n.right, n )
 				} else {
-					ret = 'this['+this.expand( n.left )+']' + this.space + n.op + this.space + this.expand( n.right )
+					ret = 'this['+this.expand( n.left, n )+']' + this.space + n.op + 
+						this.space + this.expand( n.right, n )
 				}
-				if( flag < 0) return '('+ret+')'
+				if( parens ) return '('+ret+')'
 				return ret
 			},
 
-			Call: function( n, flag, extra ){
+			Call: function( n, parens, extra ){
 				// auto this forward with local scope functions
+				// !TODO fix
 				if(n.fn.type != 'Path' && n.fn.type != 'Key' && (n.fn.type != 'Id' || n.fn.name in this.scope)){
-					return this.expand( n.fn, null, -1 ) + '.call(this' + (n.args.length?','+this.space+this.list( n.args ):'') + 
+					return this.expand( n.fn, n, true ) + '.call(this' + (n.args.length?','+this.space+this.list( n.args, n ):'') + 
 							(extra?','+this.space+extra+')':')')
 				} // auto this inject with new
 				else if(n.fn.type == 'Key' && n.fn.key.type == 'Id' && n.fn.key.name == 'new'){
-					return this.expand( n.fn, null, -1 ) + '(this' + (n.args.length?','+this.list( n.args ):'') + 
+					return this.expand( n.fn, n, true ) + '(this' + (n.args.length?','+this.list( n.args, n ):'') + 
 						(extra?','+this.space+extra+')':')')
 				}
-				return this.expand( n.fn, null, -1 ) + '(' + this.list( n.args ) + 
+				return this.expand( n.fn, n, true ) + '(' + this.list( n.args, n ) + 
 					(extra?(n.args.length?','+this.space:'')+extra+')':')')
 			},
 
@@ -1033,7 +1138,7 @@ ONE.ast_ = function(){
 				// now we need to set the template object
 				esc.depth = this.depth
 				esc.comments = 0
-				var body = esc.expand( n.quote )
+				var body = esc.expand( n.quote, n )
 				// cache the AST for parse()
 				parserCache[body] = n.quote
 
@@ -1064,26 +1169,67 @@ ONE.ast_ = function(){
 			Extends: function( n ){
 				// n.extend should be callback
 				var ext = n.extend
+				ext.parent = n
 				if(ext.type != 'Callback') throw new Error("Dont know what to do with extend")
 				if(n.id.type != 'Id') throw new Error("Extend cant define left part")
 				if(ext.call.type != 'Id') throw new Error("Extend cant use right part")
 
-				return 'this.extends(\'' + n.id.name + '\',' +this.space + this.expand( ext.call )+','+ this.space +
+				return 'this.extends(\'' + n.id.name + '\',' +this.space + 
+					this.expand( ext.call, ext )+','+ this.space +
 					this.Function( ext )+')'
 			},
 			Do: function( n ){
 				var call = n.call
-				if( call.type != 'Call' ) throw new Error("Cant do on non function call")
-				return this.Call( call, 0, this.expand(n.arg) )
+
+				// we support a chain of multiple arguments if our call is also a Do.
+				if(n.catch){
+					arg = this.expand(n.arg, n, false, ',')
+					if(arg[arg.length - 1] == '\n') arg = arg + this.depth + this.indent
+					arg = arg + this.newline + this.depth + this.expand(n.catch, n)
+				}	
+				else {
+					arg = this.expand( n.arg, n )
+				}
+				var then = (n.then ? this.expand(n.then, n) : '')
+				if( call.type == 'Id' && call.name == 'then'){
+					// lets wrap these things in try/catches and warn about them
+					return '.then('+arg+')' + then
+				}else // turn the property into a functioncall?
+				
+				if( call.type != 'Call' ){
+					//throw new Error("Cant do on non function call")
+					return this.expand( call, n ) + '(' + arg + ')' + then
+				}
+
+				return this.Call( call, false, arg ) + then
 			},
 			Callback: function( n ){
 				var call = n.call
-				if( call.type == 'Id'){
+				var isassign = false
+	
+				if(call.type == 'Key' && call.key.type == 'Id'){
+					var name = call.key.name
+					// support super short promise or new api, should we?
+					if(name == 'new' || name == 'then'){
+						return this.expand( call, n ) + '(' + this.Function( n ) + ')'
+					}
+					isassign = true
+				}
+				if( isassign || call.type == 'Id' || call.type == 'Value'){
 					if(call.flag == 64 && !call.name){
 						return 'this.$.Track.new(this,' + this.Function( n ) +')'
 					}
-					return this.expand( call ) + this.space + '=' + this.space + this.Function( n )
-				} else 
+					// check if our Id is new catch or then
+					// ifso its a this bound call argument
+					if( call.type == 'Value'){
+						return 'this['+call.raw+']' + this.space + '=' + this.space + this.Function( n )
+					}
+					if( call.name == 'promise'){
+						return 'new Promise(' + this.Function( n, false, null, ['resolve','reject'] ) +'.bind(this))'
+					}
+					return this.expand( call, n ) + this.space + '=' + this.space + this.Function( n )
+				} 
+
 				if( call.type != 'Call' ) throw new Error("Cant append callback to non call")
 				
 				return this.Call( call, false, this.Function( n ) )
@@ -1095,7 +1241,7 @@ ONE.ast_ = function(){
 			deps:0,
 			Call:function( n ){
 				if( n.fn.type !== 'Id') throw new Error("Dont know how to do non Id call")
-				return 'this.' + n.fn.name + '(' + this.list( n.args ) + ')'
+				return 'this.' + n.fn.name + '(' + this.list( n.args, n ) + ')'
 			},
 			Id:function( n ){
 				// direct ID's
@@ -1284,3 +1430,4 @@ ONE.ast_ = function(){
 	return this
 
 }
+

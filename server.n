@@ -7,7 +7,7 @@
  * 
  */
 
-load('node.jss')
+load('node.n')
 
 var addr = "127.0.0.1"
 var port = 2000
@@ -19,30 +19,35 @@ StaticServer extends HttpServer{
 		watchRes = []
 	}
 
-	route("*"){
+	// when you are using single property names OR functions
+	// it will dynamically bind, otherwise it will statically bind.
 
-		var fullpath = path.join(root, url.pathname)
+	route(/.*/){ // this function will have a Request this
+
+		var path = File.joinPath(root, url.pathname)
 
 		if(url.pathname == "/_reloader_"){
-			return server.watchRes.push(this)
+			return ../watchRes.push(this)
 		}
 
-		var data = wait File.read(fullpath) catch {
-			text(404, "file not found")
+		File.read(fullpath).then do data->{
+
+			writeHead(200, {"Content-Type": Mime.fromFilename(pathname)})
+			write(data)
+			end()
+
+			if( watching[ filename ] ) return
+		
+			out( 'watching', filename )
+			watching[ filename ] = File.watch(filename, {type:'mtime',delay:2000}) do ->{
+
+				console.log("---- "+filename+" changed, sending reload to frontend ----")
+				// signal the frontend to reload.
+				for(var res of ../watchRes) res.text(200,"RELOAD")
+			}
 		}
-
-		writeHead(200, {"Content-Type": Mime.fromFilename(pathname)})
-		write(data)
-		end()
-
-		if( watching[ filename ] ) return
-	
-		out( 'watching', filename )
-		watching[ filename ] = File.watch(filename, {type:'mtime',delay:2000}) do->{
-			console.log("---- "+filename+" changed, sending reload to frontend ----")
-			// signal the frontend to reload.
-			for(var res of maker.watchRes) res.text(200,"RELOAD")
-			server.watchRes = []
+		catch e->{
+			text(404,'File not found')
 		}
 	}
 }

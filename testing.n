@@ -1,5 +1,6 @@
 testing = (title, node)->{
 	out("Testing "+title)
+
 	var Assert = Base.extend(){
 		assert = (check, operation, left, right, str)->{
 			if(!check){

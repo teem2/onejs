@@ -31,18 +31,27 @@ Mime extends Base{
 	}
 }
 
+var nodeify = fn->{
+	return ->{
+		new Promise(function(){
+
+		})
+	}
+}
+
 // all file, path tools
 File extends Base{
-	stream = path->{
+	stream = (path)->{
 	}
 
-	open = path->{
+	open = (path)->{
 	}
 	
-	exists = name->{
+	exists = (name)->{
 	}
 
-	watch = ( name, options ) ->{
+	watch = (name, options)->{
+
 	}
 }
 
@@ -51,7 +60,8 @@ Url extends Base{
 
 }
 
-HttpRequest extends Base{
+Http extends Base{
+
 }
 
 HttpServer extends Base{
