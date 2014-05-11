@@ -305,6 +305,8 @@ ONE.parser_strict_ = function(){
 		struct:1,
 		get:1,
 		set:1,
+		const:1,
+		local:1
 	}
 
 	// class extends 
@@ -1260,17 +1262,30 @@ ONE.parser_strict_ = function(){
 		var defs = []
 
 		for (;;) {
+			var def
 			if(this.tokType == this._parenR) break
 			if(this.tokType == this._dot) break
-			if(this.tokType !== this._name)break
-			var def = this.startNode()
-			def.id = this.parseIdent()
-			if (this.strict && this.isStrictBadIdWord(def.id.name))
-				this.raise(def.id.start, "Binding " + def.id.name + " in this.strict mode")
-			
-			this.parseDims(def, node)
+			if(this.tokType == this._bracketL){ // destructure object
+				def = this.startNode()
+				def.id = this.parseArray()
+				this.eat(this._eq)
+				def.init = this.parseExpression(true, noIn)
+			} else if(this.tokType == this._braceL){ // destructure array
+				def = this.startNode()
+				def.id = this.parseObj()
+				this.eat(this._eq)
+				def.init = this.parseExpression(true, noIn)
+			} else if(this.tokType !== this._name)break
+			else{
+				def = this.startNode()
+				def.id = this.parseIdent()
+				if (this.strict && this.isStrictBadIdWord(def.id.name))
+					this.raise(def.id.start, "Binding " + def.id.name + " in this.strict mode")
+				
+				this.parseDims(def, node)
 
-			def.init = this.eat(this._eq) ? this.parseExpression(true, noIn) : null
+				def.init = this.eat(this._eq) ? this.parseExpression(true, noIn) : null
+			}
 			defs.push(this.finishNode(def, "Def"))
 			if (!this.canInjectComma(this.tokType) && !this.eat(this._comma)) break
 		}
@@ -1945,10 +1960,7 @@ ONE.parser_strict_ = function(){
 			return val
 
 		case this._bracketL:
-			var node = this.startNode()
-			this.next()
-			node.elems = this.parseExprList(this._bracketR, true, true)
-			return this.finishNode(node, "Array")
+			return this.parseArray()
 
 		case this._braceL:
 			return this.parseObj()
@@ -2025,8 +2037,15 @@ ONE.parser_strict_ = function(){
 		return this.finishNode(node, "New")
 	}
 
-	// Parse an object literal.
+	// parseArray
+	this.parseArray = function(){
+		var node = this.startNode()
+		this.next()
+		node.elems = this.parseExprList(this._bracketR, true, true)
+		return this.finishNode(node, "Array")
+	}
 
+	// Parse an object literal.
 	this.parseObj = function() {
 		var node = this.startNode(), first = true, sawGetSet = false
 		node.keys = []
@@ -2099,10 +2118,9 @@ ONE.parser_strict_ = function(){
 		o.end = node.end
 		o.type = 'Def'
 
-		if( node.type === 'Id'){
+		if( node.type === 'Id' || node.type === 'Array' || node.type === 'Object'){
 			o.id = node
-		} else if( node.type === 'Assign' && node.op === '=' && 
-				node.left.type == 'Id'){
+		} else if( node.type === 'Assign' && node.op === '='){
 			o.id = node.left
 			o.init = node.right
 		} else this.raise(node.start, "Invalid function argument definition")

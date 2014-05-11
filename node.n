@@ -7,7 +7,7 @@ var _fs = require('fs')
 var _http = require('http')
 var _url = require('url')
 
-Mime extends Base{
+Mime = Base.extend{
 
 	htm  = "text/html"
 	html = "text/html"
@@ -31,13 +31,12 @@ Mime extends Base{
 var nodeify = fn->{
 	return ->{
 		new Promise(function(){
-			
 		})
 	}
 }
 
 // all file, path tools
-File extends Base{
+File = Base.extend{
 	stream = (path)->{
 	}
 
@@ -52,15 +51,15 @@ File extends Base{
 }
 
 // url class
-Url extends Base{
+Url = Base.extend{
 	// getters and setters
-	make = (url)->{
+	maker = (url)->{
 		var o = _url.parse(url)
 		for(var k in o) this[k] = o[k]
 	}
 }
 
-Http extends Base{
+Http = Base.extend{
 	get = myurl -> promise{
 		url = ../Url.new(myurl)
 		var data = []
@@ -81,13 +80,17 @@ Http extends Base{
 	}
 }
 
-HttpServer extends Base{
+HttpServer = Base.extend{
 	
-	make =->{
+	maker =->{
 	}
 	
+	route = ( match, body )->{
+
+	}
+
 	Response extends Base{
-		_make = handle->{
+		_maker = handle->{
 			req = maker.request
 		}
 
@@ -97,15 +100,13 @@ HttpServer extends Base{
 		}
 		// url object
 	}
-
-	// add websocket support
 }
 
-WatchFile extends Base{
+WatchFile = Base.extend{
 	
 	watching = {}
 
-	make = (filename, options,  cb)->{
+	maker = (filename, options,  cb)->{
 		var stat = fs.statSync( filename )
 	}
 

@@ -291,8 +291,10 @@ ONE.ast_ = function(){
 						code += 'var _'+v+' = n.'+k+'\n'+
 							'if(_'+v+'){\n'+
 								'\tvar x,y=[]\n'+
-								'\tfor(var len = _'+v+'.length,i = 0;i<len;i++)'+
-									'x = _'+v+'[i], y[i] = this[x.type](x)\n'+
+								'\tfor(var len = _'+v+'.length,i = 0;i<len;i++){\n'+
+									'x = _'+v+'[i]\n'+
+									'if(x) y[i] = this[x.type](x)\n'+
+								'}'+
 								'\tc.'+k+'=y\n'+
 							'}\n'
 					}else if(t === 3){
@@ -892,6 +894,7 @@ ONE.ast_ = function(){
 			scope:{},
 			promise_catch:1,
 			no_valueless_object:1,
+			tmp_prefix:'_',
 			globals:{
 				Object:1,
 				Array:1, 
@@ -942,16 +945,18 @@ ONE.ast_ = function(){
 				window:1,
 				require:1
 			},
-
+			resolve:function( name ){
+				if( name in this.scope ) return name
+				if( name in this.globals ) return name
+				return 'this.'+name
+			},
 			Id: function( n ){
 				var flag = n.flag
 				if( flag ){
 					if(flag === 64) throw new Error("@ Unresolved template vars in AST")
 					if(flag === 35) return 'this.color("'+n.name+'")'
 				}
-				if( n.name in this.scope ) return n.name
-				if( n.name in this.globals ) return n.name
-				return 'this.'+n.name
+				return this.resolve( n.name )
 			},
 
 			Index: function( n ){
@@ -1007,7 +1012,17 @@ ONE.ast_ = function(){
 			},
 
 			Def: function( n ){
-				if( n.id.type !== 'Id' ) throw new Error('Unknown id type')
+				// destructuring
+				if(n.id.type == 'Array' || n.id.type == 'Object'){
+					var vars = []
+					var out = this.destructure(n, n.id, n.init, this.find_function( n ), vars)
+					for(var i = 0;i<vars.length;i++){
+						this.scope[ vars[i] ] = 1
+					}
+					return vars.join(', ')+', _0='+out
+				}
+				else if( n.id.type !== 'Id' ) throw new Error('Unknown id type')
+
 				if( n.dim !== undefined ) throw new Error('Dont know what to do with dimensions')
 
 				this.scope[ n.id.name ] = 1
@@ -1052,19 +1067,37 @@ ONE.ast_ = function(){
 					for(var i = 0;i<plen;i++){
 						var param = params[i]
 						param.parent = n
-						var name = param.id.name
-						this.scope[ name ] = 1
-						str_param += this.expand( param.id, param, false, i == plen - 1?'':split )//name
-						if( str_param[str_param.length - 1] == '\n' ) str_param += this.depth
-						if(param.init){
-							str_body += this.depth + 'if('+name+'===undefined)' +name+'='+this.expand( param.init, param ) + this.newline 
+
+						// destructuring arguments
+						if(param.id.type == 'Array' || param.id.type == 'Object'){
+							var vars = []
+							var tmp = this.tmp_prefix+'arg'+i
+							var dest = this.destructure(n, param.id, param.init, n, vars, tmp) + this.newline 
+
+							str_body += this.depth + 'var ' 
+							for(var v = 0;v<vars.length;v++){
+								this.scope[ vars[v] ] = 1
+								if(v) str_body += ',' +this.space
+								str_body += vars[v]
+							}
+							str_body += ', _0=' + dest
+							str_param += tmp + (i == plen - 1?'':split)
+						} else {
+
+							var name = param.id.name
+							this.scope[ name ] = 1
+							str_param += this.expand( param.id, param, false, i == plen - 1?'':split )//name
+							if( str_param[str_param.length - 1] == '\n' ) str_param += this.depth
+							if(param.init){
+								str_body += this.depth + 'if('+name+'===undefined)' +name+'='+this.expand( param.init, param ) + this.newline 
+							}
 						}
 					}
 				}
 				if( extparams ){
 					var split = ','+this.space
-					var elen = extparams.length
-					for(var i = 0;i<elen;i++){
+					var exlen = extparams.length
+					for(var i = 0;i<exlen;i++){
 						var name = extparams[i]
 						this.scope[name] = 1
 						if(i) str_param += split
@@ -1119,9 +1152,6 @@ ONE.ast_ = function(){
 					} 
 				}
 				if(!this.promise_catch) trywrap = false
-				this.depth = olddepth
-				this.scope = scope
-
 
 				var ret = 'function'
 
@@ -1133,7 +1163,20 @@ ONE.ast_ = function(){
 
 				if( !str_param ) str_param = '_'
 				ret += '(' + str_param + '){' 
+				if( n.tmp_vars ){
+					ret += this.newline + this.depth
+					ret += 'var '
+					for(var i = 0;i<n.tmp_vars;i++){
+						if(i) ret += ','+this.space
+						ret += this.tmp_prefix + i
+					}
+					ret += ';'
+				}
 				if( trywrap ) ret += 'try{'
+
+				this.depth = olddepth
+				this.scope = scope
+
 				ret += this.comments_or_newline(n.body) + str_body + this.depth 
 				if( trywrap ) ret += '}catch(_){console.log(_);throw(_)}'
 				ret += '}'
@@ -1146,29 +1189,25 @@ ONE.ast_ = function(){
 				if( parens ) return '('+ret+')'
 				return ret
 			},
-
-			Yield: function( n ){
+			find_function: function( n ){
 				var p = n.parent
 				while(p){
-					if(p.type == 'Function'){
-						p.auto_gen = 1
-						break
-					}
+					if(p.type == 'Function') return p
 					p = p.parent
 				}
+			},
+			Yield: function( n ){
+				var fn = this.find_function( n )
+				if(!fn) throw new Error('Yield cannot find enclosing function')
+				fn.auto_gen = 1
 				return 'yield' + (n.arg ? ' ' + this.expand( n.arg, n ):'')
 			},
 
 			Await: function( n ){
-				var p = n.parent
-				while(p){
-					if(p.type == 'Function'){
-						p.await = 1
-						p.auto_gen = 1
-						break
-					}
-					p = p.parent
-				}
+				var fn = this.find_function( n )
+				if(!fn) throw new Error('Await cannot find enclosing function')
+				fn.auto_gen = 1
+				fn.await = 1
 				return 'yield'+ (n.arg ? ' ' + this.expand( n.arg, n ):'')
 			},
 
@@ -1182,27 +1221,124 @@ ONE.ast_ = function(){
 				if( parens ) return '(' + ret + ')'
 				return ret
 			},
-			Assign: function( n, parens ){
-				if(n.left.type == 'Array' ){
-					// alright.
-					throw new Error("Destructuring not implemented")
-				}
-				if(n.left.type == 'Object'){
-					// ohkay so.
-					// we need to transform the object tree to a property tree
+			// destructuring helpers
+			_destructureArrayOrObject:function(v, acc, nest, fn, vars){
+				// alright we must store our object fetch on a ref
+				if(nest >= fn.tmp_vars) fn.tmp_vars = nest + 1
+				var out = ''
+				var od = this.depth
+				this.depth = this.depth + this.indent
+				out += '('+this.tmp_prefix+nest+'='+this.tmp_prefix+(nest-1)+acc+')===undefined||('+this.newline+this.depth
+				if(v.type == 'Object') out += this._destructureObject(v, nest + 1, fn, vars)
+				else out += this._destructureArray(v, nest + 1, fn, vars)
+				this.depth = od
+				out += this.newline+this.depth + ')'
+				return out
+			},
+			_destructureArray:function(arr, nest, fn, vars){
+				var out = ''
+				var elems = arr.elems
+				for(var i = 0;i<elems.length;i++){
+					var v = elems[i]
+					if(!v) continue
+					var acc = '['+i+']'
 
+					if(v.type == 'Rest'){
+						if(e.id.type !=='Id') throw new Error('Unknown rest id type')
+						if(i) out += ',' + this.newline + this.depth
+						var name = v.name 
+						if(vars) vars.push(name)
+						else name = this.resolve(name)
+						out += name + '='+this.tmp_prefix +(nest - 1)+'.slice('+i+')'
+					}
+					else if(v.type == 'Id') {
+						if(i) out += ',' + this.newline + this.depth
+						var name = v.name 
+						if(vars) vars.push(name)
+						else name = this.resolve(name)
+						out += name + '='+this.tmp_prefix +(nest - 1) + acc
+					} 
+					else if(v.type == 'Object' || v.type == 'Array') {
+						if(i) out += ',' + this.newline + this.depth
+						out += this._destructureArrayOrObject(v, acc, nest, fn, vars)
+					}  else throw new Error('Cannot destructure array item '+i)
 				}
-				var ret 
+				return out
+			},
+			_destructureObject:function( obj, nest, fn, vars ){
+				var out = ''
+				var keys = obj.keys
+				for(var i = 0;i<keys.length;i++){
+					k = keys[i]
+					var acc
+					if(k.key.type == 'Value'){
+						acc = '['+k.key.raw+']'
+					} else acc = '.'+k.key.name
+					var v = k.value
+					if(k.enum){
+						// lets output a prop
+						if(i) out += ',' + this.newline + this.depth
+						var name = k.key.name 
+						if(vars) vars.push(name)
+						else name = this.resolve(name)							
+						out += name + '='+this.tmp_prefix+(nest - 1)+acc
+					} 
+					else if(v.type == 'Id') {
+						if(i) out += ',' + this.newline + this.depth
+						var name = v.name 
+						if(vars) vars.push(name)
+						else name = this.resolve(name)							
+						out += name + '='+this.tmp_prefix +(nest - 1)+acc
+					} 
+					else if(v.type == 'Object' || v.type == 'Array') {
+						if(i) out += ',' + this.newline + this.depth
+						out += this._destructureArrayOrObject(v, acc, nest, fn, vars)
+					}
+					else throw new Error('Cannot destructure property '+acc)
+				}
+
+				return out
+			},
+			destructure:function( n, left, init, fn, vars, def ){
+				if(!fn) throw new Error('Destructuring assign cant find enclosing function')
+				if(!fn.tmp_vars) fn.tmp_vars = 1
+
+				var out = ''
+				var olddepth = this.depth
+				this.depth = this.depth + this.indent					
+
+				var oldcmt = this.comments
+				this.comments = 0
+				if( init )
+					out = '('+this.tmp_prefix+'0='+(def?def+'||':'') + this.expand( init, n, true)+',('+this.newline+this.depth
+				else{
+					if(!def) throw new Error('Destructuring assignment without init value')
+					out = '('+this.tmp_prefix+'0='+(def?def:'') +',('+this.newline+this.depth
+				}
+				this.comments = 1
+
+				if( left.type == 'Object' ) out += this._destructureObject(left, 1, fn, vars)
+				else out += this._destructureArray(left, 1, fn, vars)
+
+				this.depth = olddepth
+				out += this.newline+this.depth+'))' + this.comments_or_newline( left )
+				return out
+			},
+			Assign: function( n, parens ){
+				var out 
+				if(n.left.type == 'Object' || n.left.type == 'Array'){
+					return this.destructure(n, n.left, n.right, this.find_function( n ))
+				}
 				if(n.left.type == 'Id' || n.left.type == 'Key' || n.left.type == 'Index'){
-					ret = this.expand( n.left, n, false, this.space + n.op )
-					if(ret[ ret.length - 1 ] == '\n') ret += this.indent + this.depth
-					ret += this.space + this.expand( n.right, n )
+					out = this.expand( n.left, n, false, this.space + n.op )
+					if(out[ out.length - 1 ] == '\n') out += this.indent + this.depth
+					out += this.space + this.expand( n.right, n )
 				} else {
-					ret = 'this['+this.expand( n.left, n )+']' + this.space + n.op + 
+					out = 'this['+this.expand( n.left, n )+']' + this.space + n.op + 
 						this.space + this.expand( n.right, n )
 				}
-				if( parens ) return '('+ret+')'
-				return ret
+				if( parens ) return '('+out+')'
+				return out
 			},
 
 			Call: function( n, parens, extra ){
