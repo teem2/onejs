@@ -1,3 +1,5 @@
+#js
+
 /**
  *  ONEJS Browser utility classes
  * 
@@ -218,7 +220,7 @@ window.addEventListener('keypress', function(e){
 	t._oneNode.keypress = sig
 })
 
-Mouse extends Base{
+Mouse = Base.extend{
 	signal x, y, xy, isdown, left, right, middle
 	
 	capture = function( obj, move, end ){
@@ -268,7 +270,7 @@ Mouse extends Base{
 mouse = this.mouse = Mouse.new()
 mouse.bind_signals()
 
-Key extends Base{
+Key = Base.extend{
 
 	for(var k in browserKeyTable){
 		// turn it into a signal
@@ -293,7 +295,7 @@ window.addEventListener('resize', function(event){
 	screen.wh = [w,h]
 });
 
-Screen extends Base{
+Screen = Base.extend{
 	var _w = window.innerWidth
 	var _h = window.innerHeight        
 	signal w = _w
@@ -303,8 +305,7 @@ Screen extends Base{
 var screen = this.screen = Screen.new()
 screen.bind_signals()
 
-
-Http extends Base{
+Http = Base.extend{
 
 	get = url -> promise{
 		var req = new XMLHttpRequest()
@@ -318,4 +319,3 @@ Http extends Base{
 		req.send()
 	}
 }
-

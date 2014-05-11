@@ -10,7 +10,7 @@
 // It parses a loose superset of JavaScript
 // with added ES6/7, Julia, Coffeescript, CSS, XML and GLSL feel.
 // It targets JS, Asm.js and GLSL as output languages
-// It aims to be backwards compatible with valid JS, atleast for the parser
+// It aims to be backwards compatible with valid JS
 //
 // The Parser AST has been designed to be human friendly,
 // and with the quote operator makes ASTs a first class citizen of the language
@@ -23,37 +23,45 @@
 // Arrow function '->x', 'x->x', '()->x', '(x)->x' and all ->{}
 // Typed var 'float x' 'float x[10]' 'struct x{float y}'
 //
+// Three arrow types: => .bind(this) -> auto(this) ~> unbound
 // Paren free if form 'if x then y'
 // Commas are optional when you have newlines '[1\n2] {x:1\x:2}'
 // Logic words 'if x and y', 'if x or y', 'if x is y', 'if x isnt y' 'if not x'
 // Booleans 'yes == true' 'on == true' 'no == false' 'off == false'
 // Class extends 'x extends y{}'
 // Default arguments for functions '(x=10)->x'
-// ES6 Fat arrow '=>' with no this.empty arg () required
 // Rest prefix '...name' '(x, ...y) -> {}''
 // Path prefix '...(operator)name' 'var x = .../y'
 // For To 'for(x = 0 to 10 in 3){}'
-// Casting/Type annotation expressions 'x = float' 'x = float(10)'
-// @, # prefix flags and ! and ~ postfix flags on identifiers
-// Automatic// insertion in '2word' -> '2*word' for units or math
-// 
+// @, # are prefix flags for identifiers
+// ! is postfixable,  % * & are prefixable 
+// Automatic * insertion in '2word' -> '2*word' for units or math
+// Destructuring assignment of arrays and objects
+// Value-less objects are enums '{x,y}' -> '{x:1, y:2}'
+// do catch subscripts: 'v(x) do y catch z' -> 'v(x,y,z)' 'v do x' -> 'v(x)'
+// then chaining on do catch: v(x).then do y catch z then do x catch z (for promises)
+// await-catch: var x = await async(y) catch z
+// free floating blocks are parsed as objects
+// ( ) and [ ] subscripts starting after newline are not parsed as call/index but new statements
+// getter setter syntax:  'get x = ->10' 'set y = v->out(v)'
+//
 // Code generation features depend on the target language
 //
 // TODO items for the parser:
-// Destructuring assignment of arrays and objects
 // Splats '[1 2 3]^^'
 // Ranges '[0..1]' '[0...3]'
 // Multiline strings ' no interpolation
 // Multiline strings "{}" w interpolation 
-// Interpolated markdown """markdown{code}"""
+// Multline regex ///
 // Interpolated XML <div>{code}</div>
 // Array slicing x[0..2] x[3..-2]
-// Conditional assignments '||=''
-// Existential object traverse  'x.?y.?z
-// Generators/yield "yield x" "function//" "(x)*->"
+// Conditional assignments '?='
+// Existential object traverse  'x?.y?.z
+// Existential prefix operator ?x -> (x===undefined)
+// Existential or '?|'
 // Array comprehensions as in ES6
 // Let as in ES6
-// Allow if/else/try/catch in expressions 
+// Allow if/else/try/catch in expressions? 
 // for each syntax
 // const
 // Add a step to for to
@@ -246,6 +254,9 @@ ONE.parser_strict_ = function(){
 	this._function = {keyword: "function"}
 	this._if = {keyword: "if"}
 	this._return = {keyword: "return", beforeExpr: true}
+	this._yield = {keyword: "yield", beforeExpr: true}
+	this._await = {keyword: "await", beforeExpr: true}
+
 	this._switch = {keyword: "switch"}
 	this._throw = {keyword: "throw", beforeExpr: true}
 	this._try = {keyword: "try"}
@@ -289,10 +300,11 @@ ONE.parser_strict_ = function(){
 		mat2:1,
 		mat3:1,
 		mat4:1,
+		mixer:1,
 		signal:1,
 		struct:1,
 		get:1,
-		set:1
+		set:1,
 	}
 
 	// class extends 
@@ -1214,7 +1226,7 @@ ONE.parser_strict_ = function(){
 		var node = this.startNode(), first = true
 		node.steps = []
 		while (this.tokType !== this._eof) {
-			var stmt = this.parseStatement( this.objectInTopLevel )
+			var stmt = this.parseStatement( true )
 			node.steps.push(stmt)
 			if (first && this.isUseStrict(stmt)) this.setStrict(true)
 			first = false
@@ -1298,6 +1310,14 @@ ONE.parser_strict_ = function(){
 		return this.finishNode(node, type)
 	}
 
+	this.parseStatementBlock = function(){
+		// this parses 
+		if(this.tokType == this._braceL){
+			return this.parseBlock()
+		}
+		return this.parseStatement()
+	}
+
 	// Parse a single statement.
 	//
 	// If expecting a statement and finding a slash operator, parse a
@@ -1305,7 +1325,7 @@ ONE.parser_strict_ = function(){
 	// `if (foo) /blah/.exec(foo);`, where looking at the previous token
 	// does not help.
 
-	this.parseStatement = function( blockIsObject ) {
+	this.parseStatement = function( ) {
 		if (this.tokType === this._slash || this.tokType === this._assign && this.tokVal == "/=")
 			this.readToken(true)
 
@@ -1356,7 +1376,7 @@ ONE.parser_strict_ = function(){
 		case this._do:
 			this.next()
 			this.labels.push(this.loopLabel)
-			node.loop = this.parseStatement()
+			node.loop = this.parseStatementBlock()
 			this.labels.pop()
 			this.expect(this._while)
 			node.test = this.parseParenExpression()
@@ -1414,8 +1434,8 @@ ONE.parser_strict_ = function(){
 			} else {
 				node.test = this.parseParenExpression()
 			}
-			node.then = this.parseStatement()
-			node.else = this.eat(this._else) ? this.parseStatement() : null
+			node.then = this.parseStatementBlock()
+			node.else = this.eat(this._else) ? this.parseStatementBlock() : null
 			return this.finishNode(node, "If")
 
 		case this._return:
@@ -1430,6 +1450,13 @@ ONE.parser_strict_ = function(){
 			if (this.eat(this._semi) || this.canInsertSemicolon()) node.arg = null
 			else { node.arg = this.parseExpression(); this.semicolon(); }
 			return this.finishNode(node, "Return")
+
+		case this._yield:
+			this.next()
+
+			if (this.eat(this._semi) || this.canInsertSemicolon()) node.arg = null
+			else { node.arg = this.parseExpression(); this.semicolon(); }
+			return this.finishNode(node, "Yield")
 
 		case this._switch:
 			this.next()
@@ -1456,7 +1483,7 @@ ONE.parser_strict_ = function(){
 					this.expect(this._colon)
 				} else {
 					if (!cur) this.unexpected()
-					cur.then.push(this.parseStatement())
+					cur.then.push(this.parseStatementBlock())
 				}
 			}
 
@@ -1500,7 +1527,7 @@ ONE.parser_strict_ = function(){
 			this.next()
 			node.test = this.parseParenExpression()
 			this.labels.push(this.loopLabel)
-			node.loop = this.parseStatement()
+			node.loop = this.parseStatementBlock()
 			this.labels.pop()
 			return this.finishNode(node, "While")
 
@@ -1508,12 +1535,9 @@ ONE.parser_strict_ = function(){
 			if (this.strict) this.raise(this.tokStart, "'with' in this.strict mode")
 			this.next()
 			node.object = this.parseParenExpression()
-			node.body = this.parseStatement()
+			node.body = this.parseStatementBlock()
 			return this.finishNode(node, "With")
 
-		case this._braceL:
-			if(blockIsObject) return this.parseObj()
-			return this.parseBlock()
 		case this._semi:
 			this.next()
 			return this.finishNode(node, "Empty")
@@ -1531,23 +1555,15 @@ ONE.parser_strict_ = function(){
 					if (this.labels[i].name === maybeName) this.raise(expr.start, "Label '" + maybeName + "' is already declared")
 				var kind = this.tokType.isLoop ? "loop" : this.tokType === this._switch ? "switch" : null
 				this.labels.push({name: maybeName, kind: kind})
-				node.body = this.parseStatement()
+				node.body = this.parseStatementBlock()
 				this.labels.pop()
 				node.label = expr
 				return this.finishNode(node, "Label")
 			} else {
-				if(this.tokType == this._extends){
-					this.next()
-					node.id = expr
-					node.extend = this.parseExpression()
-					this.semicolon()
-					return this.finishNode(node, "Extends")
-				} else {
-					node.expr = expr
-					if(this.tokType != this._else) this.semicolon()
+				node.expr = expr
+				if(this.tokType != this._else) this.semicolon()
 
-					return this.finishNode(node, "Expr")
-				}
+				return this.finishNode(node, "Expr")
 			}
 		}
 	}
@@ -1594,7 +1610,7 @@ ONE.parser_strict_ = function(){
 		this.expect(this._semi)
 		node.update = this.tokType === this._parenR ? null : this.parseExpression()
 		this.expect(this._parenR)
-		node.loop = this.parseStatement()
+		node.loop = this.parseStatementBlock()
 		this.labels.pop()
 		return this.finishNode(node, "For")
 	}
@@ -1605,7 +1621,7 @@ ONE.parser_strict_ = function(){
 		node.left = init
 		node.right = this.parseExpression()
 		this.expect(this._parenR)
-		node.loop = this.parseStatement()
+		node.loop = this.parseStatementBlock()
 		this.labels.pop()
 		return this.finishNode(node, "ForIn")
 	}
@@ -1619,7 +1635,7 @@ ONE.parser_strict_ = function(){
 			node.in = this.parseExpression(true, true)
 		}
 		this.expect(this._parenR)
-		node.loop = this.parseStatement()
+		node.loop = this.parseStatementBlock()
 		this.labels.pop()
 		return this.finishNode(node, "ForTo")
 	}
@@ -1630,7 +1646,7 @@ ONE.parser_strict_ = function(){
 		node.left = init
 		node.right = this.parseExpression()
 		this.expect(this._parenR)
-		node.loop = this.parseStatement()
+		node.loop = this.parseStatementBlock()
 		this.labels.pop()
 		return this.finishNode(node, "ForOf")
 	}
@@ -1942,6 +1958,18 @@ ONE.parser_strict_ = function(){
 			this.next()
 			return this.parseFunction(node, false)
 
+		case this._yield:
+			var node = this.startNode()
+			this.next()
+			node.arg = this.parseExpression()
+			return this.finishNode(node, "Yield")
+
+		case this._await:
+			var node = this.startNode()
+			this.next()
+			node.arg = this.parseExpression()
+			return this.finishNode(node, "Await")
+
 		case this._new:
 			return this.parseNew()
 		
@@ -2010,6 +2038,7 @@ ONE.parser_strict_ = function(){
 			} else first = false
 
 			var prop = {key: this.parsePropertyName()}, isGetSet = false, kind
+			
 			if (this.eat(this._colon)) {
 				prop.value = this.parseExpression(true)
 				kind = prop.kind = "init"
@@ -2020,8 +2049,23 @@ ONE.parser_strict_ = function(){
 				prop.key = this.parsePropertyName()
 				if (this.tokType !== this._parenL) this.unexpected()
 				prop.value = this.parseFunction(this.startNode(), false)
-			} else this.unexpected()
-
+			} else {
+				if( this.tokType != this._braceR && this.tokType != this._comma && !this.canInjectComma( this.tokType, true))
+					this.unexpected()
+				// we are an enum, lets set the numeric value
+				var last = 0
+				if(node.keys.length){ 
+					var p = node.keys[node.keys.length - 1]
+					if(p.value && p.value.type === 'Value' && p.value.kind === 'num'){
+						last = p.value.value
+						if(parseInt(last)!= last || last < 0) last = 0
+					} else {
+						last = p.enum || 0
+					}
+				}
+				prop.enum = last + 1
+				//console.log(prop.enum)
+			}
 			// getters and setters are not allowed to clash — either with
 			// each other or with an init property — and in this.strict mode,
 			// init properties are also not allowed to be repeated.
@@ -2097,6 +2141,10 @@ ONE.parser_strict_ = function(){
 	// `isStatement` parameter).
 
 	this.parseFunction = function(node, isStatement) {
+		if( this.tokType === this._multiplyModulo){
+			node.gen = 1
+			this.next()
+		}
 		if (this.tokType === this._name) node.id = this.parseIdent()
 		else node.id = null
 

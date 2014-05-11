@@ -1,14 +1,11 @@
-/**
- *  NodeJS API Classes
- * 
- *  Copyright (C) 2014 ONEJS 
- *
- *  MIT license =  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions =  The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- * 
- */
+//  NodeJS API Classes
+//  Copyright (C) 2014 ONEJS 
+
+load('timer')
 
 var _fs = require('fs')
 var _http = require('http')
+var _url = require('url')
 
 Mime extends Base{
 
@@ -23,7 +20,7 @@ Mime extends Base{
 	png  = "image/png"
 	gif  = "image/gif"
 
-	regex = new RegExp("\\.(" + Object.keys(table).join("|") + ")$")
+	regex = new RegExp("\\.(" + Object.keys(this).join("|") + ")$")
 
 	fromFilename = name->{
 		var ext = name.match(mimeRx)
@@ -34,7 +31,7 @@ Mime extends Base{
 var nodeify = fn->{
 	return ->{
 		new Promise(function(){
-
+			
 		})
 	}
 }
@@ -46,28 +43,47 @@ File extends Base{
 
 	open = (path)->{
 	}
-	
+
 	exists = (name)->{
 	}
 
 	watch = (name, options)->{
-
 	}
 }
 
 // url class
 Url extends Base{
-
+	// getters and setters
+	make = (url)->{
+		var o = _url.parse(url)
+		for(var k in o) this[k] = o[k]
+	}
 }
 
 Http extends Base{
+	get = myurl -> promise{
+		url = ../Url.new(myurl)
+		var data = []
+		var req = _http.request({
+			hostname:url.hostname, 
+			port:url.port || 80,
+			method:'GET', 
+			path:url.path} ) 
 
+		do (res, err)->{
+			if(res.statusCode != 200) reject(res)
+			res.setEncoding('utf8')
+			res.on('data') do chunk -> data.push(chunk)
+			res.on('end') do -> resolve(data.join(''))
+		}
+
+		req.end()
+	}
 }
 
 HttpServer extends Base{
 	
 	make =->{
-
 	}
 	
 	Response extends Base{
@@ -76,7 +92,7 @@ HttpServer extends Base{
 		}
 
 		text = (code, text)->{
-			writeHead(code, {"Content-Type" =  "text/plain"})
+			writeHead(code, {"Content-Type":"text/plain"})
 			end(text)
 		}
 		// url object
@@ -93,7 +109,7 @@ WatchFile extends Base{
 		var stat = fs.statSync( filename )
 	}
 
-	watching[ filename ] = Interval.new(50) do -> {
+	watching[ filename ] = ../Interval.new(50) do -> {
 		var stat = fs.statSync(filename)
 		var diff = 0
 		if(stat[watch].toString() != stats[filename]){ 

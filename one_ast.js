@@ -102,7 +102,11 @@ ONE.ast_ = function(){
 			if(dump && dump.indexOf('js')!=-1) ONE.out( code )
 
 			try{
-				var fn = Function.call(null, code)()
+				if( typeof process !== 'undefined')
+					var fn = Function.call(null, 'require', code)(require)
+				else 
+					var fn = Function.call(null, 'require', code)()
+
 			} catch(e){
 				console.log("ERROR",e,code)
 			}
@@ -132,7 +136,7 @@ ONE.ast_ = function(){
 	}
 
 	// AST node
-	parser.Node = this.AST = this.extends({}, function(){
+	parser.Node = this.AST = this.extend.call({}, this, function(){
 
 		// AST nodes can be bound to signals
 		this.$_sigbind = function( pthis, key, valkey, old ){
@@ -163,6 +167,7 @@ ONE.ast_ = function(){
 		}
 
 		this.getDependencies = function(){
+			console.log('here')
 			// lets find all load
 			var out = []
 			var steps = this.body.steps
@@ -170,7 +175,7 @@ ONE.ast_ = function(){
 				var step = steps[i]
 				if(step.type == 'Expr' && 
 					step.expr.type == 'Call' &&
-					step.expr.fn.name == 'load' &&
+					step.expr.fn.name == 'mixin' &&
 					step.expr.args &&
 					step.expr.args[0].type == 'Value' &&
 					step.expr.args[0].kind == 'string'){
@@ -230,8 +235,10 @@ ONE.ast_ = function(){
 			Struct: { id:1, struct:1, defs:2, dim:1 },
 			Def: { id:1, init:1, dim:1 },
 
-			Function: { id:1, params:2, rest:1, body:1, arrow:0, def:0 },
+			Function: { id:1, params:2, rest:1, body:1, arrow:0, gen:0, def:0 },
 			Return: { arg:1 },
+			Yield: { arg:1 },
+			Await: { arg:1 },
 
 			Unary: { op:0, prefix:0, arg:1 },
 			Binary: { op:0, prio:0, left:1, right:1 },
@@ -292,8 +299,11 @@ ONE.ast_ = function(){
 						code += 'var _'+v+' = n.'+k+'\n'+
 							'if(_'+v+'){\n'+
 								'\tvar x,y=[]\n'+
-								'\tfor(var len = _'+v+'.length,i = 0;i<len;i++)'+
-									'x = _'+v+'[i], y[i] = {key:this[x.key.type](x.key),value:this[x.value.type](x.value)}\n'+
+								'\tfor(var len = _'+v+'.length,i = 0;i<len;i++){\n'+
+									'x = _'+v+'[i], y[i] = {key:this[x.key.type](x.key)}\n'+
+									'if(x.value) y[i].value = this[x.value.type](x.value)\n'+
+									'else y[i].enum = x.enum\n'+
+								'}\n'+
 								'\tc.'+k+'=y\n'+
 							'}\n'
 					}
@@ -397,6 +407,7 @@ ONE.ast_ = function(){
 			comments:1,
 			line:0,
 			array_fix:0, //!TODO do this nicely
+			no_valueless_object:0,
 
 			expand:function( n, parent, parens, term ){ // recursive expansion
 				if( !n || !n.type ) return ''
@@ -527,23 +538,40 @@ ONE.ast_ = function(){
 				this.depth += this.indent
 				var k = n.keys
 				var len = k.length
-				var out = '{'
+				var out = '{' + this.space
 				if(n.comments){
 					out += this.comments_flush( n.comments )
 					if( !len ) out += old_depth
 				}
+				var lastcm = ''
+				var vc = 0
 				for( var i = 0; i < len; i++ ){
+					var prop = k[i]
+					if( i ) out += ',' + this.space + lastcm
+					lastcm = ''
 					var ch = out[ out.length -1 ]
-					if( i ) out += ','
 					if( ch == '\n' ) out += this.depth
 					else if( ch == '}' ) out +=  this.newline + this.depth
-					out += (k[i].key.name || k[i].key.raw) + ':' + this.expand( k[i].value, n )
+					out += (prop.key.name || prop.key.raw) 
+
+					if(prop.enum === undefined){
+						out += ':' + this.expand( prop.value, n )
+					}
+					else{
+						if(this.no_valueless_object){
+							out += ':' + prop.enum
+						}
+						if( prop.key.comments ){
+							lastcm = this.comments_or_newline( prop.key )
+							if( i == len - 1) out += lastcm
+						}
+					}
 				}
 				var ch = out[ out.length - 1 ]
 				if( ch == '\n') out += old_depth +'}'
 				else{
 					if( ch == '}' ) out += this.newline + old_depth + '}'
-					else out += ' }'
+					else out += this.space + '}'
 				}
 				this.depth = old_depth
 				this.array_fix--
@@ -623,9 +651,19 @@ ONE.ast_ = function(){
 				return 'throw ' + this.expand( n.arg, n )
 			},
 			Try: function( n ){
-				return 'try' + this.expand( n.try, n ) +
-						(n.catch?'catch('+this.expand( n.arg, n )+')'+this.expand( n.catch, n ):'')+
-						(n.finally?'finally'+this.expand( n.finally, n ):'')
+				var out = 'try' + this.expand( n.try, n )
+				if(n.catch){
+					if(n.arg.type !== 'Id') throw new Error("unsupported catch type")
+					var name = n.arg.name 
+					var inscope = this.scope[ name ]
+					if(!inscope) this.scope[ name ] = 1
+					out += 'catch('+name+')'+this.expand( n.catch, n )
+					if(!inscope) this.scope[ name ] = undefined
+
+				} 
+
+				if(n.finally) out += 'finally'+this.expand( n.finally, n )
+				return out
 			},
 
 			While: function( n ){
@@ -648,6 +686,7 @@ ONE.ast_ = function(){
 					this.expand( n.loop, n )
 			},
 			ForOf: function( n ){
+
 				return 'for(' + this.expand( n.left, n ) + ' of ' +
 					this.expand( n.right, n ) + ')' + 
 					this.expand( n.loop, n )
@@ -660,10 +699,10 @@ ONE.ast_ = function(){
 			},
 
 			Var: function( n ){
-				return 'var ' + this.flat( n.defs )
+				return 'var ' + this.flat( n.defs, n )
 			},
 			Const: function( n ){
-				return 'const ' + this.flat( n.defs )
+				return 'const ' + this.flat( n.defs, n )
 			},
 			TypeVar: function( n ){
 				return this.expand(n.kind, n) + 
@@ -696,9 +735,13 @@ ONE.ast_ = function(){
 					this.cignore = 1
 					return ret
 				}
-				var ret = 'function'+(n.id?' '+this.expand( n.id, n ):'') +
-							'('+this.list( n.params, n )+(n.rest ? ',' + this.expand(n.rest, n) : '' ) + ')' +
-							this.expand( n.body, n )
+				var ret = 'function'
+				if( n.gen ) ret += '*'
+				if( n.id ) ret += ' '+this.expand( n.id, n )
+				ret += '('+this.list( n.params, n )
+				if( n.rest ) ret += ',' + this.expand(n.rest, n) 
+				ret += ')'
+				ret += this.expand( n.body, n )
 				this.cignore = 1
 				if( parens ) return '(' +ret + ')'
 				return ret
@@ -706,6 +749,13 @@ ONE.ast_ = function(){
 			Return: function( n ){
 				return 'return' + (n.arg ? ' ' + this.expand( n.arg, n ):'')
 			},
+			Yield: function( n ){
+				return 'yield' + (n.arg ? ' ' + this.expand( n.arg, n ):'')
+			},
+			Await: function( n ){
+				return 'await' + (n.arg ? ' ' + this.expand( n.arg, n ):'')
+			},
+
 			Unary: function( n ){
 				if( n.prefix )return n.op + this.space + this.expand( n.arg, n )
 				return this.expand ( n.arg, n ) + n.op
@@ -785,9 +835,6 @@ ONE.ast_ = function(){
 				out += n.op + this.expand( n.id, n )
 				return out
 			},
-			Extends: function( n ){
-				return this.expand( n.id, n ) + ' extends '+this.expand( n.extend, n )
-			},
 			Do: function( n ){
 				var ret = ''
 				ret += this.expand( n.call, n ) 
@@ -816,7 +863,7 @@ ONE.ast_ = function(){
 			}
 		}
 
-		this.code_escaped = this.extends( this.code_serialize,{
+		this.code_escaped = this.extend.call(this.code_serialize, this, {
 			newline:' \\n\\\n',
 			indent:'\t',
 			Unary: function( n ){
@@ -838,12 +885,13 @@ ONE.ast_ = function(){
 			}
 		})
 
-		this.js_serialize = this.extends( this.code_serialize, {
+		this.js_serialize = this.extend.call(this.code_serialize, this, {
 			
 			newline:'\n',
 			semi:';',
 			scope:{},
 			promise_catch:1,
+			no_valueless_object:1,
 			globals:{
 				Object:1,
 				Array:1, 
@@ -891,7 +939,8 @@ ONE.ast_ = function(){
 				setTimeout:1,
 				clearTimeout:1,
 				console:1,
-				window:1
+				window:1,
+				require:1
 			},
 
 			Id: function( n ){
@@ -918,6 +967,7 @@ ONE.ast_ = function(){
 			},
 
 			ForTo: function( n ){
+
 				throw new Error("implement ForTo")
 			},
 
@@ -1025,7 +1075,7 @@ ONE.ast_ = function(){
 				// expand the function
 				if( n.body.type == 'Block' ){
 					var steps = n.body.steps
-
+					n.body.parent = n
 					// we can do a simple wait transform
 					str_body += this.block( n.body.steps, n.body, 1 )
 					//for( var i = 0; i < steps.length; i++ ){
@@ -1072,7 +1122,12 @@ ONE.ast_ = function(){
 				this.depth = olddepth
 				this.scope = scope
 
+
 				var ret = 'function'
+
+				if(n.await) ret = 'ONE.await(' + ret
+
+				if(n.gen || n.auto_gen) ret += '*'
 				if( nametag ) ret += ' '+nametag
 				else if(n.id) ret += ' '+this.expand( n.id, n )
 
@@ -1082,11 +1137,39 @@ ONE.ast_ = function(){
 				ret += this.comments_or_newline(n.body) + str_body + this.depth 
 				if( trywrap ) ret += '}catch(_){console.log(_);throw(_)}'
 				ret += '}'
-				if( bind )ret += '.bind(this)'
-
+				if( n.await ){
+					if( bind ) ret += ',this'
+					ret += ')'
+				}
+				else if( bind )ret += '.bind(this)'
 				this.cignore = 1
 				if( parens ) return '('+ret+')'
 				return ret
+			},
+
+			Yield: function( n ){
+				var p = n.parent
+				while(p){
+					if(p.type == 'Function'){
+						p.auto_gen = 1
+						break
+					}
+					p = p.parent
+				}
+				return 'yield' + (n.arg ? ' ' + this.expand( n.arg, n ):'')
+			},
+
+			Await: function( n ){
+				var p = n.parent
+				while(p){
+					if(p.type == 'Function'){
+						p.await = 1
+						p.auto_gen = 1
+						break
+					}
+					p = p.parent
+				}
+				return 'yield'+ (n.arg ? ' ' + this.expand( n.arg, n ):'')
 			},
 
 			Update: function( n, parens ){
@@ -1100,8 +1183,14 @@ ONE.ast_ = function(){
 				return ret
 			},
 			Assign: function( n, parens ){
-				if(n.left.type == 'Array' || n.left.type == 'Object'){
+				if(n.left.type == 'Array' ){
+					// alright.
 					throw new Error("Destructuring not implemented")
+				}
+				if(n.left.type == 'Object'){
+					// ohkay so.
+					// we need to transform the object tree to a property tree
+
 				}
 				var ret 
 				if(n.left.type == 'Id' || n.left.type == 'Key' || n.left.type == 'Index'){
@@ -1123,7 +1212,7 @@ ONE.ast_ = function(){
 					return this.expand( n.fn, n, true ) + '.call(this' + (n.args.length?','+this.space+this.list( n.args, n ):'') + 
 							(extra?','+this.space+extra+')':')')
 				} // auto this inject with new
-				else if(n.fn.type == 'Key' && n.fn.key.type == 'Id' && n.fn.key.name == 'new'){
+				else if(n.fn.type == 'Key' && n.fn.key.type == 'Id' && (n.fn.key.name == 'new' || n.fn.key.name == 'extend')){
 					return this.expand( n.fn, n, true ) + '(this' + (n.args.length?','+this.list( n.args, n ):'') + 
 						(extra?','+this.space+extra+')':')')
 				}
@@ -1166,18 +1255,6 @@ ONE.ast_ = function(){
 				for(var i = 0; i < dots; i++ ) out += join + '.'
 				return out + n.id.name
 			},
-			Extends: function( n ){
-				// n.extend should be callback
-				var ext = n.extend
-				ext.parent = n
-				if(ext.type != 'Callback') throw new Error("Dont know what to do with extend")
-				if(n.id.type != 'Id') throw new Error("Extend cant define left part")
-				if(ext.call.type != 'Id') throw new Error("Extend cant use right part")
-
-				return 'this.extends(\'' + n.id.name + '\',' +this.space + 
-					this.expand( ext.call, ext )+','+ this.space +
-					this.Function( ext )+')'
-			},
 			Do: function( n ){
 				var call = n.call
 
@@ -1210,7 +1287,10 @@ ONE.ast_ = function(){
 				if(call.type == 'Key' && call.key.type == 'Id'){
 					var name = call.key.name
 					// support super short promise or new api, should we?
-					if(name == 'new' || name == 'then'){
+					if(name == 'new' || name == 'extend'){
+						return this.expand( call, n ) + '(this,' + this.Function( n ) + ')'
+					}
+					if(name == 'then' ){
 						return this.expand( call, n ) + '(' + this.Function( n ) + ')'
 					}
 					isassign = true
@@ -1237,7 +1317,7 @@ ONE.ast_ = function(){
 		})
 
 		// TODO update this
-		this.signal_serialize = this.extends( this.code_serialize, {
+		this.signal_serialize = this.extend.call(this.code_serialize, this, {
 			deps:0,
 			Call:function( n ){
 				if( n.fn.type !== 'Id') throw new Error("Dont know how to do non Id call")

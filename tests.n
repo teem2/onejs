@@ -1,7 +1,6 @@
 load('testing')
 
 testing("ONE:Classes") do :->{
-
 	C1 extends Base{}
 	Der1 extends C1{ x = ../callOnce(1) }
 	Der2 extends C1{ x = ../callOnce(2) }

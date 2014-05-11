@@ -14,7 +14,8 @@ testing = (title, node)->{
 		}
 	}
 
-	if( node.type != 'Function') throw new Error("Can only test quoted functions")
+	if( node.type != 'Function') 
+		throw new Error("Can only test quoted functions")
 
 	var body = node.body // here is a comment!
 

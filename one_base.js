@@ -7,55 +7,42 @@ ONE.base_ = function(){
 
 	// inherit a new class, whilst passing on the scope
 
-	this.extends = function( proto, role, last ){
+	this.extend = function( pthis, role ){
 
-		if( arguments.length == 0 ) return ONE.Base
-		if( arguments.length == 1 ){
-			role = proto
-			proto = ONE.Base
+		var obj = Object.create( this )
+		obj.$ = pthis.$
+		obj._ = pthis
+		obj.__onename__ = 'unknown-class'
+		if(! obj.mixin ){
+			obj.mixin = pthis.mixin
+			obj.extend = pthis.extend
+			obj.new = pthis.new
 		}
-
-		if(arguments.length == 3){
-			var setter = proto
-			proto = role
-			role = last
-		}
-		
-		if( typeof proto == 'string' ) proto = this.resolve( proto )
-
-		if( !proto || typeof proto != 'object' ) throw new Error("Cannot create new class from this prototype")
-
-		var obj = Object.create( proto )
-		obj.$ = this.$
-		obj._ = this
-		obj.__onename__ = setter?setter:'unknown-class'
-		if(! obj.load ){
-			obj.load = this.load
-			obj.extends = this.extends
-			obj.new = this.new
-		}
-		obj.load( role )
-
-		if(setter){
-			if( this.__lookupSetter__( setter ) ) throw new Error("Cannot redefine class " + setter )
-			if( setter in this ){
-				obj.load( this[ setter ] )
-			}
-			var storeKey = '__' + setter
-			this[ storeKey ] = obj
-			Object.defineProperty( this, setter, {
-				configurable:true,
-				enumerable:true,
-				get:function(){
-					return this[ storeKey ]
-				},
-				set:function( value ){
-					this[ storeKey ].load( value )
-				}
-			})
-		}
+		obj.mixin( role )
 
 		return obj
+	}
+
+	// define something as a mixer
+
+	this.mixer = function( name, init ){
+
+		if( this.__lookupSetter__( name ) ) throw new Error("Cannot redefine mixer " + name )
+		if( name in this ){
+			obj.load( this[ name ] )
+		}
+		var storeKey = '__' + name
+		this[ storeKey ] = init
+		Object.defineProperty( this, name, {
+			configurable:true,
+			enumerable:true,
+			get:function(){
+				return this[ storeKey ]
+			},
+			set:function( value ){
+				this[ storeKey ].mixin( value )
+			}
+		})
 	}
 
 	// Internal prefixes:
@@ -79,12 +66,7 @@ ONE.base_ = function(){
 	// __roles__ = roles object
 	// __overloads__ = role overloading stacks
 
-	this.extend = function( role ){
-		return this.extends( this, role )
-	}
-
 	// create a new object
-
 	this.new = function(){
 
 		var obj = Object.create( this )
@@ -92,12 +74,12 @@ ONE.base_ = function(){
 		var arg
 		var len = arguments.length
 		if(len){
-			this.__maker__ = arguments[0]
+			this.__newthis__ = arguments[0]
 			if(len > 1) arg = Array.prototype.slice.call( arguments, 1 )
 		}
 
-		if(obj._make) obj._make.apply( obj, arg )
-		else if(obj.make) obj.make.apply( obj, arg )
+		if(obj._maker) obj._maker.apply( obj, arg )
+		else if(obj.maker) obj.maker.apply( obj, arg )
 		else if( arg ) obj.load.apply( obj, arg )
 		
 		return obj
@@ -113,7 +95,6 @@ ONE.base_ = function(){
 	}
 	
 	// load a property bag
-	
 	this.load = function( irole ){
 		var role = irole
 		if( typeof irole == 'string' ){// try to read it from scope
@@ -122,40 +103,36 @@ ONE.base_ = function(){
 		}
 
 		if( typeof role == 'function' ){
-			// if we have arguments, we need to execute the
-			// function on a clean object and pull out the right props.
-			if( arguments.length > 1 ){
-				var base = this.Base.new()
-				role.call( base )
-				for( var i = 1;i< arguments.length;i++){
-					var k = arguments[i]
-					var as = k
-					if( typeof k == 'object') as = k.as, k = k.key
-					var v = base[ k ]
-					if(v === undefined) throw new Error("Cannot load specific "+k+" from "+irole)
-					this[ as ] = v
-				}
-			}
-			else role.call( this )
+			var base = this.Base.new()
+			role.call( base )
+			return base
+		}
+
+		return role
+	}
+	
+	// mixin a property bag
+	this.mixin = function( irole ){
+		var role = irole
+		if( typeof irole == 'string' ){// try to read it from scope
+			role = this.$[irole]
+			if( !role ) throw new Error("Cannot find role "+irole+" on this")
+		}
+
+		if( typeof role == 'function' ){
+			role.call( this )
+			return this
 		}
 		
 		if( typeof role == 'object' ){
-			if( arguments.length > 1 ){
-				for( var i = 1;i< arguments.length;i++){
-					var k = arguments[i]
-					var as = k
-					if( typeof k == 'object') as = k.as, k = k.key
-					var v = role[ k ]
-					if(v === undefined) throw new Error("Cannot load specific "+k+" from "+irole)
-					this[ as ] = v
-				}
-			}else 
 			for( var k in role ) this[ k ] = role[ k ]
+			return this
 		}
+
+		throw new Error('could not mix in', irole)
 	}
-	
-	// learn a role, creates undo stacks so forget works.
-	 
+
+	// learn a property bag, creates undo stacks so forget works.
 	this.learn = function( ){
 
 		var roles
@@ -275,7 +252,7 @@ ONE.base_ = function(){
 		return this
 	}
 
-	// forget a role
+	// forget a property bag
 
 	this.forget = function( role ){
 	   if( !this.hasOwnProperty('__roles__') ) return
@@ -894,4 +871,109 @@ ONE.base_ = function(){
 	this.out = function(){ ONE.logwrite(2, arguments); return arguments[0];}
 	this.warn = function(){ ONE.logwrite(1, arguments) }
 	this.error = function(){ ONE.logwrite(0, arguments) }
+}
+
+ONE.await = function( generator, bound, _catch ){
+	var ret = function(){
+		var iter = generator.apply(this, arguments)
+		return new Promise(function(resolve, reject){
+			function error(e){
+				reject(e)
+				iter.throw( e )
+			}
+			function next( value ){
+				promise = iter.next( value )
+				if(promise.done === false){
+					promise.value.then( next, error )
+				}
+				else{
+					resolve( promise.value )
+				}
+			}
+			next()
+		})
+	}
+	if(bound) return ret.bind(bound)
+	return ret
+}
+
+if(typeof Promise === 'undefined'){
+	function Promise(fn) {
+		var state = 'pending'
+		var value
+		var deferred = null
+
+		function resolve(newValue) {
+			try {
+				if(newValue && typeof newValue.then === 'function') {
+					newValue.then(resolve, reject)
+					return
+				}
+				state = 'resolved'
+				value = newValue
+
+				if(deferred) {
+					handle(deferred)
+				}
+			} catch(e) {
+				reject(e);
+			}
+		}
+
+		function reject(reason) {
+			state = 'rejected'
+			value = reason
+
+			if(deferred) {
+				handle(deferred)
+			}
+		}
+
+		function handle(handler) {
+			if(state === 'pending') {
+				deferred = handler
+				return
+			}
+			setTimeout(function(){
+				var handlerCallback
+
+				if(state === 'resolved') {
+					handlerCallback = handler.onResolved
+				} else {
+					handlerCallback = handler.onRejected
+				}
+
+				if(!handlerCallback) {
+					if(state === 'resolved') {
+						handler.resolve(value)
+					} else {
+						handler.reject(value)
+					}
+				}
+	
+				var ret
+				try {
+					ret = handlerCallback(value)
+				} catch(e) {
+					handler.reject(e)
+					return
+				}
+
+				handler.resolve(ret)
+			},0)
+		}
+
+		this.then = function(onResolved, onRejected) {
+			return new Promise(function(resolve, reject) {
+				handle({
+					onResolved: onResolved,
+					onRejected: onRejected,
+					resolve: resolve,
+					reject: reject
+				})
+			})
+		}
+
+		fn(resolve, reject)
+	}
 }
