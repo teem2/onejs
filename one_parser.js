@@ -344,7 +344,12 @@ ONE.parser_strict_ = function(){
 	this._comma = {type: ",", beforeExpr: true}
 	this._semi = {type: ";", beforeExpr: true}
 	this._colon = {type: ":", prefix: 1, beforeExpr: true}
+	this._doublecolon = {type:"::"}
 	this._dot = {type: "."}
+	this._dotdot = {type: ".."}
+	this._tripledot = {type: "..."}
+	this._dotdotslash = {type: "../"}
+
 	this._question = {type: "?", beforeExpr: true}
 	this._thinArrow = {type:"->"}
 	this._fatArrow = {type:"=>"}
@@ -629,6 +634,20 @@ ONE.parser_strict_ = function(){
 	this.readToken_dot = function() {
 		var next = this.input.charCodeAt(this.tokPos + 1)
 		if (next >= 48 && next <= 57) return this.readNumber(true)
+		if( next == 46){
+			next = this.input.charCodeAt(this.tokPos + 2)
+			if( next == 47){
+				this.tokPos += 3
+				return this.finishToken(this._dotdotslash)
+			}
+			var after = this.input.charCodeAt(this.tokPos + 3)
+			if( next == 46 && after != 46){
+				this.tokPos += 3
+				return this.finishToken(this._tripledot)
+			}
+			this.tokPos += 2
+			return this.finishToken(this._dotdot)
+		} // double dot
 		++this.tokPos
 		return this.finishToken(this._dot)
 	}
@@ -719,7 +738,13 @@ ONE.parser_strict_ = function(){
 		case 93: ++this.tokPos; return this.finishToken(this._bracketR)
 		case 123: ++this.tokPos; return this.finishToken(this._braceL)
 		case 125: ++this.tokPos; return this.finishToken(this._braceR)
-		case 58: ++this.tokPos; return this.finishToken(this._colon)
+		case 58: ++this.tokPos; 
+			var next = this.input.charCodeAt(this.tokPos)
+			if(next == 58){
+				++this.tokPos
+				return this.finishToken(this._doublecolon)
+			}
+			return this.finishToken(this._colon)
 		case 63: ++this.tokPos; return this.finishToken(this._question)
 
 			// '0x' is a hexadecimal number.
@@ -1565,7 +1590,7 @@ ONE.parser_strict_ = function(){
 
 		default:
 			var maybeName = this.tokVal, expr = this.parseExpression()
-			if (starttype === this._name && expr.type === "Id" && this.eat(this._colon)) {
+			if (starttype === this._name && expr.type === "Id" && this.eat(this._colon)) {				
 				for (var i = 0; i < this.labels.length; ++i)
 					if (this.labels[i].name === maybeName) this.raise(expr.start, "Label '" + maybeName + "' is already declared")
 				var kind = this.tokType.isLoop ? "loop" : this.tokType === this._switch ? "switch" : null
@@ -1673,6 +1698,22 @@ ONE.parser_strict_ = function(){
 		return node
 	}
 	
+	this.parseExtends = function(left){
+		var node = this.startNode(left)
+		this.eat(this._doublecolon)
+		if(this.tokType !== this._braceL) node.right = this.parseIdent(true)
+		if(left) node.left = left
+		if(this.tokType == this._parenL){ // we are a call or a parameterized extends
+			if(!left) throw new Error("Cannot call function by :: without identifier")
+			var call = this.parseCall(this.finishNode(node,"Extends"))
+			if(call.type == 'Function') this.raise(call.start,"Block following class-specified call has no meaning")
+			return call
+		} else { // a normal extends
+			node.body = this.parseStatementBlock()
+			return this.finishNode(node, "Extends")
+		}
+	}
+
 	// Determines if a comma injection is safe
 
 	this.canInjectComma = function( type, ignoreNewLine ) {
@@ -1729,6 +1770,9 @@ ONE.parser_strict_ = function(){
 		if(this.tokType == this._colon ){
 			var node = this.startNode()
 			this.next()
+			if(this.tokType == this._colon){
+				return this.parseExtends()
+			}
 			node.quote = this.parseMaybeAssign(noIn)
 			return this.finishNode(node, "Quote")
 		}
@@ -1837,14 +1881,33 @@ ONE.parser_strict_ = function(){
 
 	this.parseSubscripts = function(base, noCalls) {
 		if (this.tokType == this._dot) {
-			// dots on new line are ok.
-			if( this.input.charCodeAt(this.tokPos) == 46 ) return base
 			this.eat(this._dot)
 			var node = this.startNodeFrom(base)
 			node.object = base
 			node.key = this.parseIdent(true)
 			return this.parseSubscripts(this.finishNode(node, "Key"), noCalls)
-		} else if (this.tokType == this._bracketL) {
+		} 
+		else if (this.tokType == this._dotdot){
+			if( this.lastSkippedNewlines ) return base
+			this.eat(this._dotdot)
+			var node = this.startNodeFrom(base)
+			node.left = base
+			if( this.tokType == this._name){
+				node.right = this.parseIdent(true)
+			}
+			return this.parseSubscripts(this.finishNode(node, "Prototype"), noCalls)
+		}	
+		else if (this.tokType == this._dotdotslash){
+			if( this.lastSkippedNewlines ) return base
+			this.eat(this._dotdotslash)
+			var node = this.startNodeFrom(base)
+			node.left = base
+			if( this.tokType == this._name){
+				node.right = this.parseIdent(true)
+			}
+			return this.parseSubscripts(this.finishNode(node, "Path"), noCalls)
+		}
+		else if (this.tokType == this._bracketL) {
 			// we also dont do this._bracketL on new line
 			if( this.lastSkippedNewlines ) return base
 			this.eat(this._bracketL)
@@ -1855,7 +1918,11 @@ ONE.parser_strict_ = function(){
 			}
 			this.expect(this._bracketR)
 			return this.parseSubscripts(this.finishNode(node, "Index"), noCalls)
-		} else if (this.tokType == this._braceL){
+		} 
+		else if(this.tokType == this._doublecolon){
+			return this.parseExtends(base)
+		} 
+		else if (this.tokType == this._braceL){
 
 			// we also dont do this._braceL on new line
 			if( this.lastSkippedNewlines ) return base
@@ -1866,21 +1933,24 @@ ONE.parser_strict_ = function(){
 				var node = this.startNodeFrom(base)
 				node.arrow = '->'
 				return this.parseArrowFunction(node, base)
-			} else {
+			} 
+			else {
 				var node = this.startNodeFrom(base)
 				node.call = base
 				node.arrow = '->'
 				node.body = this.parseBlock(true)
 				return this.parseSubscripts(this.finishNode(node, "Callback"), noCalls)
 			}
-		} else if( this.tokType == this._thinArrow || this.tokType == this._fatArrow || this.tokType == this._wavyArrow ){
+		} 
+		else if( this.tokType == this._thinArrow || this.tokType == this._fatArrow || this.tokType == this._wavyArrow ){
 			// you cant separate an arrow from its args with a this.newline
 			if( this.lastSkippedNewlines ) return base
 			var node = this.startNodeFrom(base)
 			node.arrow = this.tokType.type
 			this.next()
 			return this.parseArrowFunction(node, base)
-		} else if( this.tokType == this._do ){
+		} 
+		else if( this.tokType == this._do ){
 			// do cant be on the next line or it can be a do while
 			if( this.lastSkippedNewlines && this.input.charCodeAt(this.tokPos) == 123)return base
 			// if we are a catch, we must scan up to
@@ -1907,15 +1977,20 @@ ONE.parser_strict_ = function(){
 				//eat(this._ident)
 			}
 			return this.finishNode( node, 'Do')
-		} else if (!noCalls && this.tokType == this._parenL) {
-			// we dont do calls on the next line. Never seen one that wasnt a bug. Just say no.
-			if( this.lastSkippedNewlines ) return base
-			this.eat(this._parenL)
-			var node = this.startNodeFrom(base)
-			node.fn = base
-			node.args = this.parseExprList(this._parenR, false)
-			return this.parseSubscripts(this.finishNode(node, "Call"), noCalls)
-		} else return base
+		} 
+		else if (!noCalls && this.tokType == this._parenL) {
+			return this.parseCall( base )
+		} 
+		else return base
+	}
+	
+	this.parseCall = function(base){
+		if( this.lastSkippedNewlines ) return base
+		this.eat(this._parenL)
+		var node = this.startNodeFrom(base)
+		node.fn = base
+		node.args = this.parseExprList(this._parenR, false)
+		return this.parseSubscripts(this.finishNode(node, "Call"))
 	}
 
 	// Parse an atomic expression — either a single token that is an
@@ -2007,36 +2082,24 @@ ONE.parser_strict_ = function(){
 			node.arrow = this.tokType.type
 			this.next()
 			return this.parseArrowFunction(node)
-		case this._dot:
-			return this.parseDots()
-
+		case this._tripledot:
+			var node = this.startNode()
+			node.id = this.parseIdent(parseIdent)
+			this.next()
+			return this.finishNode(node, "Rest")
+		case this._dotdot:
+			var node = this.startNode()
+			this.next()
+			if( this.tokType == this._name) node.right = this.parseIdent(true)
+			return this.parseSubscripts(this.finishNode(node, "Prototype"))
+		case this._dotdotslash:
+			var node = this.startNode()
+			this.next()
+			if( this.tokType == this._name) node.right = this.parseIdent(true)
+			return this.parseSubscripts(this.finishNode(node, "Path"))
 		default:
 			this.unexpected()
 		}
-	}
-
-
-	this.parseDots = function( onlyRest ) {
-			var node = this.startNode()
-			var dots = 0
-			while( this.tokType == this._dot ){
-				this.next()
-				dots++
-			}
-			node.dots = dots
-
-			if( this.tokType == this._name){ // its a ...rest thing
-				if( onlyRest && dots !== 3) this.raise(this.tokPos, "Have to use 3 dots to define rest parameter")
-				node.id = this.parseIdent()
-				return this.finishNode(node, "Rest" )
-			} 
-			else if( onlyRest || !this.tokType.binop ) this.unexpected()
-
-			node.op = this.tokVal
-			this.next()
-			node.id = this.parseIdent()
-
-			return this.finishNode(node, "Path")
 	}
 
 	// New's precedence is slightly tricky. It must allow its argument
@@ -2098,7 +2161,6 @@ ONE.parser_strict_ = function(){
 					}
 				}
 				prop.enum = last + 1
-				//console.log(prop.enum)
 			}
 			// getters and setters are not allowed to clash — either with
 			// each other or with an init property — and in this.strict mode,
@@ -2229,7 +2291,7 @@ ONE.parser_strict_ = function(){
 		var elts = [], first = true
 		while (!this.eat(close)) {
 			if (!first) {
-				this.canInjectComma( this.tokType, true ) || this.expect(this._comma)
+				this.canInjectComma( this.tokType ) || this.expect(this._comma)
 				if (allowTrailingComma && this.allowTrailingCommas && this.eat(close)) break
 			} else first = false
 

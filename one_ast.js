@@ -204,6 +204,7 @@ ONE.ast_ = function(){
 			Array: { elems:2 },
 			Object: { keys:3 },
 			Index: { object:1, index:1 },
+			Prototype: { left:1, right:1 },
 			Key: { object:1, key:1 },
 
 			Block:{ steps:2 },
@@ -248,11 +249,11 @@ ONE.ast_ = function(){
 
 			New: { fn:1, args:2 },
 			Call: { fn:1, args:2 },
+			Extends: { left:1, right:1, body:1 },
 
 			Quote: { quote:1 },
 			Rest: { id:1, dots:0 },
-			Path: { dots:0, op:0, id:1 },
-			Extends: { id:1, extend:1 },
+			Path: { left:0, right:0 },
 			Do: { call:1, arg:1, catch:1, then:1, kind:0 },
 			Then: { name:1, do:1 },
 			Callback: { call:1, body:1, arrow:0 },
@@ -822,7 +823,9 @@ ONE.ast_ = function(){
 			Call: function( n ){
 				return this.expand( n.fn, n, true ) + '(' + this.list( n.args, n ) + ')'
 			},
-
+			Extends: function( n ){
+				return n.left.name + '::' + n.right.name + this.expand( n.body, n )
+			},
 			Quote: function( n, parens ){
 				var ret = ':' + this.expand( n.quote, n )
 				if( parens ) return '(' +ret + ')'
@@ -1235,6 +1238,7 @@ ONE.ast_ = function(){
 
 				ret += this.comments_or_newline(n.body) + str_body + this.depth 
 				if( trywrap ) ret += '}catch(_){console.log(_);throw(_)}'
+				if( ret[ret.length - 1] != '\n') ret += this.newline + this.depth
 				ret += '}'
 				if( n.await ){
 					if( bind ) ret += ',this'
@@ -1248,6 +1252,8 @@ ONE.ast_ = function(){
 			find_function: function( n ){
 				var p = n.parent
 				while(p){
+					if(p.type == 'Callback') return p
+					if(p.type == 'Extends') return p
 					if(p.type == 'Function') return p
 					p = p.parent
 				}
@@ -1396,7 +1402,15 @@ ONE.ast_ = function(){
 				if( parens ) return '('+out+')'
 				return out
 			},
+			Extends: function( n, parens ){
+				// define a function.
 
+				var ret = this.expand(n.left) + this.space+'=' + this.space
+				if(n.right) ret += this.expand( n.right )
+				else ret += 'this.Base'
+				ret += '.extend(this,'+ this.Function( n )+')'
+				return ret
+			},
 			Call: function( n, parens, extra ){
 				// auto this forward with local scope functions
 				// !TODO fix
@@ -1433,19 +1447,31 @@ ONE.ast_ = function(){
 			Rest: function( n ){
 				throw new Error("dont know what to do with isolated rest object")
 			},
+			Prototype: function( n ){
+				//if( n.left.type !== 'Id' ) throw new Error('Unknown id type')
+				if( !n.left ){
+					if(!n.right) return 'Object.getPrototypeOf(this)'
+					// left is always the object
+					if(n.right.type == 'Id')	
+						return 'Object.getPrototypeOf(this).'+ n.right.name
+				}
+				if( !n.right ){
+					return 'Object.getPrototypeOf('+this.expand(n.left,n)+')'
+				}
+				return 'Object.getPrototypeOf('+this.expand(n.left, n) + ').' + n.right.name
+			},			
 			Path: function( n ){
-				if( n.id.type !== 'Id' ) throw new Error('Unknown id type')
-				// check op. if we have / we use ._.
-				// if we have | we use parent
-				var join = ''
-				if( n.op == '/') join = '_'
-				else if( n.op == '<') join = 'parent'
-				else throw new Error("Unknown path operand")
-
-				var dots = n.dots - 1
-				var out = 'this.'
-				for(var i = 0; i < dots; i++ ) out += join + '.'
-				return out + n.id.name
+				//if( n.left.type !== 'Id' ) throw new Error('Unknown id type')
+				if( !n.left ){
+					if(!n.right) return 'this._'
+					// left is always the object
+					if(n.right.type == 'Id')	
+						return 'this._.'+ n.right.name
+				}
+				if( !n.right ){
+					return this.expand(n.left,n)+'._'
+				}
+				return this.expand(n.left, n) + '._.' + n.right.name
 			},
 			Do: function( n ){
 				var call = n.call
@@ -1702,4 +1728,5 @@ ONE.ast_ = function(){
 	return this
 
 }
+
 

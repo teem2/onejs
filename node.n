@@ -7,7 +7,7 @@ var _fs = require('fs')
 var _http = require('http')
 var _url = require('url')
 
-Mime = Base.extend{
+Mime::{
 
 	htm  = "text/html"
 	html = "text/html"
@@ -22,21 +22,14 @@ Mime = Base.extend{
 
 	regex = new RegExp("\\.(" + Object.keys(this).join("|") + ")$")
 
-	fromFilename = name->{
+	fromFilename( name ){
 		var ext = name.match(mimeRx)
 		return ext && this[ext[1]] || "text/plain"
 	}
 }
 
-var nodeify = fn->{
-	return ->{
-		new Promise(function(){
-		})
-	}
-}
-
 // all file, path tools
-File = Base.extend{
+File::{
 	stream(path){
 	}
 
@@ -51,15 +44,14 @@ File = Base.extend{
 }
 
 // url class
-Url = Base.extend{
-	// getters and setters
-	maker = (url)->{
+Url::{
+	maker(url){
 		var o = _url.parse(url)
 		for(var k in o) this[k] = o[k]
 	}
 }
 
-Http = Base.extend{
+Http::{
 	get(myurl) -> promise{
 		url = ../Url.new(myurl)
 		var data = []
@@ -80,7 +72,7 @@ Http = Base.extend{
 	}
 }
 
-HttpServer = Base.extend{
+HttpServer::Http{
 	
 	maker(){
 	}
@@ -88,7 +80,7 @@ HttpServer = Base.extend{
 	route( match, body ){
 	}
 
-	Response = Base.extend{
+	Response::{
 		_maker(handle){
 			req = maker.request
 		}
@@ -101,8 +93,8 @@ HttpServer = Base.extend{
 	}
 }
 
-WatchFile = Base.extend{
-	
+WatchFile::{
+
 	watching = {}
 
 	maker(filename, options,  cb){
