@@ -1420,10 +1420,10 @@ ONE.parser_strict_ = function(){
 					this.parseVar(init, true)
 					this.finishNode(init, "Var")
 				}
+				if (this.eat(this._of)) return this.parseForOf(node, init)
 				if( init.defs.length === 1 ){
 					if (this.eat(this._in)) return this.parseForIn(node, init)
 					if (this.eat(this._to)) return this.parseForTo(node, init)
-					if (this.eat(this._of)) return this.parseForOf(node, init)
 				}
 
 				return this.parseFor(node, init)
@@ -1856,15 +1856,23 @@ ONE.parser_strict_ = function(){
 			this.expect(this._bracketR)
 			return this.parseSubscripts(this.finishNode(node, "Index"), noCalls)
 		} else if (this.tokType == this._braceL){
+
 			// we also dont do this._braceL on new line
 			if( this.lastSkippedNewlines ) return base
-			var node = this.startNodeFrom(base)
-			node.call = base
-			node.arrow = '->'
-			node.body = this.parseBlock(true)
 			
-			return this.parseSubscripts(this.finishNode(node, "Callback"), noCalls)
-
+			// we have to figure out if we are a Function or not.
+			// if base has parens, we are a short arrow funciton
+			if(base.parens || base.type == 'Call'){
+				var node = this.startNodeFrom(base)
+				node.arrow = '->'
+				return this.parseArrowFunction(node, base)
+			} else {
+				var node = this.startNodeFrom(base)
+				node.call = base
+				node.arrow = '->'
+				node.body = this.parseBlock(true)
+				return this.parseSubscripts(this.finishNode(node, "Callback"), noCalls)
+			}
 		} else if( this.tokType == this._thinArrow || this.tokType == this._fatArrow || this.tokType == this._wavyArrow ){
 			// you cant separate an arrow from its args with a this.newline
 			if( this.lastSkippedNewlines ) return base
@@ -1947,16 +1955,23 @@ ONE.parser_strict_ = function(){
 
 			if( this.tokType == this._parenR){// this.empty parens
 				this.eat(this._parenR)
-				if( this.tokType !== this._thinArrow && this.tokType !== this._fatArrow  && this.tokType !== this._wavyArrow) this.unexpected()
+
+				if( this.tokType !== this._thinArrow && 
+					this.tokType !== this._fatArrow  && 
+					this.tokType !== this._wavyArrow &&
+					this.tokType !== this._braceL) this.unexpected()
 				var val = this.startNode()
 				val.start = tokStart1
-				return this.finishNode(val, "Empty" )
+				val.parens = 1
+				return this.parseSubscripts(this.finishNode(val, "Empty" ))
 			}
 
-		  var val = this.parseExpression()
-		  val.start = tokStart1
-		  val.end = this.tokEnd
+			var val = this.parseExpression()
+			val.start = tokStart1
+			val.end = this.tokEnd
+			val.parens = 1
 			this.expect(this._parenR)
+
 			return val
 
 		case this._bracketL:
@@ -2130,8 +2145,15 @@ ONE.parser_strict_ = function(){
 	this.parseArrowFunction = function(node, args) {
 		if(args && args.type !== 'Empty'){
 			// convert args to a List of Defs
-			if( args.type === 'List'){
-				var items = args.items
+	
+			if( args.type === 'List' || args.type === 'Call'){
+				var items
+				if(args.type == 'Call'){
+					node.name = args.fn
+					items = args.args
+				}
+				else if(args.type == 'List') items = args.items
+
 				for( var i = 0, l = items.length; i < l; i++){
 					if( items[ i ].type == 'Rest'){
 						if( i < l - 1) this.raise(items[i].start, "Cannot use rest prefix befor last parameter")

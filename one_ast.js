@@ -167,7 +167,6 @@ ONE.ast_ = function(){
 		}
 
 		this.getDependencies = function(){
-			console.log('here')
 			// lets find all load
 			var out = []
 			var steps = this.body.steps
@@ -235,7 +234,7 @@ ONE.ast_ = function(){
 			Struct: { id:1, struct:1, defs:2, dim:1 },
 			Def: { id:1, init:1, dim:1 },
 
-			Function: { id:1, params:2, rest:1, body:1, arrow:0, gen:0, def:0 },
+			Function: { id:1, name:1, params:2, rest:1, body:1, arrow:0, gen:0, def:0 },
 			Return: { arg:1 },
 			Yield: { arg:1 },
 			Await: { arg:1 },
@@ -275,6 +274,7 @@ ONE.ast_ = function(){
 				var copy = ''
 				var code = 'var c = Object.create( this.AST );\n'+
 							   'c.type = n.type\n'+
+							   'if(n.parens)c.parens = n.parens\n'+
 							   'if(n.comments) c.comments = n.comments\n'+
 							   'c.start = n.start\n'+
 							   'c.end = n.end\n'
@@ -314,6 +314,7 @@ ONE.ast_ = function(){
 				out += '_clone.'+type+'=function(n){\n' + code + '\nreturn c}\n' 
 				out += '_copy.'+type+'=function(n, c){'+
 					'c.type = n.type\n'+
+					'if(n.parens)c.parens = n.parens\n'+
 					'if(n.comments) c.comments = n.comments\n'+
 					'c.start = n.start\n'+
 					'c.end = n.end\n'+
@@ -328,6 +329,8 @@ ONE.ast_ = function(){
 				c.end = n.end
 				c.type = n.type
 				c.prefix = n.prefix
+				if(n.parens)c.parens = n.parens
+				if(n.comments)c.comments = n.comments
 				c.op = n.op
 				if( n.prefix && n.op == '%'){
 					if(n.arg.type !== 'Id') throw new Error('Unknown template & argument type')
@@ -894,7 +897,8 @@ ONE.ast_ = function(){
 			scope:{},
 			promise_catch:1,
 			no_valueless_object:1,
-			tmp_prefix:'_',
+			destruc_prefix:'\u0442',
+			tmp_prefix:'\u1ecb',
 			globals:{
 				Object:1,
 				Array:1, 
@@ -970,9 +974,39 @@ ONE.ast_ = function(){
 				if( comments ) cmt = this.comments_flush( comments )
 				return this.expand( n.object, n, true ) + '.' + n.key.name + cmt
 			},
+			// just supports arrays in de polyfill
+			ForOf: function( n ){
+				// lets allocate some 
+				var fn = this.find_function( n )
+				if(!fn.tmp_vars) fn.tmp_vars = 0
+
+				// we have 2 values to get
+				// the value, and the iterator
+				var left = n.left
+				var iter
+				var isvar
+				var value
+
+				if(left.type == 'Var'){
+					isvar = true
+					var defs = left.defs
+					if(defs.length > 2)  throw new Error('unsupported iterator syntax for for of')
+
+				} 
+				else if(left.type == 'Id'){
+
+				} 
+				else if(left.type == 'List'){
+					if(left.items.length !== 2) throw new Error('unsupported iterator syntax for for of')
+				}
+				// and then we have to allocate two or three tmpvars.
+				// we fetch the 
+				return 'for(' + this.expand( n.left, n ) + ' = 0, of ' +
+					this.expand( n.right, n ) + ')' + 
+					this.expand( n.loop, n )
+			},
 
 			ForTo: function( n ){
-
 				throw new Error("implement ForTo")
 			},
 
@@ -1019,7 +1053,7 @@ ONE.ast_ = function(){
 					for(var i = 0;i<vars.length;i++){
 						this.scope[ vars[i] ] = 1
 					}
-					return vars.join(', ')+', _0='+out
+					return vars.join(','+this.space)+','+this.space+this.destruc_prefix+'0='+out
 				}
 				else if( n.id.type !== 'Id' ) throw new Error('Unknown id type')
 
@@ -1071,7 +1105,7 @@ ONE.ast_ = function(){
 						// destructuring arguments
 						if(param.id.type == 'Array' || param.id.type == 'Object'){
 							var vars = []
-							var tmp = this.tmp_prefix+'arg'+i
+							var tmp = this.destruc_prefix+'arg'+i
 							var dest = this.destructure(n, param.id, param.init, n, vars, tmp) + this.newline 
 
 							str_body += this.depth + 'var ' 
@@ -1080,7 +1114,7 @@ ONE.ast_ = function(){
 								if(v) str_body += ',' +this.space
 								str_body += vars[v]
 							}
-							str_body += ', _0=' + dest
+							str_body += ','+this.space+this.destruc_prefix+'0=' + dest
 							str_param += tmp + (i == plen - 1?'':split)
 						} else {
 
@@ -1123,22 +1157,28 @@ ONE.ast_ = function(){
 				else if( n.arrow === '->' && n.parent){ // only auto figure out the straight arrow
 					var lhs
 					var ptype = n.parent.type
-					if(n.type === 'Callback'){
-						if(n.call.name == 'promise') trywrap = true
-						lhs = n.call 
-						if(lhs.type == 'Call') lhs = lhs.fn
-					}
-					else if(ptype === 'Assign') lhs = n.parent.left 
-					else if(ptype === 'Call') lhs = n.parent.fn
-					else if(ptype === 'Do' && n.parent.call.type == 'Call'){
-						lhs = n.parent.call.fn
-					}
-					else if(ptype === 'Do'){
-						if(n.parent.call.key && n.parent.call.key.name == 'then') trywrap = true
-						lhs = n.parent.call
-					} 
-					else if(ptype === 'Def') bind = true
-					else if(ptype == 'Return') bind = true
+
+					if(n.name){
+						lhs = n.name
+					} else {
+						if(n.type === 'Callback'){
+							if(n.call.name == 'promise') trywrap = true
+							lhs = n.call 
+							if(lhs.type == 'Call') lhs = lhs.fn
+						}
+						else if(ptype === 'Assign') lhs = n.parent.left 
+						else if(ptype === 'Call') lhs = n.parent.fn
+						else if(ptype === 'Do' && n.parent.call.type == 'Call'){
+							lhs = n.parent.call.fn
+						}
+						else if(ptype === 'Do'){
+							if(n.parent.call.key && n.parent.call.key.name == 'then') trywrap = true
+							lhs = n.parent.call
+						} 
+						else if(ptype === 'Def') bind = true
+						else if(ptype == 'Return') bind = true
+					}	
+
 					if(lhs){
 						if( (lhs.type === 'Index' || lhs.type  === 'Key') ){
 							if((!lhs.key || (lhs.key.name !== 'new' && lhs.key.name !== 'extend')) && 
@@ -1153,7 +1193,13 @@ ONE.ast_ = function(){
 				}
 				if(!this.promise_catch) trywrap = false
 
-				var ret = 'function'
+				var ret = ''
+
+				if(n.name){
+					ret += this.expand(n.name, n) + this.space + '=' + this.space
+				}
+
+				ret += 'function'
 
 				if(n.await) ret = 'ONE.await(' + ret
 
@@ -1163,6 +1209,15 @@ ONE.ast_ = function(){
 
 				if( !str_param ) str_param = '_'
 				ret += '(' + str_param + '){' 
+				if( n.destruc_vars ){
+					ret += this.newline + this.depth
+					ret += 'var '
+					for(var i = 0;i<n.destruc_vars;i++){
+						if(i) ret += ','+this.space
+						ret += this.destruc_prefix + i
+					}
+					ret += ';'
+				}
 				if( n.tmp_vars ){
 					ret += this.newline + this.depth
 					ret += 'var '
@@ -1172,6 +1227,7 @@ ONE.ast_ = function(){
 					}
 					ret += ';'
 				}
+
 				if( trywrap ) ret += 'try{'
 
 				this.depth = olddepth
@@ -1224,11 +1280,11 @@ ONE.ast_ = function(){
 			// destructuring helpers
 			_destructureArrayOrObject:function(v, acc, nest, fn, vars){
 				// alright we must store our object fetch on a ref
-				if(nest >= fn.tmp_vars) fn.tmp_vars = nest + 1
+				if(nest >= fn.destruc_vars) fn.destruc_vars = nest + 1
 				var out = ''
 				var od = this.depth
 				this.depth = this.depth + this.indent
-				out += '('+this.tmp_prefix+nest+'='+this.tmp_prefix+(nest-1)+acc+')===undefined||('+this.newline+this.depth
+				out += '('+this.destruc_prefix+nest+'='+this.destruc_prefix+(nest-1)+acc+')===undefined||('+this.newline+this.depth
 				if(v.type == 'Object') out += this._destructureObject(v, nest + 1, fn, vars)
 				else out += this._destructureArray(v, nest + 1, fn, vars)
 				this.depth = od
@@ -1249,14 +1305,14 @@ ONE.ast_ = function(){
 						var name = v.name 
 						if(vars) vars.push(name)
 						else name = this.resolve(name)
-						out += name + '='+this.tmp_prefix +(nest - 1)+'.slice('+i+')'
+						out += name + '='+this.destruc_prefix +(nest - 1)+'.slice('+i+')'
 					}
 					else if(v.type == 'Id') {
 						if(i) out += ',' + this.newline + this.depth
 						var name = v.name 
 						if(vars) vars.push(name)
 						else name = this.resolve(name)
-						out += name + '='+this.tmp_prefix +(nest - 1) + acc
+						out += name + '='+this.destruc_prefix +(nest - 1) + acc
 					} 
 					else if(v.type == 'Object' || v.type == 'Array') {
 						if(i) out += ',' + this.newline + this.depth
@@ -1281,14 +1337,14 @@ ONE.ast_ = function(){
 						var name = k.key.name 
 						if(vars) vars.push(name)
 						else name = this.resolve(name)							
-						out += name + '='+this.tmp_prefix+(nest - 1)+acc
+						out += name + '='+this.destruc_prefix+(nest - 1)+acc
 					} 
 					else if(v.type == 'Id') {
 						if(i) out += ',' + this.newline + this.depth
 						var name = v.name 
 						if(vars) vars.push(name)
 						else name = this.resolve(name)							
-						out += name + '='+this.tmp_prefix +(nest - 1)+acc
+						out += name + '='+this.destruc_prefix +(nest - 1)+acc
 					} 
 					else if(v.type == 'Object' || v.type == 'Array') {
 						if(i) out += ',' + this.newline + this.depth
@@ -1301,7 +1357,7 @@ ONE.ast_ = function(){
 			},
 			destructure:function( n, left, init, fn, vars, def ){
 				if(!fn) throw new Error('Destructuring assign cant find enclosing function')
-				if(!fn.tmp_vars) fn.tmp_vars = 1
+				if(!fn.destruc_vars) fn.destruc_vars = 1
 
 				var out = ''
 				var olddepth = this.depth
@@ -1310,10 +1366,10 @@ ONE.ast_ = function(){
 				var oldcmt = this.comments
 				this.comments = 0
 				if( init )
-					out = '('+this.tmp_prefix+'0='+(def?def+'||':'') + this.expand( init, n, true)+',('+this.newline+this.depth
+					out = '('+this.destruc_prefix+'0='+(def?def+'||':'') + this.expand( init, n, true)+',('+this.newline+this.depth
 				else{
 					if(!def) throw new Error('Destructuring assignment without init value')
-					out = '('+this.tmp_prefix+'0='+(def?def:'') +',('+this.newline+this.depth
+					out = '('+this.destruc_prefix+'0='+(def?def:'') +',('+this.newline+this.depth
 				}
 				this.comments = 1
 

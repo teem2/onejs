@@ -307,7 +307,7 @@ screen.bind_signals()
 
 Http = Base.extend{
 
-	get = url -> promise{
+	get(url) -> promise{
 		var req = new XMLHttpRequest()
 		req.open("GET", url, true)
 		req.onreadystatechange = ->{

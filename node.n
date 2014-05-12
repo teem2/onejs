@@ -37,16 +37,16 @@ var nodeify = fn->{
 
 // all file, path tools
 File = Base.extend{
-	stream = (path)->{
+	stream(path){
 	}
 
-	open = (path)->{
+	open(path){
 	}
 
-	exists = (name)->{
+	exists(name){
 	}
 
-	watch = (name, options)->{
+	watch(name, options){
 	}
 }
 
@@ -60,7 +60,7 @@ Url = Base.extend{
 }
 
 Http = Base.extend{
-	get = myurl -> promise{
+	get(myurl) -> promise{
 		url = ../Url.new(myurl)
 		var data = []
 		var req = _http.request({
@@ -69,7 +69,7 @@ Http = Base.extend{
 			method:'GET', 
 			path:url.path} ) 
 
-		do (res, err)->{
+		do (res, err){
 			if(res.statusCode != 200) reject(res)
 			res.setEncoding('utf8')
 			res.on('data') do chunk -> data.push(chunk)
@@ -82,19 +82,18 @@ Http = Base.extend{
 
 HttpServer = Base.extend{
 	
-	maker =->{
+	maker(){
 	}
 	
-	route = ( match, body )->{
-
+	route( match, body ){
 	}
 
-	Response extends Base{
-		_maker = handle->{
+	Response = Base.extend{
+		_maker(handle){
 			req = maker.request
 		}
 
-		text = (code, text)->{
+		text( code, text ){
 			writeHead(code, {"Content-Type":"text/plain"})
 			end(text)
 		}
@@ -106,11 +105,11 @@ WatchFile = Base.extend{
 	
 	watching = {}
 
-	maker = (filename, options,  cb)->{
+	maker(filename, options,  cb){
 		var stat = fs.statSync( filename )
 	}
 
-	watching[ filename ] = ../Interval.new(50) do -> {
+	watching[ filename ] = ../Interval.new(50) do->{
 		var stat = fs.statSync(filename)
 		var diff = 0
 		if(stat[watch].toString() != stats[filename]){ 
