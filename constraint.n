@@ -80,8 +80,8 @@ var util = Base.new() do{
 }
 
 
-AbstractConstraint extends Base{
-	make = function(strength /*util.Strength*/, weight /*double*/) {
+AbstractConstraint::{
+	new(strength /*util.Strength*/, weight /*double*/) {
 		hashCode = util._inc()
 		strength = strength || util.Strength.required
 		weight = weight || 1
@@ -92,7 +92,7 @@ AbstractConstraint extends Base{
 	isStayConstraint = false
 	get required() { return (strength === util.Strength.required); }
 
-	toString = ->{
+	toString(){
 		// this is abstract -- it intentionally leaves the parens unbalanced for
 		// the subclasses to complete (e.g., with ' = 0', etutil.
 		return strength + " {" + weight + "} (" + expression +")"
@@ -131,16 +131,17 @@ Constraint extends AbstractConstraint{
 
 Inequality extends Constraint{
 
-	_cloneOrNewCle = function(cle) {
+	_cloneOrNewCle(cle) {
 		// FIXME(D4) = move somewhere else?
 		if (cle.clone)  {
 			return cle.clone()
-		} else {
+		} 
+		else {
 			return new util.Expression(cle)
 		}
 	}
 
-	make = function(a1, a2, a3, a4, a5) {
+	new(a1, a2, a3, a4, a5) {
 		// FIXME(slightlyoff) = what a disgusting mess. Should at least add docs.
 		// console.log("util.Inequality.make(", a1, a2, a3, a4, a5, ")")
 

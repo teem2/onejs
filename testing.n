@@ -1,15 +1,14 @@
-testing = (title, node)->{
+testing(title, node){
 	out("Testing "+title)
 
-	var Assert = Base.extend(){
-		assert = (check, operation, left, right, str)->{
+	var Assert = ::{
+		assert(check, operation, left, right, str){
 			if(!check){
 				out(title + " Assert failed ",left,operation,
 					right," In expression "+str)
 			}
 		} // hi!
-
-		callOnce = ->{
+		callOnce(){
 			return ->{}
 		}
 	}
@@ -20,7 +19,7 @@ testing = (title, node)->{
 	var body = node.body // here is a comment!
 
 	// gogo magic super power template quotes!
-	each(body.steps) do step->{
+	each(body.steps) do(step){
 		if(step.type != 'Expr') return
 		var node = step.expr
 		if(node.type != 'Logic') return
@@ -40,7 +39,7 @@ testing = (title, node)->{
 		)
 	}
 	// make a new object to execute our test in
-	Assert.new(){
+	Assert.new{
 		eval( node )()
 	}
 }

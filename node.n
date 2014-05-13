@@ -20,48 +20,54 @@ Mime::{
 	png  = "image/png"
 	gif  = "image/gif"
 
-	regex = new RegExp("\\.(" + Object.keys(this).join("|") + ")$")
+	regex = new RegExp("\\.(" + keys().join("|") + ")$")
 
 	fromFilename( name ){
-		var ext = name.match(mimeRx)
-		return ext && this[ext[1]] || "text/plain"
+		var ext = name.match(regex)
+		return ext && this[ ext[1] ] || "text/plain"
 	}
 }
 
-// all file, path tools
-File::{
-	stream(path){
+HttpServer::{
+
+	routes = []
+
+	// make a new server and listen
+	init( port, addr ){
+		server = http.createServer()
+		server.listen( port, addr ) do( req, res ){
+
+			var url = _url.parse(req.url)
+			var path = url.pathname
+
+			for(var [match, body] of routes){
+				break if typeof match == 'string' and match == path
+				break if path.match(n)
+			}
+			if(!body){
+				res.writeHead(404)
+				res.end("no route found")
+				return
+			}
+			body(req, res)
+		}
 	}
 
-	open(path){
-	}
-
-	exists(name){
-	}
-
-	watch(name, options){
-	}
-}
-
-// url class
-Url::{
-	maker(url){
-		var o = _url.parse(url)
-		for(var k in o) this[k] = o[k]
-	}
+	route( match, body ) ->routes.push( [match, body] )
 }
 
 Http::{
-	get(myurl) -> promise{
-		url = ../Url.new(myurl)
+	get( .url ) ->promise{
+		url = _url.parse( url )
 		var data = []
-		var req = _http.request({
-			hostname:url.hostname, 
-			port:url.port || 80,
-			method:'GET', 
-			path:url.path} ) 
 
-		do (res, err){
+		var req = _http.request({
+			hostname: url.hostname, 
+			port: url.port || 80,
+			method: 'GET', 
+			path: url.path} ) 
+
+		do( res, err ){
 			if(res.statusCode != 200) reject(res)
 			res.setEncoding('utf8')
 			res.on('data') do chunk -> data.push(chunk)
@@ -69,44 +75,5 @@ Http::{
 		}
 
 		req.end()
-	}
-}
-
-HttpServer::Http{
-	
-	maker(){
-	}
-	
-	route( match, body ){
-	}
-
-	Response::{
-		_maker(handle){
-			req = maker.request
-		}
-
-		text( code, text ){
-			writeHead(code, {"Content-Type":"text/plain"})
-			end(text)
-		}
-		// url object
-	}
-}
-
-WatchFile::{
-
-	watching = {}
-
-	maker(filename, options,  cb){
-		var stat = fs.statSync( filename )
-	}
-
-	watching[ filename ] = ../Interval.new(50) do->{
-		var stat = fs.statSync(filename)
-		var diff = 0
-		if(stat[watch].toString() != stats[filename]){ 
-			stats[filename] = stat[watch].toString()
-			
-		}
 	}
 }

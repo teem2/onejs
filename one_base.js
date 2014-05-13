@@ -6,34 +6,99 @@ ONE.base_ = function(){
 	this.__onename__ = 'Base'
 
 	// inherit a new class, whilst passing on the scope
-
-	this.extend = function( pthis, role ){
+	this.extend = function( pthis, role, selfname ){
 
 		var obj = Object.create( this )
 		obj.$ = pthis.$
 		obj._ = pthis
 		obj.__onename__ = 'unknown-class'
-		if(! obj.mixin ){
-			obj.mixin = pthis.mixin
+		if(! obj.apply ){
+			obj.apply = pthis.apply
 			obj.extend = pthis.extend
 			obj.new = pthis.new
 		}
-		obj.mixin( role )
+		if(selfname) obj[selfname] = obj
+		if( typeof role == 'function') role.call( obj, pthis )
+		else obj.apply( role )
 
 		return obj
 	}
 
-	// define something as a mixer
+	// create a new object
+	this.new = function(){
 
-	this.mixer = function( name, init ){
+		var obj = Object.create( this )
+
+		var arg
+		var len = arguments.length
+		if(len){
+			obj.owner = arguments[0]
+			if(len > 1) arg = Array.prototype.slice.call( arguments, 1 )
+		}
+
+		if(obj._init) obj._init.apply( obj, arg )
+		else if(obj.init) obj.init.apply( obj, arg )
+
+		return obj
+	}
+	
+	this.isClass = function(){
+		return this.hasOwnProperty('__onename__')
+	}
+
+	// plain value storage wrapper for overloads
+	function StackValue(v){
+		this.v = v
+	}
+	
+	// load a property bag into a new object
+	this.load = function( irole ){
+		var role = irole
+		if( typeof irole == 'string' ){// try to read it from scope
+			role = this.$[irole]
+			if( !role ) throw new Error("Cannot find role "+irole+" on this")
+		}
+
+		if( typeof role == 'function' ){
+			var base = this.Base.new()
+			role.call( base )
+			return base
+		}
+
+		return role
+	}
+
+	// apply a property bag onto this. its the same as function.apply(this) == this.apply(function)
+	this.apply = function( irole ){
+		var role = irole
+		if( typeof irole == 'string' ){// try to read it from scope
+			role = this.$[irole]
+			if( !role ) throw new Error("Cannot find role "+irole+" on this")
+		}
+
+		if( typeof role == 'function' ){
+			role.call( this )
+			return this
+		}
+		
+		if( typeof role == 'object' ){
+			for( var k in role ) this[ k ] = role[ k ]
+			return this
+		}
+
+		throw new Error('could not mix in', irole)
+	}
+
+	// define something as a mixin
+	this.mixin = function( name, init ){
 
 		if( this.__lookupSetter__( name ) ) throw new Error("Cannot redefine mixer " + name )
 		if( name in this ){
-			obj.load( this[ name ] )
+			//?obj.apply( this[ name ] )
 		}
 		var storeKey = '__' + name
 		this[ storeKey ] = init
-		Object.defineProperty( this, name, {
+		Object.defineProperty(this, name, {
 			configurable:true,
 			enumerable:true,
 			get:function(){
@@ -65,72 +130,6 @@ ONE.base_ = function(){
 	// __onename__ = class/role name if available
 	// __roles__ = roles object
 	// __overloads__ = role overloading stacks
-
-	// create a new object
-	this.new = function(){
-
-		var obj = Object.create( this )
-
-		var arg
-		var len = arguments.length
-		if(len){
-			this.__newthis__ = arguments[0]
-			if(len > 1) arg = Array.prototype.slice.call( arguments, 1 )
-		}
-
-		if(obj._maker) obj._maker.apply( obj, arg )
-		else if(obj.maker) obj.maker.apply( obj, arg )
-		else if( arg ) obj.load.apply( obj, arg )
-		
-		return obj
-	}
-	
-	this.isClass = function(){
-		return this.hasOwnProperty('__onename__')
-	}
-
-	// plain value storage wrapper for overloads
-	function StackValue(v){
-		this.v = v
-	}
-	
-	// load a property bag
-	this.load = function( irole ){
-		var role = irole
-		if( typeof irole == 'string' ){// try to read it from scope
-			role = this.$[irole]
-			if( !role ) throw new Error("Cannot find role "+irole+" on this")
-		}
-
-		if( typeof role == 'function' ){
-			var base = this.Base.new()
-			role.call( base )
-			return base
-		}
-
-		return role
-	}
-	
-	// mixin a property bag
-	this.mixin = function( irole ){
-		var role = irole
-		if( typeof irole == 'string' ){// try to read it from scope
-			role = this.$[irole]
-			if( !role ) throw new Error("Cannot find role "+irole+" on this")
-		}
-
-		if( typeof role == 'function' ){
-			role.call( this )
-			return this
-		}
-		
-		if( typeof role == 'object' ){
-			for( var k in role ) this[ k ] = role[ k ]
-			return this
-		}
-
-		throw new Error('could not mix in', irole)
-	}
 
 	// learn a property bag, creates undo stacks so forget works.
 	this.learn = function( ){
@@ -253,7 +252,6 @@ ONE.base_ = function(){
 	}
 
 	// forget a property bag
-
 	this.forget = function( role ){
 	   if( !this.hasOwnProperty('__roles__') ) return
 		
@@ -354,7 +352,6 @@ ONE.base_ = function(){
 	}
 
 	// export copies properties onto the scope
-
 	this.export = function( ){
 		for( var i = 0, len = arguments.length; i < len; i++ ){
 			var key = arguments[ i ]
@@ -366,7 +363,6 @@ ONE.base_ = function(){
 	}
 
 	// Make properties non enumerable
-
 	this.enumfalse = function(){
 		for( var i = arguments.length - 1; i>=0; i--){
 			Object.defineProperty( this, arguments[i], {enumerable:false, configurable:true})
@@ -384,7 +380,6 @@ ONE.base_ = function(){
 	})()
 
 	// Quickly profile things
-
 	this.profile = function( msg, times, call ){
 		var tm = this.now()
 		if(arguments.length == 1) call = msg, times = 1, msg = ''
@@ -398,7 +393,6 @@ ONE.base_ = function(){
 	}
 
 	// Create a new scope
-
 	this.scoped = function( name ){
 		if( this.$.__owner__ == this ) throw new Error("Don't scope more than once")
 		// create a prototype backed scope chain
@@ -412,7 +406,6 @@ ONE.base_ = function(){
 
 	// Finding the thing you overloaded, for anything besides objects
 	// and functions this is a 'probably' since it cant uniquely identify the value
-	
 	this.overloads = function( key, me ){
 		var proto = this
 		var next // flags if the next item is the one i want
@@ -463,7 +456,8 @@ ONE.base_ = function(){
 		if( name !== undefined ){ // we can find our overload directly
 			var fn = this.overloads( name, me )
 			if( fn && typeof fn == 'function' ) return fn.apply( this, fnargs )
-		} else { // we have to find our overload in the entire keyspace
+		} 
+		else { // we have to find our overload in the entire keyspace
 			for( var k in this ) {
 				// filter out the internal properties
 				if( !(k in ONE.Base) && k[0] != '_' && (k[1] != '$' || k[1] != '_') && 
@@ -479,7 +473,6 @@ ONE.base_ = function(){
 	}
 
 	// resolves a string multipart object a.b.c.d on this
-
 	this.resolve = function( str ){
 		var parts = str.split('.')
 		var t = this
@@ -488,7 +481,6 @@ ONE.base_ = function(){
 	}
 
 	// push a property on the overload stack
-	 
 	this.push = function( key, value ){
 		var overloads
 		if( !this.hasOwnProperty('__overloads__') ){
@@ -504,7 +496,6 @@ ONE.base_ = function(){
 	}
 	
 	// pop a property off the overload stack
-	 
 	this.pop = function( key ){
 		if( !this.hasOwnProperty('__overloads__') ) return
 		var overloads = this.__overloads__
@@ -517,7 +508,6 @@ ONE.base_ = function(){
 	}
 
 	// map
-
 	this.map = function( array, callback ){
 		var out = []
 		for( var i = 0; i < array.length; i++){
@@ -527,7 +517,6 @@ ONE.base_ = function(){
 	}
 
 	// each
-	 
 	this.each = function( array, callback ){
 		var len = array.length
 		for( var i = 0; i < len; i++){
@@ -535,8 +524,12 @@ ONE.base_ = function(){
 		}
 	}
 
-	// flush an entire property stack
+	// keys
+	this.keys = function( ){
+		return Object.keys(this)
+	}
 
+	// flush an entire property stack
 	this.flush = function( key ){
 		if( !this.hasOwnProperty('__overloads__') ) return
 		var overloads = this.__overloads__
@@ -546,8 +539,7 @@ ONE.base_ = function(){
 	}
 	
 	// return the property at index in the stack
-	 
-   this.index = function( key, idx ){
+	this.index = function( key, idx ){
 		if( !this.hasOwnProperty('__overloads__') ) return
 		var overloads = this.__overloads__
 		var stack = overloads[ key ]
@@ -559,7 +551,6 @@ ONE.base_ = function(){
 	}
    
 	// bind the signals
-
 	this.bind_signals = function(){
 		var sigbinds = this.__$sigbinds
 		if( sigbinds ){
@@ -570,14 +561,12 @@ ONE.base_ = function(){
 	}
 		
 	// hook / define a signal callback
-
 	this.hook = function( key, func ){
 		if( !this.__lookupSetter__( key ) ) this.signal( key )
 		this[ key ] = func
 	}
 
 	// unhook a signal
-
 	this.unhook = function( key, func ){
 		var hookKey = '_$AH' + key
 		if( this.hasOwnProperty( hookKey ) ){
@@ -589,7 +578,6 @@ ONE.base_ = function(){
 	}
 
 	//  hook a signal callback that only lasts n times
-
 	this.times = function( times, key, func ){
 		if( !this.__lookupSetter__( key ) ) this.signal( key )
 		function fn( value, old ){
@@ -600,13 +588,11 @@ ONE.base_ = function(){
 	}
 
 	// hook a signal callback that only gets called once
-
 	this.once = function( key, func ){
 		return this.times( 1, key, func )
 	}
 	
 	// emit a signal
-	
 	this.emit = function( key, value, old ){
 		var hookKey = '_$AH' + key
 		var valueKey = '__' + key
@@ -625,7 +611,6 @@ ONE.base_ = function(){
 	}
 	
 	//  make a signal conditional callback
-
 	this.when = function( expr, fn ){
 		if(!fn){ 
 			if ( expr ) return 1
@@ -642,35 +627,25 @@ ONE.base_ = function(){
 	}
 
 	// monitor hooks
-
 	this.monitorHooks = function( key, cb ){
 		var monitorKey = '$_M' + key
 		this[ monitorKey ] = cb
 	}
 
 	// fetch the listener array
-
 	this.getHooks = function( key ){
 		var hookKey = '_$AH' + key
 		return this[ hookKey ]
 	}
 
-	// define all arguments as signals
-
-	this.signals = function(){
-		for( var i = 0;i < arguments.length; i++) this.signal( arguments[i] )
-	}
-	
 	function empty(){}
 	
 	// define a property
-
 	this.defineProperty = function( key, def ){
 		Object.defineProperty( this, key, def )
 	}
 
 	// define key as a signal
-
 	this.signal = function( key, initvalue, setter ){
 
 		if( arguments.length == 2 && typeof initvalue == 'function') setter == initvalue, initvalue = undefined
@@ -873,7 +848,7 @@ ONE.base_ = function(){
 	this.error = function(){ ONE.logwrite(0, arguments) }
 }
 
-ONE.await = function( generator, bound, _catch ){
+ONE._await = function( generator, bound, _catch ){
 	var ret = function(){
 		var iter = generator.apply(this, arguments)
 		return new Promise(function(resolve, reject){
@@ -895,6 +870,32 @@ ONE.await = function( generator, bound, _catch ){
 	}
 	if(bound) return ret.bind(bound)
 	return ret
+}
+
+ONE.iterator = function( what ){
+	// check what what is.
+	if(typeof what.next == 'function') return what
+	if(typeof what != 'object') throw new Error('Cannot iterate over object')
+
+	if(!Array.isArray(what)){
+		var obj = what
+		what = []
+		for( var k in obj ) what.push( obj[ k ] )
+	}
+
+	var len = what.length
+	if(!len) return
+	return {
+		next:function(){
+			this.index++
+			if(this.index >= this.length - 1) this.done = true
+			this.value = what[this.index]
+			return this
+		},
+		done: false,
+		index: -1,
+		length: len
+	}
 }
 
 if(typeof Promise === 'undefined'){
