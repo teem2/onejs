@@ -187,18 +187,18 @@ ONE.ast_ = function(){
 			Array: { elems:2 },
 			Object: { keys:3 },
 			Index: { object:1, index:1 },
-			Prototype: { left:1, right:1 },
 			Key: { object:1, key:1, exist:0 },
 
 			Block:{ steps:2 },
 			Expr: { expr:1 },
 			List: { items:2 },
-			Interp: { chain:2 },
+			Comprehension:{ for:1, expr:1 },
+			Template: { chain:2 },
 			Break: { label:1 },
 			Continue: { label:1 },
 			Label: { label:1, body:1 },
 
-			If: { test:1, then:1, else:1, postfix:0 },
+			If: { test:1, then:1, else:1, postfix:0, compr:0 },
 			Switch: { on:1, cases:2 },
 			Case: { test:1, then:2 },
 
@@ -207,11 +207,11 @@ ONE.ast_ = function(){
 
 			While: { test:1, loop:1 },
 			DoWhile: { loop:1, test:1 },
-			For: { init:1, test:1, update:1, loop:1 },
-			ForIn: { left:1, right:1, loop:1 },
-			ForOf: { left:1, right:1, loop:1 },
-			ForFrom: { left:1, right:1, loop:1 },
-			ForTo: { left:1, right:1, loop:1, in:1 },
+			For: { init:1, test:1, update:1, loop:1, compr:0 },
+			ForIn: { left:1, right:1, loop:1, compr:0 },
+			ForOf: { left:1, right:1, loop:1, compr:0 },
+			ForFrom: { left:1, right:1, loop:1, compr:0 },
+			ForTo: { left:1, right:1, loop:1, in:1, compr:0 },
 
 			Var: { defs:2, const:0 },
 			Const: { defs:2 },
@@ -411,7 +411,9 @@ ONE.ast_ = function(){
 			Assign: 1,
 			Update: 1,
 			Condition: 1,
-
+			Comprehension:1,
+			Template:1,
+			
 			New: 1,
 			Call: 1,
 
@@ -452,6 +454,7 @@ ONE.ast_ = function(){
 			cignore:0,
 			comments:1,
 			line:0,
+			is_expr:this.ast_isexpr,
 			array_fix:0, //!TODO do this nicely
 			no_valueless_object:0,
 			store: function( n, value ){
@@ -653,7 +656,10 @@ ONE.ast_ = function(){
 				if( parens ) '('+this.list( n.items, n ) +')'
 				return this.list( n.items, n )
 			},
-			Interp: function( n, parens ){
+			Comprehension: function( n, parens ){
+				return '1'
+			},
+			Template: function( n, parens ){
 				var ret = '"'
 				var chain = n.chain
 				var len = chain.length 
@@ -687,7 +693,7 @@ ONE.ast_ = function(){
 				var ret = 'if('
 				ret += this.expand( n.test, n )
 				if( ret[ret.length - 1] == '\n') ret += this.depth + this.indent
-				ret += ')' + this.space + this.expand( n.then, n, true )
+				ret += ')' + this.space + this.expand( n.then, n, true ) 
 				if(n.else){
 					var ch = ret[ret.length - 1]
 					if( ch !== '\n' ) ret += this.newline
@@ -1077,7 +1083,28 @@ ONE.ast_ = function(){
 				} 
 				return this.expand( n.object, n, true ) + '.' + n.key.name + cmt
 			},
-			Interp: function( n, parens ){
+			Comprehension: function( n, parens ){
+				var ret = '(function(){'
+				var odepth = this.depth
+				this.depth += this.indent
+
+				// allocate a tempvar
+				var fn = this.find_function( n )
+
+				var tmp = this.tmp_prefix
+				ret += 'var '+tmp + '=[]' + this.newline
+
+				var old_compr = this.compr_assign
+				this.compr_assign = tmp +'.push'
+				ret += this.depth + this.expand(n.for) +this.newline
+				ret += this.depth +'return '+tmp
+				this.compr_assign = old_compr
+				this.depth = odepth
+
+				ret += this.newline+this.depth + '}).call(this)'
+				return ret
+			},
+			Template: function( n, parens ){
 				var ret = '"'
 				var chain = n.chain
 				var len = chain.length 
@@ -1101,6 +1128,38 @@ ONE.ast_ = function(){
 					}
 				}
 				ret += '"'
+				return ret
+			},
+
+
+			If: function( n ) {
+				var ret = 'if('
+				ret += this.expand( n.test, n )
+				if( ret[ret.length - 1] == '\n') ret += this.depth + this.indent
+				var then = this.expand( n.then, n, true ) 
+				ret +=  ')' + this.space
+
+				if(n.compr && this.is_expr[n.then.type]){
+					ret += this.compr_assign + '(' + then +')'
+				} else ret += then
+
+				if(n.else){
+					var ch = ret[ret.length - 1]
+					if( ch !== '\n' ) ret += this.newline
+					ret += this.depth + 'else ' + this.expand( n.else, n, true )
+				}
+				return ret
+			},
+
+			For: function( n ){
+				var ret ='for(' + this.expand( n.init, n )+';'+
+						this.expand( n.test, n ) + ';' +
+						this.expand( n.update, n ) + ')'	
+				var loop = this.expand( n.loop, n )
+				if(n.compr){
+					ret += this.compr_assign + '(' + loop + ')'
+				}
+				else ret += loop
 				return ret
 			},
 			// Complete for of polyfill with iterator and destructuring support
@@ -1166,7 +1225,12 @@ ONE.ast_ = function(){
 				this.depth = odepth
 				var loop = this.expand(n.loop, n)
 				if( loop[loop.length-1]=='}' ) ret += loop.slice(1,-1) //!todo fix this
-				else ret += this.depth+this.indent+loop+this.newline+this.depth
+				else{
+					ret += this.depth+this.indent
+					if(n.compr) ret += this.compr_assign+'('+loop+')'
+					else ret += loop
+					ret += this.newline+this.depth
+				}
 				ret += '}'
 				return ret
 			},
@@ -1214,11 +1278,15 @@ ONE.ast_ = function(){
 				// we fetch the 
 				var ret = 'for('
 				if( isvar ) ret += 'var '
-				return ret + arr+'='+this.expand(n.right)+','+alen+'='+arr+'.length,'+
-					iter+'=0,'+value+'='+arr+'[0];'+iter+'<'+alen+';'+value+'='+arr+'[++'+iter+'])' +
-					this.expand(n.loop, n)
+				ret += arr+'='+this.expand(n.right)+','+alen+'='+arr+'.length,'+
+					iter+'=0,'+value+'='+arr+'[0];'+iter+'<'+alen+';'+value+'='+arr+'[++'+iter+'])' 
+				var loop = this.expand(n.loop, n)
+
+				if(n.compr) ret += this.comp_assign +'('+loop+')'
+				else ret += loop
+				return ret
 			},
-			// a simpler from/to loop
+			// a simple for to loop on itegers
 			ForTo: function( n ){
 
 				// lets find the iterator
@@ -1238,9 +1306,17 @@ ONE.ast_ = function(){
 					if(left.items.length != 1) throw new Error("for to only supports one argument")
 					iter = this.resolve(left.items[0].name)
 				}
-				return 'for(' + this.expand( n.left, n )+';'+
-						iter+'<'+ this.expand( n.right, n)+';'+iter+'++)'+
-						this.expand( n.loop, n )
+				var ret = 'for(' + this.expand( n.left, n )+';'+
+						iter+'<'+ this.expand( n.right, n)+';'+iter+'++)'
+				var loop = this.expand( n.loop, n )
+				if(n.compr && this.is_expr[n.loop.type]){
+					ret += this.compr_assign +'('+loop+')'
+				}
+				else ret += loop
+
+				console.log(this.compr_assign)
+
+				return ret
 			},
 
 			TypeVar: function( n ){

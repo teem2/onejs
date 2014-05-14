@@ -8,74 +8,83 @@
 //
 // This parser is a modified version of Acorn
 // It parses the ONEJS superset of JavaScript
-// which is JS + ES6/7, Julia, Coffeescript, CSS, XML and GLSL constructs
+// which is JS + ES6/7, Julia, Coffeescript, CSS, Dart and GLSL constructs
 // Its designed to target JS, Asm.js and GLSL with codegeneration
 // It tries to be entirely backwards compatible with JS
+// and follows the current ES6 proposals as closely as possible
 //
 // The Parser AST has been designed to be human friendly,
 // and with the quote operator makes ASTs a first class citizen of the language
 // check one_ast.js for structural definition of the AST
 // 
 // Think JavaScript, plus:
-//
-// Code block after identifier 'x{code}'
-// Callback to a function after closing paren with do 'x() do ->{code}' 
-// Function defs can drop the function keyword 'x(param){}''
-// Function defs can drop the identifier 'x = (param){}'
-// AST Quote operator 'var x = :y = 10' quotes entire expression rhs, priority below = 
-// Arrow function '->x', 'x->x', '()->x', '(x)->x' and all ->{}
-// Typed var 'float x' 'float x[10]' 'struct x{float y}'
-//
-// Three arrow function types: => .bind(this) -> auto(this) ~> unbound
-// Paren free if form 'if x then y'
-// Commas are optional when you have newlines '[1\n2] {x:1\x:2}'
-// MIGHT REMOVE: postfixable paren free if form 'break if x is 10'
-//
-// Logic words 'if x and y', 'if x or y' 'if not x'
-// Extends operator(::) 'x::y{}' 'x = ::y{}'
-// Baseclass call 'x::y()'
-// Full destructuring assignment of arrays and objects in var, arguments and expressions
-// Default arguments for functions '(x=10)->x'
-// Tempvar/cascade operator (..)  'selectElement().. \n..click = 10, ..bla = 20'
-// Rest prefix '...name' '(x, ...y) -> {}''
-// For To 'for(x = 0 to 10 in 3){}'
-// @, # are prefix flags for identifiers
-// ! is postfixable,  % * & are prefixable 
-// Automatic * insertion in '2word' -> '2*word' for units or math
-// Value-less objects are enums/sets '{x,y}' -> '{x:1, y:2}'
-// do catch for promises: 'v(x) do y catch z' -> 'v(x,y,z)' 'v do x' -> 'v(x)'
-// then chaining on do catch: v(x).then do y catch z then do x catch z (for promises)
-// await-catch: var x = await async(y) catch z
-// getter setter syntax:  'get x()->10' 'set y(v)->out(v)'
-// Existential object traverse  'x?.y?.z for no exception-traverse
-// Existential assignments '?=' if(lhs===undefined)lhs = rhs
-// Existential prefix operator ?x -> (x===undefined)
-// Existential or '?|' lhs!==undefined?lhs:rhs
-// Multiline strings ' without interpolation
-// Multiline strings "\n{i}\n" with interpolation support
-// Multiline regex uses / /\n\n\n/ /g
-//
+
+// ES6   member defs can drop the function keyword 'x(param){}''
+// ES6   arrow function '=>x', 'x=>x', '()=>x', '(x)=>x' and all =>{} forms
+// ES6   full destructuring assignment of arrays and objects in var, arguments and expressions
+// ES6   default arguments for functions '(x=10)->x'
+// ES6   rest prefix '...name' '(x, ...y) -> {}''
+// ES6   for of 'for(x of y){}' for iterators, arrays and objects
+// ES6   enum type
+// ES6   await async: var x = await async(y)
+// ES6   getter setter syntax:  'get x()->10' 'set y(v)->out(v)'
+// ES6   const
+// ES6   array comprehensions
+// ES6   String templates `hello ${i} test` ($ is optional)
+
+// ONE   code block after identifier 'x{code}'
+// ONE   function defs can drop the identifier 'x = (param){}'
+// ONE   three arrow function types: => .bind(this) -> auto(this) ~> unbound
+// ONE   extends operator(::) 'x::y{}' 'x = ::y{}'
+// ONE   baseclass call 'x::y()'
+// ONE   for To 'for(x = 0 to 10 in 3){}'
+// ONE   ! is postfixable,  % * & are prefixable 
+// ONE   do catch for promises: 'v(x) do y catch z' -> 'v(x,y,z)' 'v do x' -> 'v(x)'
+// ONE   then chaining on do catch: v(x).then do y catch z then do x catch z (for promises)
+
+// Julia callback to a function after closing paren with do 'x() do ->{code}' 
+// Julia AST Quote operator 'var x = :y = 10' quotes entire expression rhs, priority below = 
+// GLSL  typed var 'float x' 'float x[10]' 
+// GLSL  struct support 'struct x{float y}'
+// Dart  tempvar/cascade operator (..)  'selectElement()..prop1=1 \n..prop2 = 10, ..prop3 = 20'
+// Coco  multiline regex / /\n\n\n/ /g
+// CSS   @, # are prefix flags for identifiers
+// CSS   automatic * insertion in '2px' -> '2*px' for units or math
+
+// CS    paren free if form 'if x then y'
+// CS    commas are optional when you have newlines '[1\n2] {x:1\x:2}'
+// CS    MIGHT REMOVE: postfixable paren free if form 'break if x is 10'
+// CS    logic words 'if x and y', 'if x or y' 'if not x'
+// CS    existential object traverse  'x?.y?.z for no exception-traverse
+// CS    existential assignments '?=' if(lhs===undefined)lhs = rhs
+// CS    existential prefix operator ?x -> (x===undefined)
+// CS    existential or '?|' lhs!==undefined?lhs:rhs
+// CS    pow '**'
+// CS    Mathematical modulus '%%'
+// CS    Integer divide a%/b ( cant parse // )
+
 // The following JS parser bugs/features have been fixed:
+
 // Doing 'x\n()' or 'x\n[]' subscripts is now 2 statements, not an accidental call/index
 // Loose blocks in program scope like '{x:1}' are now interpreted as objects
 // Only 'new identifier' is treated as a the JS new keyword calling new() and new{} is usable syntax
-// 
+ 
 // Code generation features depend on the target language
-//
-// add const (var alias)
-// Pow '**'
-// Integer modulus '%%'
-// Ranges '[0 to 1]' '[0 to 3]'
+
+// Todo
+// Binary/octal numeric literals
+// Add ES6 enum type
+// add step/in to for to and for from
 // For from and for to have a step / in argument
-// Array splats for arguments? (*)
-// parse inline XML. perhaps.
 //
+// items not done
+// ES6 classes, will add to parser when settled
+// Ranges '[0 to 1]' '[0 to 3]' maybe.
+// parse inline XML. perhaps. String templating works too and xml sucks
 // add catch to await
-// Allow if/else/try/catch/switch in expressions? 
-// allow try expr catch expr finally expr
-// Chained comparisons
+// Allow if/else/try/catch/switch in expressions like coffeescript? 
+// allow try expr catch expr finally expr?
 // Auto objects in sequences for named args x(10, 20, y:10,z:20) -> x(10,20, {y:10, z:20})
-// Array comprehensions as in ES6 ( add it when i need it )
 // let as in ES6 ( not polyfillable )
 // 
 // Acorn was written by Marijn Haverbeke and released under an MIT
@@ -184,7 +193,7 @@ ONE.parser_strict_ = function(){
 	this.lastComments = []
 	this.lastNodes = []
 
-	// alright parsing interpolations.
+	// alright parsing templating/interpolations.
 	this.parenStack
 
 	this.parse_strict = function(inpt) {
@@ -243,8 +252,8 @@ ONE.parser_strict_ = function(){
 	this._string = {type: "string"}
 	this._name = {type: "name"}
 	this._eof = {type: "eof"}
-	// interpolated string type
-	this._interpolate = {}
+	// templated string type
+	this._template = {}
 
 	// Keyword tokens. The `keyword` property (also used in keyword-like
 	// operators) indicates that the token originated from an
@@ -550,7 +559,7 @@ ONE.parser_strict_ = function(){
 		this.lastNodes.length = 0
 		this.tokPos = 0
 		this.tokRegexpAllowed = true
-		this.interpNext = false
+		this.templateNext = false
 		this.skipSpace()
 	}
 
@@ -608,7 +617,7 @@ ONE.parser_strict_ = function(){
 	this.skipSpace = function() {
 		this.lastSkippedNewlines = this.skippedNewlines
 		this.skippedNewlines = 0
-		if( this.interpNext ) return
+		if( this.templateNext ) return
 		while (this.tokPos < this.inputLen) {
 			var ch = this.input.charCodeAt(this.tokPos)
 			if (ch === 32) { // ' '
@@ -784,7 +793,7 @@ ONE.parser_strict_ = function(){
 		case 59: ++this.tokPos; 
 			return this.finishToken(this._semi)
 		case 44: ++this.tokPos; 
-			return this.finishToken(this._comma)
+			return this.finishToken(this._comma) 
 		case 91: ++this.tokPos; 
 			this.parenStack.push(91)
 			return this.finishToken(this._bracketL)
@@ -798,7 +807,7 @@ ONE.parser_strict_ = function(){
 			var ps = this.parenStack
 			if( ps.pop() !== 123) this.raise(this.tokPos, "Unexpected }")
 			if( ps.length && ps[ps.length-1] == 34){
-				this.interpNext = true
+				this.templateNext = true
 				ps.pop()
 			} else ++this.tokPos; 
 			return this.finishToken(this._braceR)
@@ -901,9 +910,9 @@ ONE.parser_strict_ = function(){
 
 	this.readToken = function(forceRegexp) {
 
-		// in interpolated string check
-		if(this.interpNext){ 
-			this.interpNext = false
+		// in templated string check
+		if(this.templateNext){ 
+			this.templateNext = false
 			return this.readString(34)
 		}
 
@@ -1051,10 +1060,7 @@ ONE.parser_strict_ = function(){
 			isFloat = true
 		}
 
-		next = this.input.charCodeAt(this.tokPos)
-		if (this.isIdentifierStart(next) || 
-			(next == 32 && this.isIdentifierStart(this.input.charCodeAt(this.tokPos+1)) ) ){
-			if(next == 32) this.tokPos++
+		if (this.isIdentifierStart(this.input.charCodeAt(this.tokPos))){
 			this.injectMul = true
 			return this.finishToken(this._num, val)
 			// inject a *
@@ -1111,10 +1117,10 @@ ONE.parser_strict_ = function(){
 					}
 				}
 			} else {
-				// interpolated string
-				if(this.stringInterpolation && ch == 123 && quote == 34){
+				// templated string
+				if(this.stringTemplating && ch == 123 && quote == 34){
 					this.parenStack.push(34)
-					return this.finishToken(this._interpolate, out)
+					return this.finishToken(this._template, out)
 				}
 				if (ch === 13 || ch === 10 || ch === 8232 || ch === 8233){
 					if(!this.multilineStrings) this.raise(this.tokStart, "Unterminated string constant")
@@ -1449,11 +1455,14 @@ ONE.parser_strict_ = function(){
 			} 
 			else if(this.tokType !== this._name)break
 			else{
+
 				def = this.startNode()
 				def.id = this.parseIdent()
+
 				if (this.strict && this.isStrictBadIdWord(def.id.name))
 					this.raise(def.id.start, "Binding " + def.id.name + " in this.strict mode")
 				// dont allow newline before a function-init
+
 				if( !this.lastSkippedNewlines && this.tokType == this._parenL){
 					var fn = this.startNode()
 					def.init = this.parseFunction(fn)
@@ -1592,33 +1601,7 @@ ONE.parser_strict_ = function(){
 		case this._for:
 			this.next()
 			this.labels.push(this.loopLabel)
-			this.expect(this._parenL)
-			if (this.tokType === this._semi) return this.parseFor(node, null)
-			if (this.tokType === this._var || this.tokType.isType) {
-				if( this.tokType.isType ){
-					var init = this.parseTypeVar(true,true)
-				} else {
-					var init = this.startNode()
-					this.next()
-					this.parseVar(init, true)
-					this.finishNode(init, "Var")
-				}
-				if (this.eat(this._of)) return this.parseForOf(node, init)
-				if (this.eat(this._from)) return this.parseForFrom(node, init)
-
-				if( init.defs.length === 1 ){
-					if (this.eat(this._in)) return this.parseForIn(node, init)
-					if (this.eat(this._to)) return this.parseForTo(node, init)
-				}
-
-				return this.parseFor(node, init)
-			}
-			var init = this.parseExpression(false, true)
-			if (this.eat(this._in)) return this.parseForIn(node, init)
-			if (this.eat(this._to)) return this.parseForTo(node, init)
-			if (this.eat(this._of)) return this.parseForOf(node, init)
-
-			return this.parseFor(node, init)
+			return parseAllFor(node)
 
 		case this._function:
 			this.next()
@@ -1626,6 +1609,7 @@ ONE.parser_strict_ = function(){
 
 		case this._if:
 			this.next()
+
 			// if we dont have a paren, we switch to if .. then
 			if( this.tokType !== this._parenL ){
 				node.test = this.parseExpression(true)
@@ -1814,64 +1798,142 @@ ONE.parser_strict_ = function(){
 		return this.finishNode(node, "Block", true)
 	}
 
+	// parse a comprehension block
+	this.parseComprBlock = function(){
+		// we can parse either a for or an if or an expression
+		if(this.tokType == this._for){
+			var node = this.startNode()
+			this.eat(this._for)
+			node.compr = true
+			return this.parseAllFor(node, true)
+		}
+		else if(this.tokType == this._if){
+
+			var node = this.startNode()
+			this.next()
+			// if we dont have a paren, we switch to if .. then
+			if( this.tokType !== this._parenL ){
+				node.test = this.parseExpression(true)
+				if( this.tokVal != 'then' ) this.unexpected()
+				this.next()
+			} else {
+				node.test = this.parseParenExpression()
+			}
+			node.then = this.parseComprBlock()
+			node.else = this.eat(this._else) ? this.parseComprBlock() : null
+			node.compr = true
+			return this.finishNode(node, 'If')
+		}
+		return this.parseExpression()
+	}
+
+	this.parseAllFor = function(node, compr){
+		this.expect(this._parenL)
+
+		if (this.tokType === this._semi) return this.parseFor(node, null, compr)
+		if (this.tokType === this._var || this.tokType.isType) {
+			if( this.tokType.isType ){
+				var init = this.parseTypeVar(true,true)
+			} else {
+				var init = this.startNode()
+				this.next()
+				this.parseVar(init, true)
+				this.finishNode(init, "Var")
+			}
+
+			if (this.eat(this._of)) return this.parseForOf(node, init, compr)
+			if (this.eat(this._from)) return this.parseForFrom(node, init, compr)
+
+			if( init.defs.length === 1 ){
+				if (this.eat(this._in)) return this.parseForIn(node, init, compr)
+				if (this.eat(this._to)) return this.parseForTo(node, init, compr)
+			}
+
+			return this.parseFor(node, init)
+		}
+		var init = this.parseExpression(false, true)
+
+		if (this.eat(this._in)) return this.parseForIn(node, init, compr)
+		if (this.eat(this._to)) return this.parseForTo(node, init, compr)
+		if (this.eat(this._of)) return this.parseForOf(node, init, compr)
+
+		return this.parseFor(node, init)
+	}
 	// Parse a regular `for` loop. The disambiguation code in
 	// `this.parseStatement` will already have parsed the init statement or
 	// expression.
 
-	this.parseFor = function(node, init) {
+	this.parseFor = function(node, init, compr) {
 		node.init = init
 		this.expect(this._semi)
 		node.test = this.tokType === this._semi ? null : this.parseExpression()
 		this.expect(this._semi)
 		node.update = this.tokType === this._parenR ? null : this.parseExpression()
 		this.expect(this._parenR)
-		node.loop = this.parseStatementBlock()
+		if(compr) node.loop = this.parseComprBlock()
+		else node.loop = this.parseStatementBlock()
 		this.labels.pop()
 		return this.finishNode(node, "For")
 	}
 
 	// Parse a `for`/`in` loop.
 
-	this.parseForIn = function(node, init) {
+	this.parseForIn = function(node, init, compr) {
 		node.left = init
 		node.right = this.parseExpression()
 		this.expect(this._parenR)
-		node.loop = this.parseStatementBlock()
-		this.labels.pop()
+		if(compr) node.loop = this.parseComprBlock()
+		else node.loop = this.parseStatementBlock()
 		return this.finishNode(node, "ForIn")
 	}
 
 	// Parse a `for`/`to` loop.
 
-	this.parseForTo = function(node, init) {
+	this.parseForTo = function(node, init, compr) {
+
 		node.left = init
 		node.right = this.parseExpression(true, true)
 		if( this.eat(this._in) ){
 			node.in = this.parseExpression(true, true)
 		}
 		this.expect(this._parenR)
-		node.loop = this.parseStatementBlock()
-		this.labels.pop()
+		if(compr){
+			console.log(this.tokType)
+			node.loop = this.parseComprBlock()
+		}
+		else { 
+			node.loop = this.parseStatementBlock()
+			this.labels.pop()
+		}
 		return this.finishNode(node, "ForTo")
 	}
 
 	// Parse a `for`/`of` loop.
 
-	this.parseForOf = function(node, init) {
+	this.parseForOf = function(node, init, compr) {
 		node.left = init
 		node.right = this.parseExpression()
 		this.expect(this._parenR)
-		node.loop = this.parseStatementBlock()
-		this.labels.pop()
+		if(compr){	
+			node.loop = this.parseComprBlock()
+		}
+		else {
+			node.loop = this.parseStatementBlock()
+			this.labels.pop()
+		}
 		return this.finishNode(node, "ForOf")
 	}
+
 	// Parse a for from optimized array loop
-	this.parseForFrom = function(node, init) {
+	this.parseForFrom = function(node, init, compr) {
 		node.left = init
 		node.right = this.parseExpression()
 		this.expect(this._parenR)
-		node.loop = this.parseStatementBlock()
-		this.labels.pop()
+		if(compr) node.loop = this.parseComprBlock()
+		else {
+			node.loop = this.parseStatementBlock()
+			this.labels.pop()
+		}
 		return this.finishNode(node, "ForFrom")
 	}
 	// Parse a list of variable declarations.
@@ -1932,8 +1994,9 @@ ONE.parser_strict_ = function(){
 	// or the `in` operator (in for loops initalization expressions).
 
 	this.parseExpression = function(noComma, noIn, termColon) {
-		var expr = this.parseMaybeQuote(noIn, termColon)
 
+		var expr = this.parseMaybeQuote(noIn, termColon)
+		
 		if ( (this.tokType !== this._colon || !termColon) && !noComma && (this.tokType === this._comma || this.canInjectComma(this.tokType) ) ) {
 
 			var node = this.startNodeFrom(expr)
@@ -2221,7 +2284,7 @@ ONE.parser_strict_ = function(){
 			node.raw = this.input.slice(this.tokStart, this.tokEnd)
 			this.next()
 			return this.finishNode(node, "Value")
-		case this._interpolate:
+		case this._template:
 			var node = this.startNode()
 			node.chain = []
 			// what this should do is call
@@ -2237,7 +2300,7 @@ ONE.parser_strict_ = function(){
 				if(tokType == this._string) break
 				node.chain.push(this.parseBlock())
 			}
-			return this.finishNode(node,"Interp")
+			return this.finishNode(node,"Template")
 		case this._string: 
 			var node = this.startNode()
 			node.kind = "string"
@@ -2372,6 +2435,14 @@ ONE.parser_strict_ = function(){
 	this.parseArray = function(){
 		var node = this.startNode()
 		this.next()
+		if(this.tokType == this._for){
+			this.next()
+			var nfor = this.startNode()
+			nfor.compr = true
+			node.for = this.parseAllFor(nfor, true)
+			this.eat(this._bracketR)
+			return this.finishNode(node, 'Comprehension')
+		}
 		node.elems = this.parseExprList(this._bracketR, true, true)
 		return this.finishNode(node, "Array")
 	}
