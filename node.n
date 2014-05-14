@@ -1,11 +1,35 @@
 //  NodeJS API Classes
 //  Copyright (C) 2014 ONEJS 
-
 load('timer')
 
 var _fs = require('fs')
 var _http = require('http')
 var _url = require('url')
+Path = require('path')
+
+Node::{
+	promisify( api ){
+		for(var k in api) bind(k){
+			if(k.indexOf('Sync')!=-1){
+				this[k] = api[k]
+				return
+			}
+			if(k in this) return
+
+			this[k] = ( ...args )->promise{
+				args.push do( err, data ){
+					if(err) return reject( err )
+					resolve( data )
+				}
+				api[k].apply(api, args)
+			}
+		}
+	}
+}
+
+Fs::Node{
+	promisify(_fs)
+}
 
 Mime::{
 
@@ -34,23 +58,22 @@ HttpServer::{
 
 	// make a new server and listen
 	init( port, addr ){
-		server = http.createServer()
-		server.listen( port, addr ) do( req, res ){
-
+		server = _http.createServer() do( req, res ){
 			var url = _url.parse(req.url)
 			var path = url.pathname
-
 			for(var [match, body] of routes){
-				break if typeof match == 'string' and match == path
-				break if path.match(n)
+				if typeof match == 'string' and match == path then break 
+				else if path.match(match) then break
 			}
 			if(!body){
 				res.writeHead(404)
 				res.end("no route found")
 				return
 			}
+			req.url = url
 			body(req, res)
 		}
+		server.listen( port, addr ) 
 	}
 
 	route( match, body ) ->routes.push( [match, body] )

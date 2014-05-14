@@ -21,7 +21,7 @@ testing("ONE:Roles") do :->{
 
 	var x = C1.new()
 	C1.learn(Role1)
-	C1.learn(Role2)
+	C1.learn(Role2) 
 	C1.learn(Role3)
 	x.a == 40
 

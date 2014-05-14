@@ -7,46 +7,48 @@
  * 
  */
 
-var { HttpServer, Fs, Mime, Path } = load('node.n')
+var { HttpServer, Fs, Mime, Path } = load('node')
 
 var addr = "127.0.0.1"
-var port = 2000
+var port = 2001
 var root = Path.resolve(__dirname)
 
 StaticServer::HttpServer{
-	// this thing is variable this
-	watch( file ){
+	// when you assign to something you must make it explicit
+	// when you read from something you can omit it.
+	watch( path ){
 
 		files ?= {}
-		if( files[ path ] ) return
-		out('watching', path)
+		if(files[path]) return
 
-		files[ path ] = Fs.watchFile( path, {type:'mtime',delay:2000} ) 
-		do ->{
+		files[path] = Fs.watchFile(path) 
+		do(){
 			out("---- " + path + " changed, sending reload to frontend ----" )
-			for( var res of pending ) res.text(200,"RELOAD")
+			for(var res of pending){
+				res.writeHead(200)
+				res.end('Reload')
+			}
 		}
 	}
 
-	route("/_reloader_") do -> (pending ?= []).push( res )
+	route("/_reloader_") do( req, res ) ->( pending ?= []).push(res)
+
 	route(/.*/) do( req, res ){
 
-		var path = Fs.joinPath(root, req.url.pathname)
+		var path = Path.join(root, req.url.pathname)
 
 		Fs.readFile(path).then
-
-		catch e->{
-			res.writeHead(404,'File not found')
-			res.end()
-		}
 		do data->{
-
-			res.writeHead(200, {"Content-Type": Mime.fromFilename(path)})
+			res.writeHead(200) do {"Content-Type": Mime.fromFilename(path)}
 			res.write(data)
 			res.end()
-
 			watch(path)
 		}
+		catch e->{
+			res.writeHead(404)
+			res.end('File not found')
+		}
+
 	}
 }
 

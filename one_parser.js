@@ -19,21 +19,22 @@
 // Think JavaScript, plus:
 //
 // Code block after identifier 'x{code}'
-// Callback to a function after closing paren 'x() do ->{code}' 
+// Callback to a function after closing paren with do 'x() do ->{code}' 
 // Function defs can drop the function keyword 'x(param){}''
 // Function defs can drop the identifier 'x = (param){}'
 // AST Quote operator 'var x = :y = 10' quotes entire expression rhs, priority below = 
 // Arrow function '->x', 'x->x', '()->x', '(x)->x' and all ->{}
 // Typed var 'float x' 'float x[10]' 'struct x{float y}'
 //
-// Three arrow types: => .bind(this) -> auto(this) ~> unbound
+// Three arrow function types: => .bind(this) -> auto(this) ~> unbound
 // Paren free if form 'if x then y'
 // Commas are optional when you have newlines '[1\n2] {x:1\x:2}'
-// Logic words 'if x and y', 'if x or y', 'if x is y', 'if x isnt y' 'if not x'
-// Booleans 'yes == true' 'on == true' 'no == false' 'off == false'
+// MIGHT REMOVE: postfixable paren free if form 'break if x is 10'
+//
+// Logic words 'if x and y', 'if x or y' 'if not x'
 // Extends operator(::) 'x::y{}' 'x = ::y{}'
 // Baseclass call 'x::y()'
-// Full destructuring assignment of arrays and objects 
+// Full destructuring assignment of arrays and objects in var, arguments and expressions
 // Default arguments for functions '(x=10)->x'
 // Tempvar/cascade operator (..)  'selectElement().. \n..click = 10, ..bla = 20'
 // Rest prefix '...name' '(x, ...y) -> {}''
@@ -45,37 +46,37 @@
 // do catch for promises: 'v(x) do y catch z' -> 'v(x,y,z)' 'v do x' -> 'v(x)'
 // then chaining on do catch: v(x).then do y catch z then do x catch z (for promises)
 // await-catch: var x = await async(y) catch z
-// getter setter syntax:  'get x = ->10' 'set y = v->out(v)'
+// getter setter syntax:  'get x()->10' 'set y(v)->out(v)'
 // Existential object traverse  'x?.y?.z for no exception-traverse
 // Existential assignments '?=' if(lhs===undefined)lhs = rhs
 // Existential prefix operator ?x -> (x===undefined)
 // Existential or '?|' lhs!==undefined?lhs:rhs
+// Multiline strings ' without interpolation
+// Multiline strings "\n{i}\n" with interpolation support
+// Multiline regex uses / /\n\n\n/ /g
 //
 // The following JS parser bugs/features have been fixed:
-// Doing 'x\n()' or 'x\n[]' subscripts is now 2 statements
+// Doing 'x\n()' or 'x\n[]' subscripts is now 2 statements, not an accidental call/index
 // Loose blocks in program scope like '{x:1}' are now interpreted as objects
 // Only 'new identifier' is treated as a the JS new keyword calling new() and new{} is usable syntax
 // 
 // Code generation features depend on the target language
 //
-// TODO items for the parser:
-// Temp / cascade operator ..
-// Splats '[1 2 3]^^'
-// Ranges '[0..1]' '[0...3]'
-// Multiline strings ' no interpolation
-// Multiline strings "{}" w interpolation 
-// Multline regex ///
-// Interpolated XML <div>{code}</div>
-// Array slicing x[0..2] x[3..-2]
-// Array comprehensions as in ES6
-// Let as in ES6
-// Allow if/else/try/catch in expressions? 
-// for each syntax
-// const
-// Add a step to for to
+// add const (var alias)
 // Pow '**'
 // Integer modulus '%%'
-// Obvious string multiply 'x'// 10
+// Ranges '[0 to 1]' '[0 to 3]'
+// For from and for to have a step / in argument
+// Array splats for arguments? (*)
+// parse inline XML. perhaps.
+//
+// add catch to await
+// Allow if/else/try/catch/switch in expressions? 
+// allow try expr catch expr finally expr
+// Chained comparisons
+// Auto objects in sequences for named args x(10, 20, y:10,z:20) -> x(10,20, {y:10, z:20})
+// Array comprehensions as in ES6 ( add it when i need it )
+// let as in ES6 ( not polyfillable )
 // 
 // Acorn was written by Marijn Haverbeke and released under an MIT
 // license. The Unicode regexps (for identifiers and whitespace) were
@@ -122,6 +123,10 @@ ONE.parser_strict_ = function(){
 	// stores comments on the AST as best as we can
 	this.storeComments = true
 	
+	// allows multiline strings
+	this.multilineStrings = true
+	this.stringInterpolation = true
+
 	this.sourceFile = ''
 
 	// The current position of the tokenizer in the this.input.
@@ -179,6 +184,9 @@ ONE.parser_strict_ = function(){
 	this.lastComments = []
 	this.lastNodes = []
 
+	// alright parsing interpolations.
+	this.parenStack
+
 	this.parse_strict = function(inpt) {
 		this.input = String(inpt)
 		this.inputLen = this.input.length
@@ -235,6 +243,8 @@ ONE.parser_strict_ = function(){
 	this._string = {type: "string"}
 	this._name = {type: "name"}
 	this._eof = {type: "eof"}
+	// interpolated string type
+	this._interpolate = {}
 
 	// Keyword tokens. The `keyword` property (also used in keyword-like
 	// operators) indicates that the token originated from an
@@ -269,6 +279,7 @@ ONE.parser_strict_ = function(){
 	this._throw = {keyword: "throw", beforeExpr: true}
 	this._try = {keyword: "try"}
 	this._var = {keyword: "var"}
+	this._const = {keyword: "const"}
 	this._while = {keyword: "while", isLoop: true}
 	this._with = {keyword: "with"}
 	this._new = {keyword: "new", beforeExpr: true}
@@ -313,7 +324,6 @@ ONE.parser_strict_ = function(){
 		struct:1,
 		get:1,
 		set:1,
-		const:1,
 		local:1
 	}
 
@@ -324,10 +334,6 @@ ONE.parser_strict_ = function(){
 	this._null = {keyword: "null", isValue:1, atomValue: null}
 	this._true = {keyword: "true", isValue:1, atomValue: true}
 	this._false = {keyword: "false", isValue:1, atomValue: false}
-	this._yes = {keyword:"yes", isValue:1, atomValue: true}
-	this._no = {keyword:"no", isValue:1, atomValue: false}
-	this._on = {keyword:"on", isValue:1, atomValue: true}
-	this._off = {keyword:"off", isValue:1, atomValue: false}
 
 	// Some keywords are treated as regular operators. `in` sometimes
 	// (when parsing `for`) needs to be tested against specifically, so
@@ -358,7 +364,7 @@ ONE.parser_strict_ = function(){
 	this._dotdot = {type: ".."}
 	this._tripledot = {type: "..."}
 	this._dotdotslash = {type: "../"}
-
+	
 	this._existkey = {type: "?."}
 	this._existor = {type: "?|", binop:1, beforeExpr:true}
 	this._existeq = {type: "?=",isAssign: true, binop:0, beforeExpr: true}
@@ -401,9 +407,10 @@ ONE.parser_strict_ = function(){
 	this._bitShift = {binop: 8, beforeExpr: true}
 	this._plusMin = {binop: 9, prefix: true, beforeExpr: true}
 	this._multiplyModulo = {binop: 10, prefix:true, beforeExpr: true}
-
-	this._is = {keyword: "is", replace:'===', replaceOp:this._equality, binop: 6, beforeExpr: true}
-	this._isnt = {keyword: "isnt", replace:'!==', replaceOp:this._equality,  binop: 6, beforeExpr: true}
+	this._pow = {binop: 10, beforeExpr: true}
+	this._intmod = {binop: 10, beforeExpr: true}
+	this._intdiv = {binop: 10, beforeExpr: true}
+	
 	this._or = {keyword: "or", replace:'||', replaceOp:this._logicalOR, binop: 1, beforeExpr: true}
 	this._and = {keyword: "and", replace:'&&', replaceOp:this._logicalAND, binop: 2, beforeExpr: true}
 	this._not = {keyword: "not", replace:'!', prefix: 1, beforeExpr: true}
@@ -535,6 +542,7 @@ ONE.parser_strict_ = function(){
 	// Reset the token state. Used at the start of a parse.
 
 	this.initTokenState = function() {
+		this.parenStack = []
 		this.lastTok = undefined
 		this.skippedNewlines = false
 		this.lastSkippedNewlines = false
@@ -542,6 +550,7 @@ ONE.parser_strict_ = function(){
 		this.lastNodes.length = 0
 		this.tokPos = 0
 		this.tokRegexpAllowed = true
+		this.interpNext = false
 		this.skipSpace()
 	}
 
@@ -599,6 +608,7 @@ ONE.parser_strict_ = function(){
 	this.skipSpace = function() {
 		this.lastSkippedNewlines = this.skippedNewlines
 		this.skippedNewlines = 0
+		if( this.interpNext ) return
 		while (this.tokPos < this.inputLen) {
 			var ch = this.input.charCodeAt(this.tokPos)
 			if (ch === 32) { // ' '
@@ -669,14 +679,34 @@ ONE.parser_strict_ = function(){
 
 	this.readToken_slash = function() {// '/'
 		var next = this.input.charCodeAt(this.tokPos + 1)
-		if (this.tokRegexpAllowed) {++this.tokPos; return this.readRegexp();}
+		if (this.tokRegexpAllowed) {
+			if(next == 32 && this.input.charCodeAt(this.tokPos + 2) == 47){
+				this.tokPos += 3
+				return this.readRegexp(true)				
+			}
+			++this.tokPos
+			return this.readRegexp()
+		}
 		if (next === 61) return this.finishOp(this._assign, 2)
 		return this.finishOp(this._slash, 1)
 	}
 
-	this.readToken_mult_modulo = function() { // '%*'
+	this.readToken_multiply = function() { // '*'
 		var next = this.input.charCodeAt(this.tokPos + 1)
+		
+		if (next === 42) return this.finishOp(this._pow, 2)
 		if (next === 61) return this.finishOp(this._assign, 2)
+
+		return this.finishOp(this._multiplyModulo, 1)
+	}
+
+	this.readToken_modulo = function() { // '%'
+		var next = this.input.charCodeAt(this.tokPos + 1)
+
+		if (next === 47) return this.finishOp(this._intdiv, 2)
+		if (next === 37) return this.finishOp(this._intmod, 2)
+		if (next === 61) return this.finishOp(this._assign, 2)
+
 		return this.finishOp(this._multiplyModulo, 1)
 	}
 
@@ -745,14 +775,33 @@ ONE.parser_strict_ = function(){
 			return this.readToken_dot()
 
 			// Punctuation tokens.
-		case 40: ++this.tokPos; return this.finishToken(this._parenL)
-		case 41: ++this.tokPos; return this.finishToken(this._parenR)
-		case 59: ++this.tokPos; return this.finishToken(this._semi)
-		case 44: ++this.tokPos; return this.finishToken(this._comma)
-		case 91: ++this.tokPos; return this.finishToken(this._bracketL)
-		case 93: ++this.tokPos; return this.finishToken(this._bracketR)
-		case 123: ++this.tokPos; return this.finishToken(this._braceL)
-		case 125: ++this.tokPos; return this.finishToken(this._braceR)
+		case 40: ++this.tokPos; 
+			this.parenStack.push(40)
+			return this.finishToken(this._parenL)
+		case 41: ++this.tokPos; 
+			if( this.parenStack.pop() !== 40) this.raise(this.tokPos, "Unexpected )")
+			return this.finishToken(this._parenR)
+		case 59: ++this.tokPos; 
+			return this.finishToken(this._semi)
+		case 44: ++this.tokPos; 
+			return this.finishToken(this._comma)
+		case 91: ++this.tokPos; 
+			this.parenStack.push(91)
+			return this.finishToken(this._bracketL)
+		case 93: ++this.tokPos; 
+			if( this.parenStack.pop() !== 91) this.raise(this.tokPos, "Unexpected ]")
+			return this.finishToken(this._bracketR)
+		case 123: ++this.tokPos; 
+			this.parenStack.push(123)
+			return this.finishToken(this._braceL)
+		case 125: 
+			var ps = this.parenStack
+			if( ps.pop() !== 123) this.raise(this.tokPos, "Unexpected }")
+			if( ps.length && ps[ps.length-1] == 34){
+				this.interpNext = true
+				ps.pop()
+			} else ++this.tokPos; 
+			return this.finishToken(this._braceR)
 		case 58: ++this.tokPos; 
 			var next = this.input.charCodeAt(this.tokPos)
 			if(next == 58){
@@ -802,8 +851,11 @@ ONE.parser_strict_ = function(){
 		case 47: // '/'
 			return this.readToken_slash(code)
 
-		case 37: case 42: // '%*'
-			return this.readToken_mult_modulo()
+		case 37: // %
+			return this.readToken_modulo()
+
+		case 42: // '*'
+			return this.readToken_multiply()
 
 		case 124: case 38: // '|&'
 			return this.readToken_pipe_amp(code)
@@ -848,6 +900,13 @@ ONE.parser_strict_ = function(){
 	}
 
 	this.readToken = function(forceRegexp) {
+
+		// in interpolated string check
+		if(this.interpNext){ 
+			this.interpNext = false
+			return this.readString(34)
+		}
+
 		if (!forceRegexp) this.tokStart = this.tokPos
 		else this.tokPos = this.tokStart + 1
 		if (forceRegexp) return this.readRegexp()
@@ -879,32 +938,69 @@ ONE.parser_strict_ = function(){
 	// Parse a regular expression. Some context-awareness is necessary,
 	// since a '/' inside a '[]' set does not end the expression.
 
-	this.readRegexp = function() {
+	this.readRegexp = function(multiLine) {
 		var content = "", escaped, inClass, start = this.tokPos
 		for (;;) {
 			if (this.tokPos >= this.inputLen) this.raise(start, "Unterminated regular expression")
 			var ch = this.input.charAt(this.tokPos)
-			if (this.newline.test(ch)) this.raise(start, "Unterminated regular expression")
+			if (!multiLine && this.newline.test(ch)) this.raise(start, "Unterminated regular expression")
 			if (!escaped) {
 				if (ch === "[") inClass = true
 				else if (ch === "]" && inClass) inClass = false
-				else if (ch === "/" && !inClass) break
+				else if (ch === "/" && !inClass){
+					if(multiLine){
+						var next = this.input.charCodeAt(this.tokPos + 1)
+						console.log(next)
+						if(next == 47 || next == 42){ // its a /* */ comment to skip
+							content += this.input.slice(start, this.tokPos)
+							if(next == '*'){
+								for(;;){
+									this.tokPos ++
+									if(this.input.charCodeAt(this.tokPos) == 42 &&
+									   this.input.charCodeAt(this.tokPos+1) == 47){
+										start = this.tokPos + 2
+										break
+									}
+									if(this.tokPos >= this.inputLen) this.raise(start, "Unterminated regular expression")
+								}
+							} 
+							else { // single line comment
+								for(;;){
+									this.tokPos ++
+									if(this.input.charCodeAt(this.tokPos) == 10){
+										start = this.tokPos + 1
+										break
+									}
+									if(this.tokPos >= this.inputLen) this.raise(start, "Unterminated regular expression")
+								}
+							}
+						}
+						if( next == 32 && this.input.charCodeAt(this.tokPos + 2) == 47 ){
+							break
+						}
+					} else break	
+				}
 				escaped = ch === "\\"
 			} else escaped = false
 			++this.tokPos
 		}
-		var content = this.input.slice(start, this.tokPos)
+		content += this.input.slice(start, this.tokPos)
+
 		++this.tokPos
+		if(multiLine) this.tokPos += 2
 		// Need to use `this.readWord1` because '\uXXXX' sequences are allowed
 		// here (don't ask).
 		var mods = this.readWord1()
 		if (mods && !/^[gmsiy]*$/.test(mods)) this.raise(start, "Invalid regular expression flag")
 		try {
+			if(multiLine) content = content.replace(/[\s\r\n]*/g,'')
 			var value = new RegExp(content, mods)
 		} catch (e) {
 			if (e instanceof SyntaxError) this.raise(start, "Error parsing regular expression: " + e.message)
 			this.raise(e)
 		}
+		this.regexContent = '/'+content+'/'+mods
+		this.isMultiLine = multiLine
 		return this.finishToken(this._regexp, value)
 	}
 
@@ -955,7 +1051,10 @@ ONE.parser_strict_ = function(){
 			isFloat = true
 		}
 
-		if (this.isIdentifierStart(this.input.charCodeAt(this.tokPos))){
+		next = this.input.charCodeAt(this.tokPos)
+		if (this.isIdentifierStart(next) || 
+			(next == 32 && this.isIdentifierStart(this.input.charCodeAt(this.tokPos+1)) ) ){
+			if(next == 32) this.tokPos++
 			this.injectMul = true
 			return this.finishToken(this._num, val)
 			// inject a *
@@ -973,6 +1072,7 @@ ONE.parser_strict_ = function(){
 	this.readString = function(quote) {
 		this.tokPos++
 		var out = ""
+		this.isMultiLine = false
 		for (;;) {
 			if (this.tokPos >= this.inputLen) this.raise(this.tokStart, "Unterminated string constant")
 			var ch = this.input.charCodeAt(this.tokPos)
@@ -1011,7 +1111,15 @@ ONE.parser_strict_ = function(){
 					}
 				}
 			} else {
-				if (ch === 13 || ch === 10 || ch === 8232 || ch === 8233) this.raise(this.tokStart, "Unterminated string constant")
+				// interpolated string
+				if(this.stringInterpolation && ch == 123 && quote == 34){
+					this.parenStack.push(34)
+					return this.finishToken(this._interpolate, out)
+				}
+				if (ch === 13 || ch === 10 || ch === 8232 || ch === 8233){
+					if(!this.multilineStrings) this.raise(this.tokStart, "Unterminated string constant")
+					this.isMultiLine = true
+				}
 				out += String.fromCharCode(ch); // '\'
 				++this.tokPos
 			}
@@ -1331,22 +1439,31 @@ ONE.parser_strict_ = function(){
 				if(this.eat(this._eq)){
 					def.init = this.parseExpression(true, noIn)
 				}
-			} else if(this.tokType == this._braceL){ // destructure array
+			} 
+			else if(this.tokType == this._braceL){ // destructure array
 				def = this.startNode()
 				def.id = this.parseObj()
 				if(this.eat(this._eq)){
 					def.init = this.parseExpression(true, noIn)
 				}
-			} else if(this.tokType !== this._name)break
+			} 
+			else if(this.tokType !== this._name)break
 			else{
 				def = this.startNode()
 				def.id = this.parseIdent()
 				if (this.strict && this.isStrictBadIdWord(def.id.name))
 					this.raise(def.id.start, "Binding " + def.id.name + " in this.strict mode")
-				
-				this.parseDims(def, node)
-				if(this.eat(this._eq)){
-					def.init = this.parseExpression(true, noIn)
+				// dont allow newline before a function-init
+				if( !this.lastSkippedNewlines && this.tokType == this._parenL){
+					var fn = this.startNode()
+					def.init = this.parseFunction(fn)
+					def.init.arrow = '~>'
+				}
+				else {
+					this.parseDims(def, node)
+					if(this.eat(this._eq)){
+						def.init = this.parseExpression(true, noIn)
+					}
 				}
 			}
 			defs.push(this.finishNode(def, "Def"))
@@ -1600,6 +1717,8 @@ ONE.parser_strict_ = function(){
 				this.raise(node.start, "Missing catch or finally clause")
 			return this.finishNode(node, "Try")
 
+		case this._const:
+			node.const = true;
 		case this._var:
 			this.next()
 			this.parseVar(node)
@@ -2030,7 +2149,7 @@ ONE.parser_strict_ = function(){
 			return this.parseArrowFunction(node, base)
 		} 
 		else if( this.tokType == this._do ){
-			// do cant be on the next line or it can be a do while
+			// do on next line followed by { } is interpreted as the JS do/while
 			if( this.lastSkippedNewlines && this.input.charCodeAt(this.tokPos) == 123)return base
 			// if we are a catch, we must scan up to
 			// the last do
@@ -2095,10 +2214,47 @@ ONE.parser_strict_ = function(){
 			return this.parseIdent()
 		case this._name:
 			return this.parseIdent()
-		case this._num: case this._string: case this._regexp:
+		case this._num: 
 			var node = this.startNode()
-			node.kind = this.tokType.type
+			node.kind = "num"
 			node.value = this.tokVal
+			node.raw = this.input.slice(this.tokStart, this.tokEnd)
+			this.next()
+			return this.finishNode(node, "Value")
+		case this._interpolate:
+			var node = this.startNode()
+			node.chain = []
+			// what this should do is call
+			while(1){
+				var item = this.startNode()
+				item.kind = "string"
+				item.value = this.tokVal
+				item.multi = this.isMultiLine
+				node.chain.push(item)
+				var tokType = this.tokType
+				this.next()
+				this.finishNode(item, "Value")
+				if(tokType == this._string) break
+				node.chain.push(this.parseBlock())
+			}
+			return this.finishNode(node,"Interp")
+		case this._string: 
+			var node = this.startNode()
+			node.kind = "string"
+			node.value = this.tokVal
+			node.multi = this.isMultiLine
+			node.raw = this.input.slice(this.tokStart, this.tokEnd)
+			this.next()
+			// we should emit a this._stringInterp
+			// and keep a stack for the tokenizer
+
+			// how are we going to do string interpolation?
+			return this.finishNode(node, "Value")
+		case this._regexp:
+			var node = this.startNode()
+			node.kind = "regexp"
+			node.value = this.regexContent
+			node.multi = this.isMultiLine
 			node.raw = this.input.slice(this.tokStart, this.tokEnd)
 			this.next()
 			return this.finishNode(node, "Value")
@@ -2167,8 +2323,10 @@ ONE.parser_strict_ = function(){
 			return this.parseArrowFunction(node)
 		case this._tripledot:
 			var node = this.startNode()
-			node.id = this.parseIdent(true)
 			this.next()
+			if(this.tokType == this._name || this.tokType.keyword){
+				node.id = this.parseIdent(true)
+			}
 			return this.finishNode(node, "Rest")
 		case this._dot: // a flagged identifier
 			var node = this.startNode()
@@ -2190,9 +2348,6 @@ ONE.parser_strict_ = function(){
 				return this.parseSubscripts(this.finishNode(node, "Key"))
 			} 
 			return this.parseSubscripts(base)
-		case this._dotdotslash:
-			this.raise(this.tokPos, 'Dotdotslash is unused')
-
 		case this._doublecolon:
 			return this.parseExtends()
 		default:
@@ -2392,7 +2547,6 @@ ONE.parser_strict_ = function(){
 				this.canInjectComma( this.tokType ) || this.expect(this._comma)
 				if (allowTrailingComma && this.allowTrailingCommas && this.eat(close)) break
 			} else first = false
-
 			if (allowEmpty && this.tokType === this._comma) elts.push(null)
 			else elts.push(this.parseExpression(true))
 		}
