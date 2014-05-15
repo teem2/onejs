@@ -173,7 +173,7 @@ ONE.ast_ = function(){
 		// 0 is value
 		// 1 is node
 		// 2 is array
-		// 3 is array of [ { key:1, value:1, kind:0 } ]
+		// 3 is array of [ { key:1, value:1, kind:0, short:0 } ]
 
 		this.ast_structure = {
 			Program:{ steps:2 },
@@ -217,6 +217,8 @@ ONE.ast_ = function(){
 			Const: { defs:2 },
 			TypeVar: { kind:1, defs:2, dim:1 },
 			Struct: { id:1, struct:1, defs:2, dim:1 },
+			Enum: { id:1, enums:1 },
+
 			Def: { id:1, init:1, dim:1 },
 
 			Function: { id:1, name:1, params:2, rest:1, body:1, arrow:0, gen:0, def:0 },
@@ -316,7 +318,7 @@ ONE.ast_ = function(){
 								'\t\tfor(var len = _'+v+'.length,i = 0; i < len; i++){\n'+
 									'\t\t\tx = _'+v+'[i], y[i] = {key:this[x.key.type](x.key)}\n'+
 									'\t\t\tif(x.value) y[i].value = this[x.value.type](x.value)\n'+
-									'\t\t\telse y[i].enum = x.enum\n'+
+									'\t\t\telse y[i].short = x.short\n'+
 								'\t\t}\n'+
 								'\t\tc.'+k+'=y\n'+
 							'\t}\n'
@@ -413,7 +415,7 @@ ONE.ast_ = function(){
 			Condition: 1,
 			Comprehension:1,
 			Template:1,
-			
+
 			New: 1,
 			Call: 1,
 
@@ -456,7 +458,7 @@ ONE.ast_ = function(){
 			line:0,
 			is_expr:this.ast_isexpr,
 			array_fix:0, //!TODO do this nicely
-			no_valueless_object:0,
+			expand_short_object:0,
 			store: function( n, value ){
 				return value + '..'
 			},
@@ -611,12 +613,12 @@ ONE.ast_ = function(){
 					else if( ch == '}' ) ret +=  this.newline + this.depth
 					ret += (prop.key.name || prop.key.raw) 
 
-					if(prop.enum === undefined){
+					if(prop.short === undefined){
 						ret += ':' + this.expand( prop.value, n )
 					}
 					else{
-						if(this.no_valueless_object){
-							ret += ':' + prop.enum
+						if(this.expand_short_object){
+							ret += ':' + this.resolve( prop.key.name )
 						}
 						if( prop.key.comments ){
 							lastcm = this.comments_or_newline( prop.key )
@@ -802,7 +804,9 @@ ONE.ast_ = function(){
 				return 'struct ' + this.expand( n.id, n) + 
 					(n.struct ? this.expand( n.struct, n): ' '+this.list( n.defs, n ) )
 			},
-
+			Enum: function( n ){
+				return 'enum ' + this.expand( n.id, n) + this.expand( n.enums, n)
+			},
 			Function: function( n, parens ){
 				if(n.arrow){
 					var arrow = n.arrow
@@ -842,7 +846,7 @@ ONE.ast_ = function(){
 			},
 
 			Unary: function( n ){
-				if( n.prefix )return n.op + this.space + this.expand( n.arg, n )
+				if( n.prefix )return n.op + this.expand( n.arg, n )
 				return this.expand ( n.arg, n ) + n.op
 			},
 			Binary: function( n, parens ){
@@ -978,11 +982,16 @@ ONE.ast_ = function(){
 			semi:';',
 			scope:{},
 			promise_catch:1,
-			no_valueless_object:1,
+			expand_short_object:1,
 			destruc_prefix:'_\u0441',
 			desarg_prefix:'_\u0430',
 			tmp_prefix:'_\u0442',
 			store_prefix:'_\u0455',
+			macros:{
+				assert:function( n ){
+
+				}
+			},
 			globals:{
 				Object:1,
 				Array:1, 
@@ -1034,12 +1043,12 @@ ONE.ast_ = function(){
 				require:1,
 				__dirname:1
 			},
-			store:function(n, value ){
+			store: function(n, value ){
 				var fn = this.find_function( n )
 				if(!fn.store_var) fn.store_var = 1
 				return '('+this.store_prefix+'='+value + ')'
 			},
-			resolve:function( name ){
+			resolve: function( name ){
 				if( name in this.scope ) return name
 				if( name in this.globals ) return name
 				return 'this.'+name
@@ -1052,15 +1061,28 @@ ONE.ast_ = function(){
 						if(!fn.store_var) throw new Error("Storage .. operator read but not set in function")
 						return this.store_prefix
 					}
-					if(flag === 64) throw new Error("@ Unresolved template vars in AST")
 					if(flag === 35) return 'this.color("'+n.name+'")'
+					if(flag === 64){
+						if(n.name == undefined) return 'this'
+						return 'this.' + n.name
+					}
 				}
+
 				return this.resolve( n.name )
 			},
 			Value: function( n ){ 
+				if(n.kind == 'string' && n.raw[0] == '`'){
+					return '"'+n.raw.slice(1,-1).replace(/\n/g,'\\n').replace(/"/g,'\\"')+'"'
+				}
 				if(n.multi){
 					if(n.kind == 'regexp') return n.value
 					return n.raw.replace(/\n/g,'\\n')
+				}
+				if(n.kind == 'num'){
+					var ch = n.raw.charCodeAt(1)
+					if(ch == 79 || ch == 111 || ch == 66 || ch == 98){
+						return n.value
+					}
 				}
 				return n.raw 
 			},
@@ -1082,6 +1104,45 @@ ONE.ast_ = function(){
 					return ret
 				} 
 				return this.expand( n.object, n, true ) + '.' + n.key.name + cmt
+			},
+			Enum: function( n ){
+				// okay lets convert our enum structure into an object on this.
+				// we can accept a block with steps of type assign
+				// and a lefthandside of type id
+				// right hand side is auto-enumerated when not provided
+				if(n.id.flag == 64){
+					ret = 'this.'+n.id.name+' = '
+				}
+				else {
+					ret = 'var '+n.id.name+' = '
+					this.scope[n.id.name] = 1
+				}
+
+				var olddepth = this.depth
+				this.depth += this.indent
+				ret += '{'
+				var elem = n.enums.steps
+				if(!elem || !elem.length){
+					return ret + '}'
+				}
+				ret += this.newline
+				for(var i = 0;i<elem.length;i++){
+					var expr = elem[i]
+					if(expr.type != 'Expr') throw new Error("Unexpected enum item")
+					var item = expr.expr
+					// lets check our property 
+					if(item.type == 'Id'){
+						
+					}
+					else if(item.type == 'Assign'){
+
+					} 
+					else throw new Error("Unexpected enum item "+item.type)
+				}
+				this.depth
+
+
+				this.expand( n.enums, n)
 			},
 			Comprehension: function( n, parens ){
 				var ret = '(function(){'
@@ -1420,7 +1481,7 @@ ONE.ast_ = function(){
 							var vardef = ''
 							for(var v = 0;v<vars.length;v++){
 								var id = vars[v]
-								if(id.flag !== 46){
+								if(id.flag !== 64){
 									this.scope[ id.name ] = 1
 									if(vardef) vardef += ',' +this.space
 									vardef += id.name
@@ -1821,7 +1882,7 @@ ONE.ast_ = function(){
 						if(parens) return '(' + this.expand(n.arg, n) +'===undefined)'
 						return this.expand(n.arg, n) +'===undefined'
 					}
-					return n.op + this.space + this.expand( n.arg, n )
+					return n.op + this.expand( n.arg, n, true )
 				}
 				return this.expand ( n.arg, n ) + n.op
 			},
@@ -1839,18 +1900,44 @@ ONE.ast_ = function(){
 			Call: function( n, parens, extra ){
 				// auto this forward with local scope functions
 				// !TODO fix
+				var fn  = n.fn
+
+				// assert macro
+				if(fn.type == 'Id' && fn.name == 'assert'){
+					var argl = n.args
+					if(!argl || argl.length == 0 || argl.length > 2) throw new Error("Invalid assert args")
+					var arg = this.expand(argl[0], n)
+					var msg = argl.length>1?this.expand(argl[1], n):'""'
+					var value = 'undefined'
+					var paren
+					if(argl[0].type == 'Logic' && argl[0].left.type !== 'Call'){
+						value = this.expand( argl[0].left, n )
+					}
+
+					var body = '(function(){throw new Assert("'+
+						arg.replace(/"/g,'\\"').replace(/\n/g,'\\n')+'",'+
+						msg+','+value+')}).call(this)'
+
+					if(n.parent.type == 'Expr' && argl[0].type == 'Logic'){
+						if(parens) return '(' + arg + ' || ' + body + ')'
+						return arg + ' || ' + body
+					}
+					return '(('+arg+') || '+body+')'
+				}
+
 				var nargs = n.args.length ? this.list( n.args, n ) : ''
 				if( extra ) nargs += nargs? ',' + this.space + extra : extra
 				var args = nargs ? ',' + nargs : ''
-				var fn  = n.fn
+
 				if(fn.type == 'Extends'){
 					return this.expand(fn.left)+'.'+fn.right.name+'(this' + args +')'
 				}
 				if(fn.type == 'Id'){
-					if(fn.name == 'new'){
+					var name = fn.name
+					if(name == 'new'){
 						return 'this.new(this' + args + ')'
 					}
-					if(fn.name == 'super'){
+					if(name == 'super'){
 						return 'this.super(arguments' + args + ')'
 					}
 				}

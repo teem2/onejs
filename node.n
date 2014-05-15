@@ -1,37 +1,33 @@
 //  NodeJS API Classes
 //  Copyright (C) 2014 ONEJS 
+
 load('timer')
 
 var _fs = require('fs')
 var _http = require('http')
 var _url = require('url')
+
 Path = require('path')
 
-Node::{
-	promisify( api ){
-		for(var k in api) bind(k){
-			if(k.indexOf('Sync')!=-1){
-				this[k] = api[k]
-				return
-			}
-			if(k in this) return
+function promisify( api ){
+	for(var k in api) bind(k){
+		if(k.indexOf('Sync')!=-1){
+			this[k] = api[k]
+			return
+		}
+		if(k in this) return
 
-			this[k] = ( ...args )->promise{
-				args.push do( err, data ){
-					if(err) return reject( err )
-					resolve( data )
-				}
-				api[k].apply(api, args)
+		this[k] = ( ...args ) ~> promise{
+			args.push then( err, data ){
+				if(err) return reject( err )
+				resolve( data )
 			}
+			api[k](...args)
 		}
 	}
 }
 
-Fs::Node{
-	promisify(_fs)
-}
-
-Mime::{
+mime = Base{
 
 	htm  = "text/html"
 	html = "text/html"
@@ -52,12 +48,16 @@ Mime::{
 	}
 }
 
-HttpServer::{
+fs = Base{
+	promisify(_fs)
+}
 
+HttpServer::{
+	// ignore private
 	routes = []
 
-	// make a new server and listen
-	init( port, addr ){
+	constructor( port, addr ){
+
 		server = _http.createServer() do( req, res ){
 			var url = _url.parse(req.url)
 			var path = url.pathname
@@ -76,11 +76,11 @@ HttpServer::{
 		server.listen( port, addr ) 
 	}
 
-	route( match, body ) ->routes.push( [match, body] )
+	route( match, body ) ~> routes.push( [match, body] )
 }
 
 Http::{
-	get( .url ) ->promise{
+	get( @url ) ~> promise{
 		url = _url.parse( url )
 		var data = []
 
@@ -90,11 +90,11 @@ Http::{
 			method: 'GET', 
 			path: url.path} ) 
 
-		do( res, err ){
+		then( res, err ){
 			if(res.statusCode != 200) reject(res)
 			res.setEncoding('utf8')
-			res.on('data') do chunk -> data.push(chunk)
-			res.on('end') do -> resolve(data.join(''))
+			res.on('data') then chunk => data.push(chunk)
+			res.on('end') then => resolve(data.join(''))
 		}
 
 		req.end()

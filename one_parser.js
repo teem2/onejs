@@ -1,14 +1,14 @@
 
 //  ONEJS parser
 // 
-//  Parts Copyright (C) Marijn Haverbeke
 //  Parts Copyright (C) 2014 ONEJS
+//  Parts Copyright (C) Marijn Haverbeke
 //
 //  MIT license
 //
 // This parser is a modified version of Acorn
 // It parses the ONEJS superset of JavaScript
-// which is JS + ES6/7, Julia, Coffeescript, CSS, Dart and GLSL constructs
+// which is JS + ES6, Julia, Coffeescript, CSS, Dart and C++ / GLSL constructs
 // Its designed to target JS, Asm.js and GLSL with codegeneration
 // It tries to be entirely backwards compatible with JS
 // and follows the current ES6 proposals as closely as possible
@@ -17,7 +17,7 @@
 // and with the quote operator makes ASTs a first class citizen of the language
 // check one_ast.js for structural definition of the AST
 // 
-// Think JavaScript, plus:
+// Think JavaScript, plus (inspiration language on the left)
 
 // ES6   member defs can drop the function keyword 'x(param){}''
 // ES6   arrow function '=>x', 'x=>x', '()=>x', '(x)=>x' and all =>{} forms
@@ -31,17 +31,19 @@
 // ES6   const
 // ES6   array comprehensions
 // ES6   String templates `hello ${i} test` ($ is optional)
+// ES6   Binary and Octal numbers according to new 0b and 0o spec
+// ES6   Shorthand object intialization {x,y} == {x:x,y:y} 
 
 // ONE   code block after identifier 'x{code}'
 // ONE   function defs can drop the identifier 'x = (param){}'
 // ONE   three arrow function types: => .bind(this) -> auto(this) ~> unbound
-// ONE   extends operator(::) 'x::y{}' 'x = ::y{}'
-// ONE   baseclass call 'x::y()'
 // ONE   for To 'for(x = 0 to 10 in 3){}'
 // ONE   ! is postfixable,  % * & are prefixable 
 // ONE   do catch for promises: 'v(x) do y catch z' -> 'v(x,y,z)' 'v do x' -> 'v(x)'
 // ONE   then chaining on do catch: v(x).then do y catch z then do x catch z (for promises)
 
+// C++   extends operator(::) 'x::y{}' 'x = ::y{}'
+// C++   baseclass call 'x::y()'
 // Julia callback to a function after closing paren with do 'x() do ->{code}' 
 // Julia AST Quote operator 'var x = :y = 10' quotes entire expression rhs, priority below = 
 // GLSL  typed var 'float x' 'float x[10]' 
@@ -61,14 +63,16 @@
 // CS    existential or '?|' lhs!==undefined?lhs:rhs
 // CS    pow '**'
 // CS    Mathematical modulus '%%'
-// CS    Integer divide a%/b ( cant parse // )
+// CS    Integer divide '%/' ( cant parse // )
 
 // The following JS parser bugs/features have been fixed:
 
 // Doing 'x\n()' or 'x\n[]' subscripts is now 2 statements, not an accidental call/index
+// This makes coding without semicolons completely predictable and safe.
 // Loose blocks in program scope like '{x:1}' are now interpreted as objects
 // Only 'new identifier' is treated as a the JS new keyword calling new() and new{} is usable syntax
- 
+// Dont parse 0131 as octal, its almost always a typo
+
 // Code generation features depend on the target language
 
 // Todo
@@ -109,6 +113,7 @@ ONE.parser_strict_ = function(){
 	// influences support for this.strict mode, the set of reserved words, and
 	// support for getters and setter.
 	this.ecmaVersion = 5
+
 	// Turn on `strictSemicolons` to prevent the parser from doing
 	// automatic this.semicolon insertion.
 	this.strictSemicolons = false
@@ -129,12 +134,15 @@ ONE.parser_strict_ = function(){
 	// When enabled, a return at the top level is not considered an
 	// error.
 	this.allowReturnOutsideFunction = true
-	// stores comments on the AST as best as we can
+
+	// stores comments and newline info on the AST as best as we can
 	this.storeComments = true
 	
 	// allows multiline strings
 	this.multilineStrings = true
-	this.stringInterpolation = true
+
+	// allow string templating
+	this.stringTemplating = true
 
 	this.sourceFile = ''
 
@@ -300,6 +308,7 @@ ONE.parser_strict_ = function(){
 		double:1,
 		bool:1,
 		int:1,
+		enum:1,
 		uint:1,
 		bvec2:1,
 		bvec3:1,
@@ -806,7 +815,7 @@ ONE.parser_strict_ = function(){
 		case 125: 
 			var ps = this.parenStack
 			if( ps.pop() !== 123) this.raise(this.tokPos, "Unexpected }")
-			if( ps.length && ps[ps.length-1] == 34){
+			if( ps.length && ps[ps.length-1] == 96){
 				this.templateNext = true
 				ps.pop()
 			} else ++this.tokPos; 
@@ -842,14 +851,18 @@ ONE.parser_strict_ = function(){
 			// '0x' is a hexadecimal number.
 		case 48: // '0'
 			var next = this.input.charCodeAt(this.tokPos + 1)
-			if (next === 120 || next === 88) return this.readHexNumber()
+			if (next === 120 || next === 88) return this.readHexNumber() //0x 0X
+			if (next === 66 || next === 98) return this.readBinNumber() //0b 0B
+			if (next === 66 || next === 98) return this.readBinNumber() //0b 0B
+
 			// Anything else beginning with a digit is an integer, octal
 			// number, or float.
 		case 49: case 50: case 51: case 52: case 53: case 54: case 55: case 56: case 57: // 1-9
 			return this.readNumber(false)
 
 			// Quotes produce strings.
-		case 34: case 39: // '"', "'"
+
+		case 34: case 39: case 96:// '"', "'", "`"
 			return this.readString(code)
 
 		// Operators are parsed inline in tiny state machines. '=' (61) is
@@ -913,7 +926,7 @@ ONE.parser_strict_ = function(){
 		// in templated string check
 		if(this.templateNext){ 
 			this.templateNext = false
-			return this.readString(34)
+			return this.readString(96)
 		}
 
 		if (!forceRegexp) this.tokStart = this.tokPos
@@ -1034,6 +1047,23 @@ ONE.parser_strict_ = function(){
 		return total
 	}
 
+	this.readOctNumber = function(){
+		this.tokPos += 2; // 0o
+		var val = this.readInt(8)
+		if(val == null ) this.raise(this.tokStart + 2, "Expected octal number")
+		if (this.isIdentifierStart(this.input.charCodeAt(this.tokPos))) this.raise(this.tokPos, "Identifier directly after number")
+		this.newNumSyntax = 1
+		return this.finishToken(this._num, val)
+	}
+
+	this.readBinNumber = function(){
+		this.tokPos += 2; // 0b
+		var val = this.readInt(2)
+		if(val == null ) this.raise(this.tokStart + 2, "Expected binary number")
+		if (this.isIdentifierStart(this.input.charCodeAt(this.tokPos))) this.raise(this.tokPos, "Identifier directly after number")
+		return this.finishToken(this._num, val)
+	}
+
 	this.readHexNumber = function() {
 		this.tokPos += 2; // 0x
 		var val = this.readInt(16)
@@ -1045,7 +1075,10 @@ ONE.parser_strict_ = function(){
 	// Read an integer, octal integer, or floating-point number.
 
 	this.readNumber = function(startsWithDot) {
-		var start = this.tokPos, isFloat = false, octal = this.input.charCodeAt(this.tokPos) === 48
+		var start = this.tokPos, isFloat = false
+		// we stop parsing octals starting with 0
+		var octal = this.input.charCodeAt(this.tokPos) === 48
+		
 		if (!startsWithDot && this.readInt(10) === null) this.raise(start, "Invalid number")
 		if (this.input.charCodeAt(this.tokPos) === 46) {
 			++this.tokPos
@@ -1069,8 +1102,7 @@ ONE.parser_strict_ = function(){
 		var str = this.input.slice(start, this.tokPos), val
 		if (isFloat) val = parseFloat(str)
 		else if (!octal || str.length === 1) val = parseInt(str, 10)
-		else if (/[89]/.test(str) || this.strict) this.raise(start, "Invalid number")
-		else val = parseInt(str, 8)
+		else this.raise(start, "Old octal syntax, use new 0o"+str.slice(1))
 		return this.finishToken(this._num, val)
 	}
 	// Read a string value, interpreting backslash-escapes.
@@ -1082,6 +1114,7 @@ ONE.parser_strict_ = function(){
 		for (;;) {
 			if (this.tokPos >= this.inputLen) this.raise(this.tokStart, "Unterminated string constant")
 			var ch = this.input.charCodeAt(this.tokPos)
+
 			if (ch === quote) {
 				++this.tokPos
 				return this.finishToken(this._string, out)
@@ -1118,8 +1151,10 @@ ONE.parser_strict_ = function(){
 				}
 			} else {
 				// templated string
-				if(this.stringTemplating && ch == 123 && quote == 34){
-					this.parenStack.push(34)
+				if(quote == 96 && this.stringTemplating && 
+					(ch == 123 || (ch == 36 && this.input.charCodeAt(this.tokPos+1) == 123))){
+					if(ch == 36) this.tokPos++
+					this.parenStack.push(96)
 					return this.finishToken(this._template, out)
 				}
 				if (ch === 13 || ch === 10 || ch === 8232 || ch === 8233){
@@ -1501,6 +1536,14 @@ ONE.parser_strict_ = function(){
 				return this.finishNode(node, "Struct")
 			}
 			type = "Struct"
+		}
+
+		if( kind == "enum"){
+			node.id = this.parseIdent()
+			console.log("here")
+			if( this.tokType !== this._braceL ) this.unexpected()
+			node.enums = this.parseBlock()
+			return this.finishNode(node, "Enum")
 		}
 
 		//this.parseDims(node)
@@ -2473,18 +2516,8 @@ ONE.parser_strict_ = function(){
 			} else {
 				if( this.tokType != this._braceR && this.tokType != this._comma && !this.canInjectComma( this.tokType, true))
 					this.unexpected()
-				// we are an enum, lets set the numeric value
-				var last = 0
-				if(node.keys.length){ 
-					var p = node.keys[node.keys.length - 1]
-					if(p.value && p.value.type === 'Value' && p.value.kind === 'num'){
-						last = p.value.value
-						if(parseInt(last)!= last || last < 0) last = 0
-					} else {
-						last = p.enum || 0
-					}
-				}
-				prop.enum = last + 1
+				// we are a shorthand initialized value
+				prop.short = 1
 			}
 			// getters and setters are not allowed to clash — either with
 			// each other or with an init property — and in this.strict mode,

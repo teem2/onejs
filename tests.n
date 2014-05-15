@@ -1,9 +1,11 @@
-apply('testing')
+#js
+var assert = load('assert')
 
-testing("ONE:Classes") do :->{
+TestClasses::{
+	out("ONE::Classes")
 	C1::{}
-	Der1::C1{ x = outer.callOnce(1) }
-	Der2::C1{ x = outer.callOnce(2) }
+	Der1::C1{ x = assert.callOnce(1) }
+	Der2::C1{ x = assert.callOnce(2) }
 	Der3::Der1{}
 
 	d1 = Der1.new()
@@ -13,7 +15,9 @@ testing("ONE:Classes") do :->{
 	d2.x()
 }
 
-testing("ONE:Roles") do :->{
+Test1::{
+	out("ONE::Roles")
+
 	Role1::{ a = 20 }
 	Role2::{ a = 30 }
 	Role3 = ->{ a = 40, b = 50 }
@@ -23,23 +27,23 @@ testing("ONE:Roles") do :->{
 	C1.learn(Role1)
 	C1.learn(Role2) 
 	C1.learn(Role3)
-	x.a == 40
+	assert(x.a == 40)
 
 	C1.forget(Role2)
-	x.a == 40
+	assert(x.a == 40)
 
 	C1.forget(Role3)
-	x.a == 20
+	assert(x.a == 20)
 
 	C1.forget(Role1)
-	x.a == 10
+	assert(x.a == 10)
 
 	C1.learn(Role3)
-	x.a == 40
-	x.b == 50
+	assert(x.a == 40)
+	assert(x.b == 50)
 
 	C1.forget(Role3)
-	x.b == undefined
+	assert(x.b === undefined)
 
 	Proto1::Role1{}
 	proto = Proto1.new()
@@ -49,7 +53,5 @@ testing("ONE:Roles") do :->{
 	p.hasOwnProperty('a') == false
 	p = Object.getPrototypeOf(p)
 	p.hasOwnProperty('a') == true
-
-	trace()
 
 }

@@ -898,6 +898,15 @@ ONE.iterator = function( what ){
 	}
 }
 
+function Assert(txt, why, value){
+	this.toString = function(){
+		var msg = "Assert failed: " + txt + 
+			(why?"  why: "+why:'')+
+			(value!==undefined?"  got value: "+value:"")
+			return msg
+	}
+}
+
 if(typeof Promise === 'undefined'){
 	function Promise(fn) {
 		var state = 'pending'
