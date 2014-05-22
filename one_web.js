@@ -13,7 +13,7 @@ ONE.browser_boot_ = function(){
 		// make self a class
 		ONE.base_.apply( ONE )
 
-		ONE.__onename__ = 'ONE'
+		ONE.__class__ = 'ONE'
 		// create base class
 		ONE.base_.apply( ONE.Base = {} )
 		ONE.Base.Base = ONE.Base
@@ -33,7 +33,7 @@ ONE.browser_boot_ = function(){
 		var m = location.pathname.match(/\/([^\/\.]+)/)
 		var root = location.hash?location.hash.slice(1):(m?m[0]:"index")
 
-		var obj = ONE.Base.new()
+		var obj = ONE.Base.create(ONE,function(){ this.__class__='Root'})
 		ONE.$.http_load(obj, root)
 		
 		console.log("profile init "+(Date.now() - dt)+'ms')
@@ -74,10 +74,10 @@ ONE.browser_boot_ = function(){
 				//})
 			}
 			// lets analyze our data and load all our deps.
-			var ast = obj.parse('~>{'+code+'\n}', undefined, url)
+			var ast = obj.parse('->{'+code+'\n}', undefined, undefined, url)
 			var deps = 0
 			// load our dependencies
-			obj.each(ast.getDependencies(),function(file){
+			ast.getDependencies().forEach(function(file){
 				deps++
 				ONE.$.http_load( obj, file, function on_http_load(){
 					if(!--deps) run()

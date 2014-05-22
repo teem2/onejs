@@ -8,14 +8,12 @@
  */
 
 // these are used to create the attribute catch alls
-Dom extends Base{
-
 	// make a new scope
+
+class Dom{
 	scoped()
 
-	learn($.timeout_)
-	
-	_make = ->{
+	init(){
 		// make a new scope for our instance
 		// selector, node class
 		if( arguments.length != 2 ) throw new Error("ONE.DOM args not implemented")
@@ -54,7 +52,7 @@ Dom extends Base{
 	time.hookScope( )
 	
 	// simply initialize new nodes
-	initNew = ->{
+	initNew(){
 		var nodes = $.newNodes
 		var first
 		var error, errnode
@@ -104,7 +102,7 @@ Dom extends Base{
 		return style.sheet
 	})()
 
-	AnimFrame extends Base{
+	class AnimFrame extends Base{
 		
 		make = cb->{
 			reqframe = time=>{
@@ -119,10 +117,10 @@ Dom extends Base{
 			window.requestAnimationFrame( reqframe )
 		}
 	})
-	
+
 	// Node is a DOM node shim that exposes a simplified, executable API
 	// where styling, attributes, events and classinheritance are all the same thing.
-	Node extends Base{
+	class Node extends Base{
 
 		init~ // fired when intializing
 		click~ // mouse click
@@ -462,7 +460,11 @@ Dom extends Base{
 			}
 		}
 
-		var domAttribs = {
+		enum domAtributes{
+
+		}
+
+		enum domAttribs{
 			accept:1,accept_charset:{t:'accept-charset'},accesskey:1,action:1,align:1,alt:1,async:1,autocomplete:1,
 			autofocus:1,autoplay:1,buffered:1,challenge:1,charset:1,checked:1,cite:1,
 			cols:1,colspan:1,content:1,contenteditable:1,contextmenu:1,controls:1,coords:1,data:1,datetime:1,
@@ -633,7 +635,7 @@ Dom extends Base{
 	}
 
 	// define textnode, which has no tag
-	TextNode = extends Node{
+	class @TextNode extends Node{
 		tag = null
 		make = str->{
 			if( str !== undefined ) text = str
@@ -641,7 +643,7 @@ Dom extends Base{
 	}
 	
 	// define the platform independent tags
-	Text extends Node{
+	Text::Node{
 		tag = 'span'
 		css_position = 'absolute'
 		css_box_sizing = 'border-box'
@@ -650,7 +652,7 @@ Dom extends Base{
 		}
 	}
 	
-	Float extends Node{
+	Float::Node{
 		tag = 'span'
 		css_float = 'left'
 		css_box_sizing = 'border-box'
@@ -659,14 +661,14 @@ Dom extends Base{
 		}
 	}
 
-	Break extends Node{
+	Break::Node{
 		tag = 'br'
 		make = str->{
 			if( str !== undefined ) text = str
 		}
 	}
 	
-	Rect extends Node{
+	Rect::Node{
 		tag = 'div'
 		css_position = 'absolute'
 		css_box_sizing = 'border-box'
@@ -884,7 +886,7 @@ Dom extends Base{
 		t._oneNode.keypress = sig
 	})
 
-	Mouse extends Base(){
+	inner Mouse extends Base(){
 
 		// define signals
 		x~
@@ -941,25 +943,26 @@ Dom extends Base{
 		
 	}
 	var mouse = $.mouse = Mouse.new()
-	mouse.emit('init')
+	mouse.init!
 
-	Key extends Base{
+	class Key extends Base{
 
 		for(var k in browserKeyTable){
 			var key = browserKeyTable[ k ]
 			this[ k ] = key
 			signal( key, 0 )
 		}
-		press~
-		key~
-		cmd~ = :leftmeta || rightmeta
-		meta~ = :leftmeta || rightmeta
+		signal press, key
+
+		cmd: leftmeta || rightmeta
+		meta: leftmeta || rightmeta
 		
-		wasd~ = [: a?-1:d?1:0, : w?-1:s?1:0 ]
-		arrows~ = [: left?-1:right?1:0, : up?-1:down?1:0 ]
+		wasd: [ a?-1:d?1:0, w?-1:s?1:0 ]
+		arrows: [ left?-1:right?1:0, up?-1:down?1:0 ]
 	}
+
 	var key = $.key = Key.new()
-	key.emit('init')
+	key.init!
 
 	window.addEventListener('resize', function(event){
 		var w = window.innerWidth
@@ -969,12 +972,12 @@ Dom extends Base{
 		screen.wh = [w,h]
 	});
 
-	Screen extends Base{
-		var w = window.innerWidth
-		var h = window.innerHeight        
-		w~ = w
-		h~ = h
-		wh~ = [w,h]
+	class Screen extends Base{
+		var _w = window.innerWidth
+		var _h = window.innerHeight        
+		w: _w
+		h: _h
+		wh: [_w, _h]
 	}
 	screen = Screen.new()
 }

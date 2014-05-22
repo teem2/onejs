@@ -7,13 +7,11 @@
  * 
  */
 
-var { HttpServer, Fs, Mime, Path } = load('node')
-
 var addr = "127.0.0.1"
 var port = 2001
 var root = Path.resolve(__dirname)
 
-StaticServer::HttpServer{
+class StaticServer extends HttpServer{
 	// when you assign to something you must make it explicit
 	// when you read from something you can omit it.
 	watch( path ){
@@ -22,7 +20,7 @@ StaticServer::HttpServer{
 		if(files[path]) return
 
 		files[path] = Fs.watchFile(path) 
-		do(){
+		then(){
 			out("---- " + path + " changed, sending reload to frontend ----" )
 			for(var res of pending){
 				res.writeHead(200)
@@ -31,25 +29,28 @@ StaticServer::HttpServer{
 		}
 	}
 
-	route("/_reloader_") do( req, res ) ->( pending ?= []).push(res)
+	route("/_reloader_") 
+	do( req, res ){
+		pending ?= []).push(res)
+	}
 
-	route(/.*/) do( req, res ){
+	route(/.*/) 
+	do( req!, res! ){
 
 		var path = Path.join(root, req.url.pathname)
 
-		Fs.readFile(path).then
-		do data->{
+		fs.readFile(path).then
+		do(data){
 			res.writeHead(200) do {"Content-Type": Mime.fromFilename(path)}
 			res.write(data)
 			res.end()
 			watch(path)
 		}
-		catch e->{
+		catch(e){
 			res.writeHead(404)
 			res.end('File not found')
 		}
-
 	}
 }
 
-StaticServer.new( port, addr )
+new StaticServer( port, addr )

@@ -33,17 +33,18 @@
 // ES6   String templates `hello ${i} test` ($ is optional)
 // ES6   Binary and Octal numbers according to new 0b and 0o spec
 // ES6   Shorthand object intialization {x,y} == {x:x,y:y} 
+// ES6	 class x extends y{} notation
 
-// ONE   code block after identifier 'x{code}'
+// ONE   use of : to signify lazy/signal assigns (label syntax)
+// ONE   Create instance object with block args x{}
 // ONE   function defs can drop the identifier 'x = (param){}'
-// ONE   three arrow function types: => .bind(this) -> auto(this) ~> unbound
+// ONE   two arrow function types: => .bind(this) -> unbound
 // ONE   for To 'for(x = 0 to 10 in 3){}'
 // ONE   ! is postfixable,  % * & are prefixable 
-// ONE   do catch for promises: 'v(x) do y catch z' -> 'v(x,y,z)' 'v do x' -> 'v(x)'
+// ONE   do catch for promise-then: 'v(x) do y catch z' -> 'v(x,y,z)' 'v do x' -> 'v(x)'
 // ONE   then chaining on do catch: v(x).then do y catch z then do x catch z (for promises)
+// ONE 	 This replacement call 'x::y()' x.y.call(this,...)
 
-// C++   extends operator(::) 'x::y{}' 'x = ::y{}'
-// C++   baseclass call 'x::y()'
 // Julia callback to a function after closing paren with do 'x() do ->{code}' 
 // Julia AST Quote operator 'var x = :y = 10' quotes entire expression rhs, priority below = 
 // GLSL  typed var 'float x' 'float x[10]' 
@@ -53,9 +54,7 @@
 // CSS   @, # are prefix flags for identifiers
 // CSS   automatic * insertion in '2px' -> '2*px' for units or math
 
-// CS    paren free if form 'if x then y'
 // CS    commas are optional when you have newlines '[1\n2] {x:1\x:2}'
-// CS    MIGHT REMOVE: postfixable paren free if form 'break if x is 10'
 // CS    logic words 'if x and y', 'if x or y' 'if not x'
 // CS    existential object traverse  'x?.y?.z for no exception-traverse
 // CS    existential assignments '?=' if(lhs===undefined)lhs = rhs
@@ -65,13 +64,14 @@
 // CS    Mathematical modulus '%%'
 // CS    Integer divide '%/' ( cant parse // )
 
-// The following JS parser bugs/features have been fixed:
+// The following JS parser bugs/features have been fixed/changed:
 
 // Doing 'x\n()' or 'x\n[]' subscripts is now 2 statements, not an accidental call/index
 // This makes coding without semicolons completely predictable and safe.
 // Loose blocks in program scope like '{x:1}' are now interpreted as objects
 // Only 'new identifier' is treated as a the JS new keyword calling new() and new{} is usable syntax
-// Dont parse 0131 as octal, its almost always a typo
+// Dont parse 0131 as octal, its almost always a  typo
+// label: syntax has been depricated and is used as lazy-eval and signal assigns
 
 // Code generation features depend on the target language
 
@@ -347,6 +347,7 @@ ONE.parser_strict_ = function(){
 
 	// class extends 
 	this._extends = {keyword:"extends"}
+	this._class = {keyword:"class"}
 
 	// The keywords that denote values.
 	this._null = {keyword: "null", isValue:1, atomValue: null}
@@ -381,16 +382,14 @@ ONE.parser_strict_ = function(){
 	this._dot = {type: "."}
 	this._dotdot = {type: ".."}
 	this._tripledot = {type: "..."}
-	this._dotdotslash = {type: "../"}
-	
+
 	this._existkey = {type: "?."}
 	this._existor = {type: "?|", binop:1, beforeExpr:true}
 	this._existeq = {type: "?=",isAssign: true, binop:0, beforeExpr: true}
 
 	this._question = {type: "?", prefix: true, beforeExpr: true}
-	this._thinArrow = {type:"->"}
 	this._fatArrow = {type:"=>"}
-	this._wavyArrow = {type:"~>"}
+	this._thinArrow = {type:"->"}
 	
 	// Operators. These carry several kinds of properties to help the
 	// parser use them properly (the presence of these properties is
@@ -679,10 +678,6 @@ ONE.parser_strict_ = function(){
 		if (next >= 48 && next <= 57) return this.readNumber(true)
 		if( next == 46){
 			next = this.input.charCodeAt(this.tokPos + 2)
-			if( next == 47){
-				this.tokPos += 3
-				return this.finishToken(this._dotdotslash)
-			}
 			var after = this.input.charCodeAt(this.tokPos + 3)
 			if( next == 46 && after != 46){
 				this.tokPos += 3
@@ -853,7 +848,7 @@ ONE.parser_strict_ = function(){
 			var next = this.input.charCodeAt(this.tokPos + 1)
 			if (next === 120 || next === 88) return this.readHexNumber() //0x 0X
 			if (next === 66 || next === 98) return this.readBinNumber() //0b 0B
-			if (next === 66 || next === 98) return this.readBinNumber() //0b 0B
+			if (next === 79 || next === 111) return this.readOctNumber() //0o 0O
 
 			// Anything else beginning with a digit is an integer, octal
 			// number, or float.
@@ -892,7 +887,8 @@ ONE.parser_strict_ = function(){
 			if( next == 62 ){
 				this.tokPos += 2
 				return this.finishToken(this._thinArrow, '->')
-			}
+			}		
+			var next = this.input.charCodeAt(this.tokPos + 1)
 			return this.readToken_plus_min(code)
 
 		case 60: case 62: // '<>'
@@ -909,12 +905,6 @@ ONE.parser_strict_ = function(){
 			return this.readToken_eq_excl(code)
 
 		case 126: // '~'
-			var next = this.input.charCodeAt(this.tokPos + 1)
-			if( next == 62 ){
-
-				this.tokPos += 2
-				return this.finishToken(this._wavyArrow, '~>')
-			}		
 			return this.finishOp(this._notxor, 1)
 		}
 
@@ -972,7 +962,6 @@ ONE.parser_strict_ = function(){
 				else if (ch === "/" && !inClass){
 					if(multiLine){
 						var next = this.input.charCodeAt(this.tokPos + 1)
-						console.log(next)
 						if(next == 47 || next == 42){ // its a /* */ comment to skip
 							content += this.input.slice(start, this.tokPos)
 							if(next == '*'){
@@ -1501,7 +1490,7 @@ ONE.parser_strict_ = function(){
 				if( !this.lastSkippedNewlines && this.tokType == this._parenL){
 					var fn = this.startNode()
 					def.init = this.parseFunction(fn)
-					def.init.arrow = '~>'
+					def.init.arrow = '->'
 				}
 				else {
 					this.parseDims(def, node)
@@ -1511,7 +1500,7 @@ ONE.parser_strict_ = function(){
 				}
 			}
 			defs.push(this.finishNode(def, "Def"))
-			if (!this.canInjectComma(this.tokType) && !this.eat(this._comma)) break
+			if (!this.eat(this._comma)) break
 		}
 		return defs
 	}
@@ -1540,7 +1529,6 @@ ONE.parser_strict_ = function(){
 
 		if( kind == "enum"){
 			node.id = this.parseIdent()
-			console.log("here")
 			if( this.tokType !== this._braceL ) this.unexpected()
 			node.enums = this.parseBlock()
 			return this.finishNode(node, "Enum")
@@ -1599,23 +1587,8 @@ ONE.parser_strict_ = function(){
 
 			if (this.tokType == this._if) return this.finishNode(node, isBreak ? "Break" : "Continue")
 
-			if (this.eat(this._semi) || this.canInsertSemicolon()) node.label = null
-			else if (this.tokType !== this._name) this.unexpected()
-			else {
-				node.label = this.parseIdent()
-				this.semicolon()
-			}
+			if(!this.eat(this._semi) && !this.canInsertSemicolon()) this.unexpected()
 
-			// Verify that there is an actual destination to break or
-			// continue to.
-			for (var i = 0; i < this.labels.length; ++i) {
-				var lab = this.labels[i]
-				if (node.label == null || lab.name === node.label.name) {
-					if (lab.kind != null && (isBreak || lab.kind === "loop")) break
-					if (node.label && isBreak) break
-				}
-			}
-			if (i === this.labels.length) this.raise(node.start, "Unsyntactic " + starttype.keyword)
 			return this.finishNode(node, isBreak ? "Break" : "Continue")
 
 		case this._debugger:
@@ -1644,7 +1617,7 @@ ONE.parser_strict_ = function(){
 		case this._for:
 			this.next()
 			this.labels.push(this.loopLabel)
-			return parseAllFor(node)
+			return this.parseAllFor(node)
 
 		case this._function:
 			this.next()
@@ -1652,15 +1625,7 @@ ONE.parser_strict_ = function(){
 
 		case this._if:
 			this.next()
-
-			// if we dont have a paren, we switch to if .. then
-			if( this.tokType !== this._parenL ){
-				node.test = this.parseExpression(true)
-				if( this.tokVal != 'then' ) this.unexpected()
-				this.next()
-			} else {
-				node.test = this.parseParenExpression()
-			}
+			node.test = this.parseParenExpression()
 			node.then = this.parseStatementBlock()
 			node.else = this.eat(this._else) ? this.parseStatementBlock() : null
 			return this.finishNode(node, "If")
@@ -1750,7 +1715,19 @@ ONE.parser_strict_ = function(){
 			this.next()
 			this.parseVar(node)
 			this.semicolon()
+
 			return this.finishNode(node, "Var")
+
+		case this._class:
+			this.next()
+			node.id = this.parseIdent()
+			if(this.eat(this._extends)){
+				// we should parse Ident and then 
+				var base = this.parseIdent()
+				node.base = this.parseSubscripts(base, true)
+			}
+			node.body = this.parseStatementBlock()
+			return this.finishNode(node, "Class")
 
 		case this._while:
 			this.next()
@@ -1779,20 +1756,15 @@ ONE.parser_strict_ = function(){
 
 		default:
 			var maybeName = this.tokVal, expr = this.parseExpression()
-			if (starttype === this._name && expr.type === "Id" && this.eat(this._colon)) {				
-				for (var i = 0; i < this.labels.length; ++i)
-					if (this.labels[i].name === maybeName) this.raise(expr.start, "Label '" + maybeName + "' is already declared")
-				var kind = this.tokType.isLoop ? "loop" : this.tokType === this._switch ? "switch" : null
-				this.labels.push({name: maybeName, kind: kind})
-				node.body = this.parseStatementBlock()
-				this.labels.pop()
-				node.label = expr
-				return this.finishNode(node, "Label")
+			if (starttype === this._name && expr.type === "Id" && this.eat(this._colon)) {
+				node.left = expr
+				if(this.eat(this._eq)) node.lazy = 0
+				else node.lazy = 1
+				node.right = this.parseExpression()
+				return this.finishNode(node, "Signal")
 			} else {
-				node.expr = expr
 				if(this.tokType != this._else) this.semicolon()
-
-				return this.finishNode(node, "Expr")
+				return expr
 			}
 		}
 	}
@@ -1817,17 +1789,6 @@ ONE.parser_strict_ = function(){
 
 		while (!this.eat(this._braceR)) {
 			var stmt = this.parseStatement()
-
-			// postfix if
-			if(this.tokType == this._if && !this.lastSkippedNewlines){
-				this.next()
-				var ifnode = this.startNodeFrom(node)
-				ifnode.postfix = true
-				ifnode.test = this.parseExpression()
-				ifnode.then = stmt
-				ifnode.else = this.eat(this._else) ? this.parseStatementBlock() : null
-				stmt = this.finishNode(ifnode, "If")
-			}
 
 			node.steps.push(stmt)
 			if (first && allowStrict && this.isUseStrict(stmt)) {
@@ -1941,7 +1902,6 @@ ONE.parser_strict_ = function(){
 		}
 		this.expect(this._parenR)
 		if(compr){
-			console.log(this.tokType)
 			node.loop = this.parseComprBlock()
 		}
 		else { 
@@ -2005,12 +1965,9 @@ ONE.parser_strict_ = function(){
 	}
 
 	// Determines if a comma injection is safe
-
-	this.canInjectComma = function( type, ignoreNewLine ) {
-		if(this.lastSkippedNewlines && !ignoreNewLine || !this.injectCommas) return false
-		// if we are a this._name but our previous token was a prefixable one,
-		// throw an error
-		return  this.lastSkippedNewlines && (
+	this.canInjectComma = function( type ) {
+		return  this.injectCommas && 
+			this.lastSkippedNewlines && (
 			type === this._name || 
 			type === this._braceL ||
 			type === this._bracketL ||
@@ -2040,12 +1997,12 @@ ONE.parser_strict_ = function(){
 
 		var expr = this.parseMaybeQuote(noIn, termColon)
 		
-		if ( (this.tokType !== this._colon || !termColon) && !noComma && (this.tokType === this._comma || this.canInjectComma(this.tokType) ) ) {
+		if ( (this.tokType !== this._colon || !termColon) && !noComma && this.tokType === this._comma ) {
 
 			var node = this.startNodeFrom(expr)
 			node.items = [expr]
 
-			while( (this.tokType !== this._colon || !termColon) && (this.canInjectComma(this.tokType) || this.eat(this._comma))) {
+			while( (this.tokType !== this._colon || !termColon) && this.eat(this._comma)) {
 				if( this.tokType === this._else ) break
 				node.items.push(this.parseMaybeQuote(noIn, termColon))
 			}
@@ -2061,9 +2018,6 @@ ONE.parser_strict_ = function(){
 		if(this.tokType == this._colon ){
 			var node = this.startNode()
 			this.next()
-			if(this.tokType == this._colon){
-				return this.parseExtends()
-			}
 			node.quote = this.parseMaybeAssign(noIn)
 			return this.finishNode(node, "Quote")
 		}
@@ -2208,9 +2162,6 @@ ONE.parser_strict_ = function(){
 			}
 			return this.parseSubscripts(base, noCalls)
 		}
-		else if (this.tokType == this._dotdotslash){
-			this.raise(this.tokPos, 'Dotdotslash is unused')
-		}
 		else if (this.tokType == this._bracketL) {
 			// we also dont do this._bracketL on new line
 			if( this.lastSkippedNewlines ) return base
@@ -2224,7 +2175,11 @@ ONE.parser_strict_ = function(){
 			return this.parseSubscripts(this.finishNode(node, "Index"), noCalls)
 		} 
 		else if(this.tokType == this._doublecolon){
-			return this.parseExtends(base)
+			this.eat(this._doublecolon)
+			var node = this.startNodeFrom(base)
+			node.object = base
+			node.key = this.parseIdent(true)
+			return this.parseSubscripts(this.finishNode(node, "ThisCall"), noCalls)
 		} 
 		else if (this.tokType == this._braceL && !noCalls){
 
@@ -2240,13 +2195,13 @@ ONE.parser_strict_ = function(){
 			} 
 			else {
 				var node = this.startNodeFrom(base)
-				node.call = base
+				node.fn = base
 				node.arrow = '->'
 				node.body = this.parseBlock(true)
-				return this.parseSubscripts(this.finishNode(node, "Callback"), noCalls)
+				return this.parseSubscripts(this.finishNode(node, "Create"), noCalls)
 			}
 		} 
-		else if( this.tokType == this._thinArrow || this.tokType == this._fatArrow || this.tokType == this._wavyArrow ){
+		else if( this.tokType == this._thinArrow || this.tokType == this._fatArrow || this.tokType == this._thinArrow ){
 			// you cant separate an arrow from its args with a this.newline
 			if( this.lastSkippedNewlines ) return base
 			var node = this.startNodeFrom(base)
@@ -2381,7 +2336,6 @@ ONE.parser_strict_ = function(){
 
 				if( this.tokType !== this._thinArrow && 
 					this.tokType !== this._fatArrow  && 
-					this.tokType !== this._wavyArrow &&
 					this.tokType !== this._braceL) this.unexpected()
 				var val = this.startNode()
 				val.start = tokStart1
@@ -2422,7 +2376,6 @@ ONE.parser_strict_ = function(){
 
 		case this._thinArrow:
 		case this._fatArrow:
-		case this._wavyArrow:
 			var node = this.startNode()
 			node.arrow = this.tokType.type
 			this.next()
@@ -2497,7 +2450,7 @@ ONE.parser_strict_ = function(){
 		this.next()
 		while (!this.eat(this._braceR)) {
 			if (!first) {
-				this.canInjectComma( this.tokType, true ) || this.expect(this._comma)
+				this.canInjectComma( this.tokType ) || this.expect(this._comma)
 				if (this.allowTrailingCommas && this.eat(this._braceR)) break
 			} else first = false
 
@@ -2514,7 +2467,7 @@ ONE.parser_strict_ = function(){
 				if (this.tokType !== this._parenL) this.unexpected()
 				prop.value = this.parseFunction(this.startNode(), false)
 			} else {
-				if( this.tokType != this._braceR && this.tokType != this._comma && !this.canInjectComma( this.tokType, true))
+				if( this.tokType != this._braceR && this.tokType != this._comma && !this.canInjectComma( this.tokType ))
 					this.unexpected()
 				// we are a shorthand initialized value
 				prop.short = 1
@@ -2577,7 +2530,6 @@ ONE.parser_strict_ = function(){
 					if( items[ i ].type == 'Rest'){
 						if( i < l - 1) this.raise(items[i].start, "Cannot use rest prefix befor last parameter")
 						node.rest = items[ i ]
-						if(node.rest.dots !== 3) this.raise(items[i].start, "Have to use 3 dots to define rest parameter")
 						items.length --
 					} else items[ i ] = this.argToDef( items[ i ] )
 				}
@@ -2649,6 +2601,7 @@ ONE.parser_strict_ = function(){
 		while (!this.eat(close)) {
 			if (!first) {
 				this.canInjectComma( this.tokType ) || this.expect(this._comma)
+				
 				if (allowTrailingComma && this.allowTrailingCommas && this.eat(close)) break
 			} else first = false
 			if (allowEmpty && this.tokType === this._comma) elts.push(null)

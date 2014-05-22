@@ -1,7 +1,7 @@
 //  NodeJS API Classes
 //  Copyright (C) 2014 ONEJS 
 
-load('timer')
+extends Base
 
 var _fs = require('fs')
 var _http = require('http')
@@ -52,8 +52,8 @@ fs = Base{
 	promisify(_fs)
 }
 
-HttpServer::{
-	// ignore private
+class HttpServer{
+
 	routes = []
 
 	constructor( port, addr ){
@@ -79,7 +79,7 @@ HttpServer::{
 	route( match, body ) ~> routes.push( [match, body] )
 }
 
-Http::{
+class HttpServer{
 	get( @url ) ~> promise{
 		url = _url.parse( url )
 		var data = []
