@@ -1,10 +1,19 @@
 var assert = load('assert')
 
+//var {Root, Div} = load('dom')
+/*
+Dom1(){
+	Root{
+		init("#testarea")
+		Div{
+			text = "yeallo"
+		}
+	}
+}*/
 
-class Signals{
-	out("ONE::Signals")
+Signals(){
 	var t = Base{
-		x: 10
+		x: 10,
 		y: x + 10
 		assert( y == 20 )
 		x:20
@@ -12,8 +21,7 @@ class Signals{
 	}
 }
 
-class Scoping{
-	out("ONE::Scoping")
+Scoping(){
 	class Sub{
 		scoped()
 		$.y = 20
@@ -38,8 +46,7 @@ class Scoping{
 	assert($.Proto === undefined)
 }
 
-class Super{
-	out("ONE::Super")
+Super(){
 	var order = ''
 	class Role1{
 		fn(a){ 
@@ -72,9 +79,7 @@ class Super{
 	assert( order == '4321' )
 }
 
-class Roles{
-	out("ONE::Roles")
-
+Roles(){
 	class Role1{ a = 20 }
 	class Role2{ a = 30 }
 	class Role3{ a = 40, b = 50 }
@@ -112,8 +117,20 @@ class Roles{
 	p.hasOwnProperty('a') == true
 }
 
-class Language{
-	out("ONE::Language")
+Language(){
+
+	// array splats
+	var s1 = [1,2,3], s2 = [5,6,7]
+	var s3 = [...s1, 4, ...s2]
+
+	assert(s3.join('') == '1234567')
+
+	// argument splats
+	func(){
+		return [...]
+	}
+	assert(func(...s1,4,...s2).join('') == '1234567')
+
 	// member functions
 	member(a){ return a + 10 }
 	assert( member(10) == 20 )
@@ -189,6 +206,12 @@ class Language{
 	for(var x = 0 to 5) str += x
 	assert(str == '01234')
 
+	// for from
+	var array = [1,2,3,4]
+	var str = ''
+	for(var x from array) str += x
+	assert(str == '1234')
+
 	// enum type
 	enum mynum{
 		x = 10
@@ -202,8 +225,8 @@ class Language{
 		get gs(){ return v }
 		set gs(e){ v = e }
 	}
-
-	assert( getset{ gs = 20 }.gs == 20 )
+	var val = getset{ gs = 20 }.gs
+	assert( val == 20 )
 
 	// const
 	const cst = 10
@@ -300,4 +323,21 @@ class Language{
 	// integer divide	
 	var p = 25%/10
 	assert(p == 2)
+}
+
+// The test runner
+var run = []
+for(var key in this){
+	var fn = this[key]
+	if(typeof fn == 'function' && key.indexOf('no') != 0){
+		run.push([key, fn])
+	}
+	if(key.indexOf('only') == 0){
+		run = [key, fn]
+		break
+	}
+}
+for(var [name, fn] of run){
+	out('Testing:'+name)
+	Base{ fn() }
 }

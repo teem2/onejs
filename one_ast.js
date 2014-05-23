@@ -439,6 +439,16 @@ ONE.ast_ = function(){
 			return this.IsExpr[ this.type ]
 		}
 
+		this.isKeyChain = function(){
+			var node = this
+			while(node){
+				if(node.type == 'Id') return true
+				if(node.type != 'Key') return false
+				node = node.object
+			}
+			return false
+		}
+
 		this.toJS = function(comments){
 			var js = this.ToJS
 			js.line = 0
@@ -893,7 +903,11 @@ ONE.ast_ = function(){
 			}
 
 			this.Unary = function( n ){
-				if( n.prefix )return n.op + this.expand( n.arg, n )
+				if( n.prefix ){
+					if(n.op.length != 1)
+						return n.op + ' ' + this.expand( n.arg, n )
+					return n.op + this.expand( n.arg, n )
+				}
 				return this.expand ( n.arg, n ) + n.op
 			}
 
@@ -1039,6 +1053,8 @@ ONE.ast_ = function(){
 						if(n.arg.type != 'Id') throw new Error("Unknown template & variable type")
 						this.templates[n.arg.name] = 1
 					}
+					if(n.op.length != 1)
+						return n.op + ' ' + this.expand( n.arg, n )
 					return n.op + this.expand( n.arg, n )
 				}
 				return this.expand ( n.arg, n ) + n.op
@@ -1063,6 +1079,7 @@ ONE.ast_ = function(){
 			this.destruc_prefix = '_\u0441'
 			this.desarg_prefix = '_\u0430'
 			this.tmp_prefix = '_\u0442'
+			this.call_tmpvar = '_\u0441'
 			this.store_prefix = '_\u0455'
 
 			this.globals = {
@@ -1185,7 +1202,77 @@ ONE.ast_ = function(){
 				} 
 				return this.expand( n.object, n, true ) + '.' + n.key.name + cmt
 			}
+			
+			this.Array = function( n ){
+				//!TODO x = [\n[1]\n[2]] barfs up with comments
+				var old_cmt = this.comments
+				if(this.array_fix++>0) this.comments = 0
 
+				var elems = n.elems
+				var elemlen = n.elems.length
+				for(var i = 0; i < elemlen; i++){
+					if(elems[i].type == 'Rest') break
+				}
+
+				// do the splat transform
+				if(i != elemlen){
+					var ret = ''
+					var last = 0
+					for(var i = 0; i < elemlen; i++){
+						var elem = elems[i]
+						if(elem.type == 'Rest'){
+							// alright so we check what we have.
+							if(i == 0){
+								var id = elem.id
+								if(id === undefined  || id.name == 'arguments'){
+									ret = 'Array.prototype.slice.call(arguments,0)'
+								} 
+								else ret = 'Array.prototype.slice.call('+this.expand(id, n)+',0)'
+							}
+							else{
+								if(last == 1) ret += ']'
+								else if(last == 2) ret += ')'
+								var id = elem.id
+								if(id === undefined  || id.name == 'arguments'){
+									ret = 'Array.prototype.concat.apply('+ret+','+this.space+'arguments)'
+								}
+								else{
+									ret = 'Array.prototype.concat.apply('+
+										ret+','+this.expand(id, n) +')'
+								}
+							}
+							last = 3
+						}
+						else { // normal arg
+							if(last == 0){ // nothing before us
+								ret += '['
+								last = 1
+							}
+							else if(last == 3){ // an array before us
+								ret += '.concat('
+								last = 2
+							}
+							else { // a normal value
+								ret += ',' + this.space
+							}
+							ret += this.expand(elem, n)
+						}
+					}
+					if(last == 1) ret += ']'
+					else if(last == 2) ret += ')'
+				}
+				else {
+					var ret = '['+ 
+						(n.comments&&this.comments?this.comments_flush( n.comments )+this.depth+(n.elems.length?this.indent:''):'') + 
+						this.list( n.elems, n ) + 
+					']' 
+				}
+				this.array_fix--
+				this.comments = old_cmt
+				this.cignore = 1
+				return ret
+			}
+					
 			this.Enum = function( n ){
 				// okay lets convert our enum structure into an object on this.
 				// we can accept a block with steps of type assign
@@ -1645,27 +1732,34 @@ ONE.ast_ = function(){
 
 				if( !str_param ) str_param = ''
 				ret += '(' + str_param + '){' 
+
+				var tmp = ''
+
 				if( n.destruc_vars ){
-					ret += this.newline + this.depth
-					ret += 'var '
 					for(var i = 0;i<n.destruc_vars;i++){
-						if(i) ret += ','+this.space
-						ret += this.destruc_prefix + i
+						if(tmp) tmp += ','+this.space
+						tmp += this.destruc_prefix + i
 					}
-					ret += ';'
 				}
 				if( n.tmp_vars ){
-					ret += this.newline + this.depth
-					ret += 'var '
 					for(var i = 0;i<n.tmp_vars;i++){
-						if(i) ret += ','+this.space
-						ret += this.tmp_prefix + i
+						if(tmp) tmp += ','+this.space
+						tmp += this.tmp_prefix + i
 					}
-					ret += ';'
 				}
+
 				if( n.store_var ){
-					ret += this.newline + this.depth
-					ret += 'var '+this.store_prefix+';'
+					if(tmp) tmp += ','+this.space
+					tmp += this.store_prefix
+				}
+
+				if( n.call_var ){
+					if(tmp) tmp += ','+this.space
+					tmp += this.call_tmpvar
+				}
+
+				if(tmp){
+					ret += 'var ' + tmp +';' + this.newline
 				}
 
 				this.depth = olddepth
@@ -1990,19 +2084,11 @@ ONE.ast_ = function(){
 						if(parens) return '(' + this.expand(n.arg, n) +'!==undefined)'
 						return this.expand(n.arg, n) +'!==undefined'
 					}
+					if(n.op.length != 1)
+						return n.op + ' ' + this.expand( n.arg, n, true )
 					return n.op + this.expand( n.arg, n, true )
 				}
 				return this.expand ( n.arg, n ) + n.op
-			}
-
-			this.Extends = function( n, parens ){
-				// define a function.
-				var ret = ''
-				if(n.left) ret = this.expand(n.left) + this.space+'=' + this.space
-				if(n.right) ret += this.expand( n.right )
-				else ret += 'this.Base'
-				ret += '.extend(this,'+ this.Function( n, false, null, ['outer'] )+',"'+(n.left&&n.left.type=='Id'?n.left.name:'')+'")'
-				return ret
 			}
 
 			// convert new
@@ -2012,14 +2098,13 @@ ONE.ast_ = function(){
 				if(this.globals[fn]){
 					return 'new ' + fn + '(' + arg + ')'
 				}
+				// forward to Call
 				return  fn + '.new(this'+(arg?', '+arg:arg)+')'
 			}
 
 			this.Call = function( n, parens, extra ){
-				// auto this forward with local scope functions
-				// !TODO fix
 				var fn  = n.fn
-
+				fn.parent = this
 				// assert macro
 				if(fn.type == 'Id' && fn.name == 'assert'){
 					var argl = n.args
@@ -2043,26 +2128,144 @@ ONE.ast_ = function(){
 					return '(('+arg+') || '+body+')'
 				}
 
-				var nargs = n.args.length ? this.list( n.args, n ) : ''
-				if( extra ) nargs += nargs? ',' + this.space + extra : extra
-				var args = nargs ? ',' + nargs : ''
+				// alright so. we need to support splatting arrays into arguments.
+				// lets support a single ...bla 
+				// or ones anywhere using splices?
+				// lets also 'always' do a .call or .apply
+				var args = n.args
+				// add extra args for processing
+				if(extra) args = Array.prototype.concat.apply(args, extra)
 
 				if(fn.type == 'Id'){
 					var name = fn.name
 					// we support auto-super also for roles.
 					if(name == 'super'){
-						return 'this.super(arguments' + args + ')'
+						if(args){
+							args = args.slice(0)
+							args.unshift('arguments')
+						}
+						else args = ['arguments']
 					}
 				}
-				if(fn.type == 'Key' && fn.key.type == 'Id' && 
-					(fn.key.name == 'new' || fn.key.name == 'extend' )){
-					return this.expand( fn, n, true ) + '(this' + args + ')'
+
+				// new or extend
+				if(fn.type == 'Key' && fn.key.type == 'Id'){
+					var name = fn.key.name
+					if(name == 'new' || name == 'extend' ){
+						if(args){
+							args = args.slice(0)
+							args.unshift('this')
+						}
+						else args = ['this']
+					}
+					// else dont mess with it 
+					else if(name == 'call' || name == 'apply'){
+						return this.expand( n.fn, n, true ) + '(' + this.list( n.args, n ) + ')'
+					}
 				}
 
-				if(fn.type != 'Path' && fn.type != 'Key' && (fn.type != 'Id' || fn.flag == -1 || fn.name in this.scope)){
-					return this.expand( fn, n, true ) + '.call(this' + args + ')'
+				var arglen = args.length
+				var isapply = false
+				var sarg = ''
+				if(arglen){
+					for(var i = 0; i < arglen; i++){
+						if(args[i].type == 'Rest') break
+					}
+					// do the splat transform
+					if(i != arglen){
+						isapply = true
+						var last = 0
+						for(var i = 0; i < arglen; i++){
+							var arg = args[i]
+							if(arg.type == 'Rest'){
+								// alright so we check what we have.
+								if(i == 0){
+									if(arglen == 1){ // we are the only one
+										var id = arg.id
+										if(id === undefined  || id.name == 'arguments'){
+											sarg = 'arguments'
+										}
+										else sarg = this.expand(arg, n)
+									}
+									else{
+										var id = arg.id
+										if(id === undefined  || id.name == 'arguments'){
+											sarg = 'Array.prototype.slice.call(arguments,0)'
+										}
+										else sarg = this.expand(id, n)
+									}
+								}
+								else{
+									if(last == 1) sarg += ']'
+									else if(last == 2) sarg += ')'
+									var id = arg.id
+									if(id === undefined  || id.name == 'arguments'){
+										sarg = 'Array.prototype.concat.apply(' + sarg + ', arguments)'
+									}
+									else{
+										sarg = 'Array.prototype.concat.apply('+
+											sarg + ',' + this.space + this.expand(id, n) +')'
+									}
+								}
+								last = 3
+							}
+							else { // normal arg
+								if(last == 0){ // nothing before us
+									sarg += '['
+									last = 1
+								}
+								else if(last == 3){ // an array before us
+									sarg += '.concat('
+									last = 2
+								}
+								else { // a normal value
+									sarg += ',' + this.space
+								}
+								if(typeof arg == 'string') sarg += arg 
+								else sarg += this.expand(arg, n)
+							}
+						}
+					}
+					else {
+						for(var i = 0; i < arglen; i++){
+							if(i) sarg += ',' + this.space
+							var arg = args[i]
+							if(typeof arg == 'string') sarg += arg 
+							else sarg += this.expand(arg, n)
+						}
+					}
 				}
-				return this.expand( fn, n, true ) + '(' + nargs + ')'
+
+				// so if we are a single Id, we call using .call(this')
+				var cthis = ''
+				var call = ''
+				if(fn.type == 'Id'){
+					cthis = 'this'
+					call = this.expand(fn, n, true)
+				}
+				else {
+					// check if we are a property chain
+					if(fn.type == 'Key'){
+						if(fn.isKeyChain()){
+							// no tempvar
+							cthis = this.expand(fn.object, fn)
+							call = cthis + '.' + fn.key.name
+						}
+						else { // we might be a chain on a call.
+							// use a tempvar for the object part of the key
+							this.find_function(n).call_var = 1
+							cthis = this.call_tmpvar
+							call = '('+this.call_tmpvar+'=' + this.expand(fn.object, fn) + ')' +
+								'.' + fn.key.name
+						}
+					}
+					else {
+						cthis = 'this'
+						call = this.expand(fn, n)
+					}
+				}
+				if(isapply) return call +'.apply(' + cthis + (sarg?','+this.space+sarg:'') + ')'
+				return call +'.call(' + cthis + (sarg?','+this.space+sarg:'') + ')'
 			}
 
 			this.Create = function( n ){
@@ -2108,23 +2311,16 @@ ONE.ast_ = function(){
 			this.Do = function( n ){
 				var call = n.call
 
+				var extra = [n.arg]
 				if(n.catch){
-					arg = this.expand(n.arg, n, false, ',')
-					if(arg[arg.length - 1] == '\n') arg = arg + this.depth + this.indent
-					arg = arg + this.newline + this.depth + this.expand(n.catch, n)
-				}
-				else {
-					arg = this.expand( n.arg, n )
-				}
-				var then = (n.then ? this.expand(n.then, n) : '')
-				if( call.type == 'Id' && call.name == 'then'){
-					return '.then('+arg+')' + then
-				}
-				else if( call.type != 'Call' ){
-					return this.expand( call, n ) + '(' + arg + ')' + then
+					extra.push( n.catch )
 				}
 
-				return this.Call( call, false, arg ) + then
+				var then = (n.then ? this.expand(n.then, n) : '')
+				if( call.type == 'Id' && call.name == 'then'){
+					throw new Error('implement then chaining in codegen')
+				}
+				return this.Call( call, false, extra ) + then
 			}
 
 		})

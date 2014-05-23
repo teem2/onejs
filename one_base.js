@@ -17,7 +17,7 @@ ONE.base_ = function(){
 
 		var obj = Object.create(this)
 
-		if(outer.$) obj.$ = outer.$
+		if(outer && outer.$) obj.$ = outer.$
 
 		obj.__class__ = selfname || 'unknown-class'
 
@@ -597,6 +597,14 @@ ONE.base_ = function(){
 		// create a new signal
 		this.new = function( owner ){
 			this.owner = owner
+		}
+
+		this.apply = function( sthis, args ){
+
+		}
+
+		this.call = function( sthis, value ){
+
 		}
 
 		// bind to a property

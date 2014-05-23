@@ -7,74 +7,207 @@
  * 
  */
 
-// these are used to create the attribute catch alls
-	// make a new scope
+// Node is a DOM node shim that exposes a simplified, executable API
+// where styling, attributes, events and classinheritance are all the same thing.
+class Node{
 
-class Dom{
-	scoped()
+	// define our signals, without init value
+	click:
+	dblclick:
+	mouseup:
+	mousedown:
+	mousemove:
+	mouseover:
+	mouseout:
+	isdown:
+	keydown:
+	keyup:
+	keypress:
 
-	init(){
-		// make a new scope for our instance
-		// selector, node class
-		if( arguments.length != 2 ) throw new Error("ONE.DOM args not implemented")
+	tag = 'div'
 
-		var selector = arguments[0]
-		var learnfirst = arguments[1]
+	// css collector object, where all css properties that are set are on
+	_css = Object.create(null)
 
-		// lets inherit a class from what gets passed in.
-		var cls = extends(Node, learnfirst)
+	// events collector object
+	_events = Object.create(null)
 
-		if( typeof selector == 'string' ){
-			var all = document.querySelectorAll( selector )
-		}
+	// attributes collector object
+	_attrs = Object.create(null)
+
+	// initialize node
+	_init(){
+
+		// check if we are a Text node or if someone set the text property on us
+		var tagName = tag
+		if(tagName === null){ // its a text node
+
+			if(init) init(...arguments)
+
+			var dom = tdom = dom_node = document.createTextNode( _text ) 
+			(__parent = __new_).dom_node.appendChild( dom )
+
+		} 
 		else {
-			var all = [selector]
-		}
-		
-		for( var i = 0; i < all.length;i++ ){
-			// create a node without calling _new
-			var node = Object.create( cls )
+			var hasdom = dom_node
+			var dom = hasdom || (dom_node = document.createElement( tagName ))
+			
+			dom_style = dom.style
+			buildCssClasses()
+			
+			dom._oneNode = this
+			if(__allcss__) dom.className = __allcss__
+			
+			if(!hasdom){
+				__parent = __new_
+				if(!__parent) throw new Error()
+				newidx = $.newNodes.push( )
+				$.newNodes_timer.start()
+			}
+			
+			if(make){ // a user defined maker
+				make.apply(  arguments )
+			} 
+			else if( arguments.length ) load.apply(  arguments )
 
-			var dom = all[ i ]
-			node.dom = dom
-			node.tag = dom.tagName
-			node._make( )
-			node.emit('init')
-			node.bind_signals()
-			dom.className += ' ' + node.__allcss__
+			var events = _events
+			for( var k in events ) dom[ k ] = events[ k ]
+			var attribs = _attrs
+			for( var k in attribs ) dom.setAttribute( k, attribs[ k ] )
+
+			var parent = __parent
+			if( parent ) {
+				if( !parent.child ) parent.child = [ ], index  = 0
+				else index = parent.child.push( )
+			}
+
+			if(_text){
+				dom.appendChild( tdom = document.createTextNode( _text ) )
+			} else if(_html){
+				dom.innerHTML = _html
+			}
+			
 		}
-		// always keep the root scope
-		initNew()
 	}
 
-	// intialize the root tracker, it auto binds to $.T
-	var time = $.Time.new()
-	time.hookScope( )
+	setParent(selector){
+	if( typeof selector == 'string' )
+		var all = document.querySelectorAll( selector )
+	else 
+		var all = [selector]
+
+
+	}
+
+	monitorHooks("mouseover", ->(){
+		if( !hasOwnProperty('_events') ) _events = Object.create(_events)
+		_events.onmouseover = ->(e){
+			var node = _oneNode
+			node.$.mouse._mouseover( node, e )
+		}
+	})
 	
-	// simply initialize new nodes
-	initNew(){
-		var nodes = $.newNodes
-		var first
-		var error, errnode
-		for( var i = 0; i < nodes.length; i++ ){
-			var node = nodes[ i ]
-			//try{ // catch errors so the DOM gets built as much as possible
-			if( node.__parent ) node.__parent.dom.appendChild( node.dom )
-			node.emit('init')
-			node.bind_signals()
-			//} catch( e ) { error = e, errnode = node }
+	monitorHooks("mouseout") do ->{
+		if( !hasOwnProperty('_events') ) _events = Object.create(_events)
+		_events.onmouseout = ->(e){
+			var node = _oneNode
+			node.$.mouse._mouseout( node, e )
 		}
-		nodes.length = 0
-		//if( error ){
-		//    ONE.log("Error on class "+node.__onename__, node.tag, node)
-		//    throw error
-		//} 
+	}
+	
+	capture(move, end){
+		$.mouse.capture(move, end)
 	}
 
-	// global new node processor
-	$.newNodes = [ ]
-	$.newNodes_timer = Timeout.new(  0, initNew )
+	// parent property is automagic
+	get parent(){
+		return __parent
+	}
 
+	set parent( newParent ){
+		var oldParent = __parent
+		if( oldParent != newParent ){
+			__parent = newParent
+			// remove from old
+			if( oldParent ){
+				var idx = index
+				if( oldParent.child[ index ] != ) idx = oldParent.child.indexOf( )
+				if( idx == -1 ) throw new Error( 'Parent does not contain child, but was still set as parent' )
+				oldParent.child.splice( idx, 1 )
+				var domNode = dom_node
+				if( domNode ) domNode.parentNode.removeChild( domNode )
+			}
+			// add to new
+			if( newParent ){
+				if( !newParent.child ) newParent.child = [ ], n.index = 0
+				else index = newParent.child.push( )
+				// check new parent
+				var domNode = dom_node
+				if( domNode ){
+					var parentNode = newParent.dom_node
+					if( parentNode ) parentNode.appendChild( domNode )
+				}
+			}
+		}
+	}    
+
+	remove(){
+		parent = undefined
+	}
+
+	// clear all children
+	clearAll(){
+		if( !child ) return
+		var domNode = dom
+		for( var c from child ){
+			domNode.removeChild( c.dom_node )
+		}
+		child.length = 0
+	}
+	
+	var cssID = 0
+	
+	// recursive CSS class builder
+	buildCssClasses(cls){
+		
+		if( !cls ) cls = getPrototype( )
+
+		if( !cls.hasOwnProperty('__allcss__') ){
+
+			if( cls.hasOwnProperty('_css' ) ){
+				var css = cls._css
+				var keys = Object.keys( css )
+				
+				var data = ''
+				for( var ki = 0; ki< keys.length; ki ++){
+					var k = keys[ ki ]
+					var ks = 
+					data += (propToCSS[ k ] || k) + ": " + css[ k ] + ";"
+				}
+				
+				if( data ){
+					var mycss = cls.__mycss__ = cssID++ // give class a unique ID
+
+					if( styleSheet.addRule ) styleSheet.addRule( tag + ".one" + mycss, data, 0 )
+					else styleSheet.insertRule( tag + ".one" + mycss + " {"+data+"}", 0 )
+				}
+			}
+			// make sure our parent has a __css__ property                    
+			var parent =  Object.getPrototypeOf( cls )
+			var allcss
+			if( parent ){
+				buildCssClasses( parent )
+				allcss = parent.__allcss__
+			}
+
+			if( cls.hasOwnProperty('__mycss__') ){
+			   cls.__allcss__ = ( allcss ? allcss + ' ':'' ) + 'one' + cls.__mycss__
+			}
+			else if( allcss ) cls.__allcss__ = allcss 
+		}
+	}
+
+	// build CSS property sets
 	var propToStyle = {}
 	var propToCSS = {}
 	for( var style in document.body.style ){
@@ -86,7 +219,7 @@ class Dom{
 		})
 		// remove vendor markers
 		var fcss = css
-		prop = 'css_'+prop.replace(/^(webkit\_|moz\_|ms\_|o\_)/,->(){
+		prop = 'c_'+prop.replace(/^(webkit\_|moz\_|ms\_|o\_)/,->(){
 			fcss = '-'+css
 			return ''
 		})
@@ -94,7 +227,8 @@ class Dom{
 		propToStyle[prop] = style
 		propToCSS[prop] = fcss
 	}
-	
+
+	// make a stylesheet
 	var styleSheet = (->{
 		var style = document.createElement("style")
 		style.appendChild(document.createTextNode("")) // webkit hack
@@ -102,882 +236,735 @@ class Dom{
 		return style.sheet
 	})()
 
-	class AnimFrame extends Base{
-		
-		make = cb->{
-			reqframe = time=>{
-				running = false
-				cb.call( __maker__, time, this )
-			}
-		}
-			
-		request = ->{
-			if(running) return
-			running = true
-			window.requestAnimationFrame( reqframe )
-		}
-	})
-
-	// Node is a DOM node shim that exposes a simplified, executable API
-	// where styling, attributes, events and classinheritance are all the same thing.
-	class Node extends Base{
-
-		init~ // fired when intializing
-		click~ // mouse click
-		dblclick~ // mouse doubleclick
-		mouseup~
-		mousedown~
-		mousemove~
-		mouseover~
-		mouseout~
-		isdown~
-		keydown~
-		keyup~
-		keypress~
-
-		tag = 'div'
-
-		// css collector object, where all css properties that are set are on
-		_css = Object.create( null )
-
-		// events collector object
-		_events = Object.create( null )
-
-		// attributes collector object
-		_attrs = Object.create( null )
-
-		// is the maker
-		_make = ->{
-
-			// check if we are a Text node or if someone set the text property on us
-			var tagName = tag
-			if( tagName === null ){ // its a text node
-				
-				if(make){ // a user defined maker
-					make.apply(  arguments )
-				} 
-				else if( arguments.length ) load.apply(   arguments )
-
-				var dom = tdom = dom_node = document.createTextNode( _text ) 
-				(__parent = __new_).dom_node.appendChild( dom )
-
-			} 
-			else {
-				var hasdom = dom_node
-				var dom = hasdom || (dom_node = document.createElement( tagName ))
-				
-				dom_style = dom.style
-				buildCssClasses()
-				
-				dom._oneNode = this
-				if(__allcss__) dom.className = __allcss__
-				
-				if(!hasdom){
-					__parent = __new_
-					if(!__parent) throw new Error()
-					newidx = $.newNodes.push( )
-					$.newNodes_timer.start()
-				}
-				
-				if(make){ // a user defined maker
-					make.apply(  arguments )
-				} 
-				else if( arguments.length ) load.apply(  arguments )
-
-				if(_text == 'TEST') $.MARK=1
-
-				var events = _events
-				for( var k in events ) dom[ k ] = events[ k ]
-				var attribs = _attrs
-				for( var k in attribs ) dom.setAttribute( k, attribs[ k ] )
-
-				var parent = __parent
-				if( parent ) {
-					if( !parent.child ) parent.child = [ ], index  = 0
-					else index = parent.child.push( )
-				}
-
-				if(_text){
-					dom.appendChild( tdom = document.createTextNode( _text ) )
-				} else if(_html){
-					dom.innerHTML = _html
-				}
-				
-			}
-		}
-	
-		monitorHooks("mouseover", ->(){
-			if( !hasOwnProperty('_events') ) _events = Object.create(_events)
-			_events.onmouseover = ->(e){
-				var node = _oneNode
-				node.$.mouse._mouseover( node, e )
-			}
-		})
-		
-		monitorHooks("mouseout") do ->{
-			if( !hasOwnProperty('_events') ) _events = Object.create(_events)
-			_events.onmouseout = ->(e){
-				var node = _oneNode
-				node.$.mouse._mouseout( node, e )
-			}
-		}
-		
-		capture = ( move, end )->{
-			$.mouse.capture(  move, end )
-		}
-
-		// parent property is automagic
-		defineProperty( 'parent' ) do {
-			enumerable: true,
-			configurable: true,
-			get: ->{ return __parent },
-			set: newParent->{
-				var oldParent = __parent
-				if( oldParent != newParent ){
-					__parent = newParent
-					// remove from old
-					if( oldParent ){
-						var idx = index
-						if( oldParent.child[ index ] != ) idx = oldParent.child.indexOf( )
-						if( idx == -1 ) throw new Error( 'Parent does not contain child, but was still set as parent' )
-						oldParent.child.splice( idx, 1 )
-						var domNode = dom_node
-						if( domNode ) domNode.parentNode.removeChild( domNode )
-					}
-					// add to new
-					if( newParent ){
-						if( !newParent.child ) newParent.child = [ ], n.index = 0
-						else index = newParent.child.push( )
-						// check new parent
-						var domNode = dom_node
-						if( domNode ){
-							var parentNode = newParent.dom_node
-							if( parentNode ) parentNode.appendChild( domNode )
-						}
-					}
-				}
-			}
-		}    
-
-		remove = ->{
-			parent = undefined
-		}
-
-		// clear all children
-		clearAll = ->{
-			if( !child ) return
-			var child = child
-			var domNode = dom
-			for( var i in child ){
-				domNode.removeChild( child[ i ].dom_node )
-			}
-			child.length = 0
-			// what we can do is make a new self-node, copy our attributes
-			// and replace our node in the parent
-		}
-		
-		var cssID = 0
-		
-		// recursive CSS class builder
-		buildCssClasses = cls ->{
-			
-			if( !cls ) cls = getPrototype( )
-
-			if( !cls.hasOwnProperty('__allcss__') ){
-
-				if( cls.hasOwnProperty('_css' ) ){
-					var css = cls._css
-					var keys = Object.keys( css )
-					
-					var data = ''
-					for( var ki = 0; ki< keys.length; ki ++){
-						var k = keys[ ki ]
-						var ks = 
-						data += (propToCSS[ k ] || k) + ": " + css[ k ] + ";"
-					}
-					
-					if( data ){
-						var mycss = cls.__mycss__ = cssID++ // give class a unique ID
-
-						if( styleSheet.addRule ) styleSheet.addRule( tag + ".one" + mycss, data, 0 )
-						else styleSheet.insertRule( tag + ".one" + mycss + " {"+data+"}", 0 )
-					}
-				}
-				// make sure our parent has a __css__ property                    
-				var parent =  Object.getPrototypeOf( cls )
-				var allcss
-				if( parent ){
-					buildCssClasses( parent )
-					allcss = parent.__allcss__
-				}
-
-				if( cls.hasOwnProperty('__mycss__') ){
-				   cls.__allcss__ = ( allcss ? allcss + ' ':'' ) + 'one' + cls.__mycss__
-				}
-				else if( allcss ) cls.__allcss__ = allcss 
-			}
-		}
-
-		// building our CSS property catch alls
-		function cssPropDef( prop ){
-			return {
-				enumerable:false,
-				configurable:true,
-				get:->(){
-					return _css[ prop ]
-				},
-				set:->(value){
-					var c = hasOwnProperty('_css') ? _css : ( _css = Object.create(_css) )
-					c[ prop ] = value
-					var s = dom_style
-					if( s ) s[ propToStyle[prop] ] = value
-				}
-			}
-		}
-		
-		for( var k in propToStyle ){
-			defineProperty( k, cssPropDef(k) )
-		}
-		
-		signal('show', 1) do value->{
-			var c = hasOwnProperty('_css') ? _css : ( _css = Object.create(_css) )
-			c.css_display = value>0?'block':'none'
-			var s = dom_style
-			if(s) s.display = value>0?'block':'none'
-		}
-
-		signal('x') do value->{
-			var c = hasOwnProperty('_css') ? _css : ( _css = Object.create(_css) )
-			var v = parseInt(value)
-			c.css_left =  v
-			var s = dom_style
-			if(s) s.left = v
-		}
-
-		signal('y') do value->{
-			var c = hasOwnProperty('_css') ? _css : ( _css = Object.create(_css) )
-			var v = parseInt(value)
-			c.css_top = v
-			var s = dom_style
-			if(s) s.top = v
-		}
-
-		signal('w') do value->{
-			var c = hasOwnProperty('_css') ? _css : ( _css = Object.create(_css) )
-			var v = parseInt(value)
-			c.css_width =  v
-			var s = dom_style
-			if(s) s.width = v
-		}
-
-		signal('h') do value->{
-			var c = hasOwnProperty('_css') ? _css : ( _css = Object.create(_css) )
-			var v = parseInt(value)
-			c.css_height = v
-			var s = dom_style
-			if(s) s.height = v
-		}
-
-		signal('fill') do value->{
-			var c = hasOwnProperty('_css') ? _css : ( _css = Object.create(_css) )
-			var s = dom_style
-			var str = '#' + ('000000' + ( ( ( ( ( value[ 0 ]*255 ) & 0xff ) << 8 | ( ( value[ 1 ]*255 ) & 0xff ) ) << 8 ) | ( ( value[ 2 ]*255 ) & 0xff ) ).toString( 16 ) ).slice( -6 )
-			if(c) c.css_background_color = str
-			var a = value[ 3 ]
-			if( a? !== undefined ) c.css_opacity = a
-			if(s) {
-				s.backgroundColor = str
-				if( a !== undefined ) s.opacity = a
-			}
-		}
-
-		// convenience functions
-		signal('xy') do value->{
-			var c = hasOwnProperty('_css') ? _css : ( _css = Object.create(_css) )
-			var x = parseInt(value[ 0 ])
-			var y = parseInt(value[ 1 ])
-			c.css_left = __x = x
-			c.css_top = __y = y
-			var s = dom_style
-			if(s) {
-				s.left = x
-				s.top = y
-			}
-		}
-
-		signal('wh') do value->{
-			var c = hasOwnProperty('_css') ? _css : ( _css = Object.create(_css) )
-			var w = parseInt(value[ 0 ])
-			var h = parseInt(value[ 1 ])
-			c.css_width = __w = w
-			c.css_height = __h = h
-			var s = dom_style
-			if(s) {
-				s.width = w
-				s.height = h
-			}
-		} 
-
-		signal('xywh') do value->{
-			var c = hasOwnProperty('_css') ? _css : ( _css = Object.create(_css) )
-			var x = parseInt(value[ 0 ])
-			var y = parseInt(value[ 1 ])
-			var w = parseInt(value[ 2 ])
-			var h = parseInt(value[ 3 ])
-			c.css_left = __x = x
-			c.css_top = __y = y
-			c.css_width = __w = w
-			c.css_height = __h = h
-			var s = dom_style
-			if(s) {
-				s.left = x
-				s.top = y
-				s.width = w
-				s.height = h
-			}
-		}
-
-		// the attribute catch sink
-		var defineAttribute = ( attrib, remap )->{
-			defineProperty( attrib, {
-				enumerable:false,
-				configurable:false,
-				get:->{
-					var dom = dom_node
-					if( dom ) return dom.getAttribute( remap )
-					var attrs = _attrs
-					if( !attrs ) return
-					return _attrs[ remap ]
-				},
-				set:value->{
-					var tag = tagNames[ tag ]
-					if( !globalAttribs[attrib] && (tag == 1 || !tag[attrib] ) ) throw new Error("HTML attribute "+attrib+" 4 not valid for tag type " + tag)
-					var attrs = hasOwnProperty('_attrs') ? _attrs : ( _attrs = Object.create(_attrs) )
-					attrs[ remap ] = value
-					var dom = dom_node
-					if( dom ) dom.setAttribute( remap, value )
-				}
-			}
-		}
-
-		enum domAtributes{
-
-		}
-
-		enum domAttribs{
-			accept:1,accept_charset:{t:'accept-charset'},accesskey:1,action:1,align:1,alt:1,async:1,autocomplete:1,
-			autofocus:1,autoplay:1,buffered:1,challenge:1,charset:1,checked:1,cite:1,
-			cols:1,colspan:1,content:1,contenteditable:1,contextmenu:1,controls:1,coords:1,data:1,datetime:1,
-			default:1,defer:1,dir:1,dirname:1,disabled:1,download:1,draggable:1,dropzone:1,enctype:1,for:1,
-			form:1,headers:1,height:1, // an overload on css
-			width:1,hidden:1,high:1,href:1,hreflang:1,http_equiv:{t:'http-equiv'},icon:1,id:1,ismap:1,itemprop:1,
-			keytype:1,kind:1,label:1,lang:1,language:1,list:1,loop:1,low:1,manifest:1,max:1,maxlength:1,media:1,
-			method:1,min:1,multiple:1,name:1,novalidate:1,open:1,optimum:1,pattern:1,ping:1,placeholder:1,
-			poster:1,preload:1,pubdate:1,radiogroup:1,readonly:1,rel:1,required:1,reversed:1,rows:1,rowspan:1,
-			sandbox:1,spellcheck:1,scope:1,scoped:1,seamless:1,selected:1,shape:1,size:1,sizes:1,span:1,
-			src:1,srcdoc:1,srclang:1,start:1,step:1,summary:1,tabindex:1,target:1,title:1,type:1,
-			usemap:1,value:1,wrap:1,class:1,style:1
-		}
-
-		// define the catch sink for attributes
-		for( var k in domAttribs ){
-			var dat = domAttribs[ k ]
-			defineAttribute(  'attr_'+k, dat.t ? dat.t: k)
-		}
-		
-		defineProperty( 'text', {
-			enumerable:false,
-			configurable:false,
-			get:->{
-				var text = tdom                
-				if(!text) return
-				return text.nodeValue
-			},
-			set:value->{
-				_text = value
-				var text = tdom
-				if( text ) text.nodeValue = value
-			}
-		})
-		
-		defineProperty( 'html', {
-			enumerable:false,
-			configurable:false,
-			get:->{
-				var dom = dom_node
-				if( !dom ) return
-				return dom.innerHTML
-			},
-			set:value->{
-				_html = value
-				var dom = dom_node
-				if( dom ) dom.innerHTML = value
-			}
-		})
-
-	})
-
-	// the attribute catchers check against and the tagNames array to see if an attribute is valid for the tag            
-	var globalAttribs = {
-		accesskey:1, _class:1, contenteditable:1,contextmenu:1,dir:1,                
-		draggable:1,dropzone:1,hidden:1,id:1,lang:1,spellcheck:1,                
-		style:1,tabindex:1,title:1
-	}
-
-	var tagNames = {
-		a:{download:1,href:1,hreflang:1,media:1,ping:1,rel:1,shape:1,target:1},abbr:1,address:1,
-		area:{alt:1,coords:1,download:1,href:1,hreflang:1,media:1,ping:1,rel:1,shape:1,target:1},
-		article:1,aside:1,audio:{autoplay:1,buffered:1,controls:1,loop:1,preload:1,src:1},b:1,
-		base:{href:1,target:1},bdi:1,bdo:1,blockquote:{cite:1},body:1,br:1,
-		button:{autofocus:1,disabled:1,form:1,name:1,type:1,value:1},
-		canvas:{_width:1,_height:1},caption:{action:1},cite:1,code:1,
-		col:{action:1,span:1},colgroup:{action:1,span:1},content:1,
-		command:{checked:1,disabled:1,icon:1,radiogroup:1,type:1},
-		data:1,datalist:1,dd:1,decorator:1,del:{cite:1,datetime:1},
-		details:{open:1},dfn:1,div:1,dl:1,dt:1,element:1,em:1,
-		embed:{_width:1,_height:1,src:1,type:1},fieldset:{disabled:1,form:1,name:1},
-		figcaption:1,figure:1,footer:1,
-		form:{accept:1,acceptCharset:1,action:1,autocomplete:1,enctype:1,method:1,name:1,novalidate:1,target:1},
-		h1:1,h2:1,h3:1,h4:1,h5:1,h6:1,head:1,header:1,hr:{action:1},html:{manifest:1},i1:1,
-		iframe:{action:1,_width:1,_height:1,name:1,sandbox:1,seamless:1,src:1,srcdoc:1},
-		img:{action:1,alt:1,_width:1,_height:1,ismap:1,src:1,usemap:1},
-		input:{accept:1,alt:1,autocomplete:1,autofocus:1,checked:1,dirname:1,disabled:1,form:1,
-		width:1,height:1,list:1,max:1,maxlength:1,min:1,multiple:1,name:1,pattern:1,placeholder:1,
-		readonly:1,required:1,_size:1,src:1,step:1,type:1,usemap:1,value:1},
-		ins:{cite:1,datetime:1},kbd:1,keygen:{autofocus:1,challenge:1,disabled:1,form:1,keytype:1,name:1},
-		label:{for:1,form:1},legend:1,li:{value:1},
-		link:{href:1,hreflang:1,media:1,rel:1,sizes:1},
-		main:1,map:{name:1},mark:1,menu:{type:1},menuitem:1,
-		meta:{charset:1,content:1,httpEquiv:1,name:1},
-		meter:{form:1,high:1,low:1,max:1,min:1,optimum:1,value:1},nav:1,
-		object:{data:1,form:1,_width:1,_height:1,name:1,type:1,usemap:1},
-		ol:{reversed:1,start:1},optgroup:{disabled:1},
-		option:{disabled:1,selected:1,value:1},output:{for:1,form:1,name:1},
-		p:1,param:{name:1,value:1},pre:1,progress:{form:1,max:1,value:1},
-		q:{cite:1},rp:1,rt:1,ruby:1,s:1,samp:1,
-		script:{async:1,charset:1,defer:1,language:1,src:1,type:1},
-		section:1,select:{autofocus:1,disabled:1,form:1,multiple:1,name:1,required:1,_size:1},
-		small:1,source:{media:1,src:1,type:1},span:1,
-		strong:1,style:{media:1,scoped:1,type:1},sub:1,summary:1,sup:1,
-		table:{action:1,summary:1},tbody:{action:1},
-		td:{action:1,colspan:1,headers:1,rowspan:1},template:1,
-		textarea:{autofocus:1,cols:1,disabled:1,form:1,maxlength:1,name:1,placeholder:1,readonly:1,required:1,rows:1,wrap:1},
-		tfoot:{action:1},th:{action:1,colspan:1,headers:1,rowspan:1,scope:1},
-		thead:{action:1},time:{datetime:1,pubdate:1},title:1,
-		tr:{action:1},_track:{default:1,kind:1,label:1,src:1,srclang:1},u:1,ul:1,var:1,
-		video:{autoplay:1,buffered:1,controls:1,_width:1,_height:1,loop:1,poster:1,preload:1,src:1},wbr:1
-	}
-
-	mouseCursors = [
-		'default'
-		'none'
-		'wait'
-		'text'
-		'pointer'
-
-		'zoom-in'
-		'zoom-out'
-		'grab'
-		'grabbing'
-
-		'ns-resize'
-		'ew-resize'
-		'nwse-resize'
-		'nesw-resize'
-
-		'w-resize'
-		'e-resize'
-		'n-resize'
-		's-resize'
-		'nw-resize'
-		'ne-resize'
-		'sw-resize'
-		'se-resize'
-
-		'help'
-		'crosshair'
-		'move'
-
-		'col-resize'
-		'row-resize'
-
-		'vertical-text'
-		'context-menu'
-		'no-drop'
-		'not-allowed'
-		'alias'
-		'cell'
-		'copy'
-	]
-
-	// build all the html tagnames as classes
-	for( var k in tagNames ){
-		var clsName = k[0].toUpperCase() + k.slice(1)
-		this[clsName] = Node.extend() do ->{
-			tag = k
-			__onename__ = clsName
-			// make a multi argument default maker
-			make = ->( ){
-				if( arguments.length ) {
-					var len = arguments.length
-					for( var i = 0; i < len; i++){
-						var arg = arguments[ i ]
-						var type = typeof arg
-						if( type == 'object' ) apply( arg )
-						else if( type == 'function' ){
-							if( arg.hasOwnProperty('__onename__') ) learn( arg )
-							else apply( arg )
-						} else text = str
-					}
-				}
-			}
-		}
-	}
-
-	// define textnode, which has no tag
-	class @TextNode extends Node{
-		tag = null
-		make = str->{
-			if( str !== undefined ) text = str
-		}
-	}
-	
-	// define the platform independent tags
-	Text::Node{
-		tag = 'span'
-		css_position = 'absolute'
-		css_box_sizing = 'border-box'
-		make = str->{
-			if( str !== undefined ) text = str
-		}
-	}
-	
-	Float::Node{
-		tag = 'span'
-		css_float = 'left'
-		css_box_sizing = 'border-box'
-		make = str->{
-			if( str !== undefined ) text = str
-		}
-	}
-
-	Break::Node{
-		tag = 'br'
-		make = str->{
-			if( str !== undefined ) text = str
-		}
-	}
-	
-	Rect::Node{
-		tag = 'div'
-		css_position = 'absolute'
-		css_box_sizing = 'border-box'
-	}
-	// exports properties to the scope
-	export('Text','Rect','Float','Break')
-
-	var browserKeyTable = { // slap a usable name on keys
-		8:'backspace',9:'tab',13:'enter',16:'shift',17:'ctrl',18:'alt',
-		19:'pause',20:'caps',27:'escape',
-		32:'space',33:'pgup',34:'pgdn',
-		35:'end',36:'home',37:'left',38:'up',39:'right',40:'down',
-		45:'insert',46:'delete',
-		48:'num0',49:'num1',50:'num2',51:'num3',52:'num4',
-		53:'num5',54:'num6',55:'num7',56:'num8',57:'num9',
-		65:'a',66:'b',67:'c',68:'d',69:'e',70:'f',71:'g',
-		72:'h',73:'i',74:'j',75:'k',76:'l',77:'m',78:'n',
-		79:'o',80:'p',81:'q',82:'r',83:'s',84:'t',85:'u',
-		86:'v',87:'w',88:'x',89:'y',90:'z',
-		91:'leftmeta',92:'rightmeta',
-		96:'pad0',97:'pad1',98:'pad2',99:'pad3',100:'pad4',101:'pad5',
-		102:'pad6',103:'pad7',104:'pad8',105:'pad9',
-		106:'multiply',107:'add',109:'subtract',110:'decimal',111:'divide',
-		112:'f1',113:'f2',114:'f3',115:'f4',116:'f5',117:'f6',
-		118:'f7',119:'f8',120:'f9',121:'f10',122:'f11',123:'f12',
-		144:'numlock',145:'scrollock',186:'semicolon',187:'equals',188:'comma',
-		189:'dash',190:'period',191:'slash',192:'accent',219:'openbracket',
-		220:'backslash',221:'closebracket',222:'singlequote'
-	}
-
-	function mouse_toString(){
-		return 1
-	}
-
-	function makeMouseSignal( dom, x, y ){
-		var _dom = dom
-		var px = 0
-		var py = 0
-		do {
-			px += _dom.offsetLeft || 0
-			py += _dom.offsetTop  || 0
-			_dom = _dom.offsetParent
-		} while( _dom )
-		var rel = [ ]
-		var abs = [ ]
-		rel.abs = abs
-		rel.rel = rel
-		abs[0] = x
-		abs[1] = y
-		rel[0] = x - px
-		rel[1] = y - py
-		var c
-		if(c = mouse.cap_this){
-			var start = mouse.cap_start
-			rel.cap = [ abs[0] - start[0], abs[1] - start[1] ]
-		}
-		rel.toString = mouse_toString 
-		return rel
-	}
-
-	function makeAbsMouseSignal( dom, x, y ){
-		var pos = [x, y]
-		pos.toString = mouse_toString
-		if( dom && dom._oneNode ) pos.tgt = dom._oneNode
-		return pos
-	}
-
-	window.addEventListener('click', function(e){
-		var t = e.toElement || e.target
-		mouse.click = makeAbsMouseSignal( t, e.pageX, e.pageY )
-		if( !t || !t._oneNode ) return
-		t._oneNode.click = makeMouseSignal( t, e.pageX, e.pageY )
-	})
-
-	window.addEventListener('dblclick', function(e){
-		var t = e.toElement || e.target
-		mouse.dblclick = makeAbsMouseSignal( t, e.pageX, e.pageY )
-		if( !t || !t._oneNode ) return
-		t._oneNode.dblclk = makeMouseSignal( t, e.pageX, e.pageY )
-	})
-
-	window.addEventListener('mousedown', function(e){
-		var t = e.toElement || e.target
-
-		if(e.button === 0 ) mouse.left = 1
-		if(e.button === 1 ) mouse.middle = 1
-		if(e.button === 2 ) mouse.right = 1
-		mouse.isdown = makeAbsMouseSignal( t, e.pageX, e.pageY )
-		mouse.cap_canset = e.button + 1
-		if( !t || !t._oneNode ) return
-		// lets build a mouse event.
-		t._oneNode.isdown = 1
-		t._oneNode.mousedown = makeMouseSignal( t, e.pageX, e.pageY )
-		mouse.cap_canset = 0
-
-	})
-
-
-	window.addEventListener('mouseup', function(e){
-		if(e.button === 0 ) mouse.left = 0
-		if(e.button === 1 ) mouse.middle = 0
-		if(e.button === 2 ) mouse.right = 0
-		mouse.isdown = 0
-		
-		var t = e.toElement || e.target
-		if( mouse.cap_this && mouse.cap_btn == e.button ){
-			mouse._capEnd( e )
-		} 
-		else {
-			if( !t || !t._oneNode ) return
-			t._oneNode.isdown = 0
-			t._oneNode.mouseup = makeMouseSignal( t, e.pageX, e.pageY )
-		}
-	})
-
-	// Fancy mouse interpolation mousemove 
-	var move_last = Date.now()
-	window.addEventListener('mousemove', function(e){
-		
-		var px = e.pageX
-		var py = e.pageY
-
-		// send mouse signals
-		mouse.x = px
-		mouse.y = py
-		mouse.xy = [ px, py ]
-		
-		// used for animation time-skewing in mouse interp
-		var time = Date.now( )
-		var delta = time - move_last
-		move_last = time
-
-		var cap_this = mouse.cap_this
-		if( cap_this ){
-			mouse._capMove( e )
-			return
-		}
-
-		if( delta > 100 ) {
-			var t = e.toElement || e.target
-			if(! t || !t._oneNode) return
-			var node = t._oneNode
-			node.mousemove = makeMouseSignal( t, px, py)
-			return
-		} 
-		// interpolate all 
-		var dx = px - mouse._px
-		var dy = py - mouse._py
-		var x1 = px
-		var y1 = py
-		var dist = Math.sqrt(dx * dx + dy * dy )
-		var step = parseInt(dist / 4) // pixel stepsize
-		if( step == 0 ) step = 1
-		dx = dx / step
-		dy = dy / step
-		var last = null
-		for(var i = step - 1; i >= 0; i--){
-			var t = document.elementFromPoint(x1, y1)
-			if(last != t && t && t._oneNode){
-				last = t
-				ONE.mouseinterp = - (delta / (1000 * step)) * (step - i)
-				t._oneNode.mousemove = makeMouseSignal( t, x1, y1 )
-			}
-			x1 -= dx
-			y1 -= dy
-		}
-		mouse._px = px
-		mouse._py = py
-	})
-
-	function keyupdown_toString(){
-		return browserKeyTable[ this.code ]
-	}
-
-	function makeKeyUpDownSignal( repeat, code ){
+	// building our CSS property catch alls
+	function cssPropDef( prop ){
 		return {
-			repeat: repeat,
-			code: code,
-			toString: keyupdown_toString
-		}
-	}
-	function press_toString(){
-		return String.fromCharCode( this.code )
-	}
-
-	window.addEventListener('keydown', function(e){
-		var t = e.toElement || e.target
-		var k = browserKeyTable[ e.keyCode ]
-		if( k ) key[ k ] = 1
-		var sig = makeKeyUpDownSignal( e.repeat, e.keyCode )
-		key.key = sig
-		if( !t || !t._oneNode ) return
-		t._oneNode.keydown = sig
-	})
-
-	window.addEventListener('keyup', function(e){
-		var t = e.toElement || e.target
-		var k = browserKeyTable[ e.keyCode ]
-		if( k ) key[ k ] = 0
-		var sig = makeKeyUpDownSignal( e.repeat, e.keyCode )
-
-		if( !t || !t._oneNode ) return
-		t._oneNode.keyup = sig
-	})
-
-	window.addEventListener('keypress', function(e){
-		var t = e.toElement || e.target
-		var sig = {
-			repeat: e.repeat,
-			code: e.charCode,
-			toString: press_toString
-		}
-		key.press = sig
-		if( !t || !t._oneNode ) return
-		t._oneNode.keypress = sig
-	})
-
-	inner Mouse extends Base(){
-
-		// define signals
-		x~
-		y~
-		xy~
-		isdown~
-		left~
-		right~
-		middle~
-		
-		capture = ( obj, move, end )->{
-			if( cap_this && cap_end ){
-				_capEnd( {pageX:cap_start[0],pageY:cap_start[1]})
-			}
-			if( cap_canset ){
-				cap_btn = cap_canset - 1
-				cap_this = obj
-				cap_move = move
-				cap_end = end
-				cap_start = xy
-				if(document.setCapture) document.setCapture()
+			enumerable:false,
+			configurable:true,
+			get:->(){
+				return _css[ prop ]
+			},
+			set:->(value){
+				var c = hasOwnProperty('_css') ? _css : ( _css = Object.create(_css) )
+				c[ prop ] = value
+				var s = dom_style
+				if( s ) s[ propToStyle[prop] ] = value
 			}
 		}
-		
-		_capMove = e->{
-			var sig = makeMouseSignal( cap_dom, e.pageX, e.pageY )
-			
-			if( typeof cap_move == 'function'){
-				cap_move.call( cap_this, sig )
+	}
+	
+	for( var k in propToStyle ){
+		defineProperty( k, cssPropDef(k) )
+	}
+	
+	signal('show', 1) do value->{
+		var c = hasOwnProperty('_css') ? _css : ( _css = Object.create(_css) )
+		c.css_display = value>0?'block':'none'
+		var s = dom_style
+		if(s) s.display = value>0?'block':'none'
+	}
+
+	signal('x') do value->{
+		var c = hasOwnProperty('_css') ? _css : ( _css = Object.create(_css) )
+		var v = parseInt(value)
+		c.css_left =  v
+		var s = dom_style
+		if(s) s.left = v
+	}
+
+	signal('y') do value->{
+		var c = hasOwnProperty('_css') ? _css : ( _css = Object.create(_css) )
+		var v = parseInt(value)
+		c.css_top = v
+		var s = dom_style
+		if(s) s.top = v
+	}
+
+	signal('w') do value->{
+		var c = hasOwnProperty('_css') ? _css : ( _css = Object.create(_css) )
+		var v = parseInt(value)
+		c.css_width =  v
+		var s = dom_style
+		if(s) s.width = v
+	}
+
+	signal('h') do value->{
+		var c = hasOwnProperty('_css') ? _css : ( _css = Object.create(_css) )
+		var v = parseInt(value)
+		c.css_height = v
+		var s = dom_style
+		if(s) s.height = v
+	}
+
+	signal('fill') do value->{
+		var c = hasOwnProperty('_css') ? _css : ( _css = Object.create(_css) )
+		var s = dom_style
+		var str = '#' + ('000000' + ( ( ( ( ( value[ 0 ]*255 ) & 0xff ) << 8 | ( ( value[ 1 ]*255 ) & 0xff ) ) << 8 ) | ( ( value[ 2 ]*255 ) & 0xff ) ).toString( 16 ) ).slice( -6 )
+		if(c) c.css_background_color = str
+		var a = value[ 3 ]
+		if( a? !== undefined ) c.css_opacity = a
+		if(s) {
+			s.backgroundColor = str
+			if( a !== undefined ) s.opacity = a
+		}
+	}
+
+	// convenience functions
+	signal('xy') do value->{
+		var c = hasOwnProperty('_css') ? _css : ( _css = Object.create(_css) )
+		var x = parseInt(value[ 0 ])
+		var y = parseInt(value[ 1 ])
+		c.css_left = __x = x
+		c.css_top = __y = y
+		var s = dom_style
+		if(s) {
+			s.left = x
+			s.top = y
+		}
+	}
+
+	signal('wh') do value->{
+		var c = hasOwnProperty('_css') ? _css : ( _css = Object.create(_css) )
+		var w = parseInt(value[ 0 ])
+		var h = parseInt(value[ 1 ])
+		c.css_width = __w = w
+		c.css_height = __h = h
+		var s = dom_style
+		if(s) {
+			s.width = w
+			s.height = h
+		}
+	} 
+
+	signal('xywh') do value->{
+		var c = hasOwnProperty('_css') ? _css : ( _css = Object.create(_css) )
+		var x = parseInt(value[ 0 ])
+		var y = parseInt(value[ 1 ])
+		var w = parseInt(value[ 2 ])
+		var h = parseInt(value[ 3 ])
+		c.css_left = __x = x
+		c.css_top = __y = y
+		c.css_width = __w = w
+		c.css_height = __h = h
+		var s = dom_style
+		if(s) {
+			s.left = x
+			s.top = y
+			s.width = w
+			s.height = h
+		}
+	}
+
+	// the attribute catch sink
+	var defineAttribute = ( attrib, remap )->{
+		defineProperty( attrib, {
+			enumerable:false,
+			configurable:false,
+			get:->{
+				var dom = dom_node
+				if( dom ) return dom.getAttribute( remap )
+				var attrs = _attrs
+				if( !attrs ) return
+				return _attrs[ remap ]
+			},
+			set:value->{
+				var tag = tagNames[ tag ]
+				if( !globalAttribs[attrib] && (tag == 1 || !tag[attrib] ) ) throw new Error("HTML attribute "+attrib+" 4 not valid for tag type " + tag)
+				var attrs = hasOwnProperty('_attrs') ? _attrs : ( _attrs = Object.create(_attrs) )
+				attrs[ remap ] = value
+				var dom = dom_node
+				if( dom ) dom.setAttribute( remap, value )
 			}
-			else cap_this[cap_move] = sig
 		}
-		
-		_capEnd = e->{
-			var sig = makeMouseSignal( cap_dom, e.pageX, e.pageY )
-			if( typeof cap_end == 'function'){
-				cap_end.call( mouse.cap_this, sig )
-			} 
-			else cap_this[mouse.cap_end] = sig
-			if(document.releaseCapture) document.releaseCapture()
-			cap_this = undefined
-		}
-		// called by DOM
-		
-		_mouseover = ( node, e)->{
-			if( cap_this ) return
-			node.mouseover = makeMouseSignal( this, e.pageX, e.pageY )
-		}
-		
-		_mouseout = ( node, e)->{
-			if( cap_this ) return
-			node.mouseout = makeMouseSignal( this, e.pageX, e.pageY )
-		}    
-		
-	}
-	var mouse = $.mouse = Mouse.new()
-	mouse.init!
-
-	class Key extends Base{
-
-		for(var k in browserKeyTable){
-			var key = browserKeyTable[ k ]
-			this[ k ] = key
-			signal( key, 0 )
-		}
-		signal press, key
-
-		cmd: leftmeta || rightmeta
-		meta: leftmeta || rightmeta
-		
-		wasd: [ a?-1:d?1:0, w?-1:s?1:0 ]
-		arrows: [ left?-1:right?1:0, up?-1:down?1:0 ]
 	}
 
-	var key = $.key = Key.new()
-	key.init!
-
-	window.addEventListener('resize', function(event){
-		var w = window.innerWidth
-		var h = window.innerHeight
-		screen.w = w
-		screen.h = h
-		screen.wh = [w,h]
-	});
-
-	class Screen extends Base{
-		var _w = window.innerWidth
-		var _h = window.innerHeight        
-		w: _w
-		h: _h
-		wh: [_w, _h]
+	enum domAttribs{
+		accept, accept_charset, accesskey, action, align, alt, async, autocomplete, 
+		autofocus, autoplay, buffered, challenge, charset, checked, cite, 
+		cols, colspan, content, contenteditable, contextmenu, controls, coords, data, datetime, 
+		default, defer, dir, dirname, disabled, download, draggable, dropzone, enctype, for, 
+		form, headers, height,  // an overload on css
+		width, hidden, high, href, hreflang, http_equiv,icon, id, ismap, itemprop, 
+		keytype, kind, label, lang, language, list, loop, low, manifest, max, maxlength, media, 
+		method, min, multiple, name, novalidate, open, optimum, pattern, ping, placeholder, 
+		poster, preload, pubdate, radiogroup, readonly, rel, required, reversed, rows, rowspan, 
+		sandbox, spellcheck, scope, scoped, seamless, selected, shape, size, sizes, span, 
+		src, srcdoc, srclang, start, step, summary, tabindex, target, title, type, 
+		usemap, value, wrap, class, style
 	}
-	screen = Screen.new()
+
+	// define the catch sink for attributes
+	for( var k in domAttribs ){
+		var dat = domAttribs[ k ]
+		var rep = k.replace(/\_/g,'-')
+		defineAttribute('at_'+k, rep)
+	}
+
+	set text( value ){
+		_text = v
+		var text = tdom
+		if(text) text.nodeValue = v
+	}
+	get text(){
+		var text = tdom
+		return text && text.nodeValue
+	}
+	
+	defineProperty( 'html', {
+		enumerable:false,
+		configurable:false,
+		get:->{
+			var dom = dom_node
+			if( !dom ) return
+			return dom.innerHTML
+		},
+		set:value->{
+			_html = value
+			var dom = dom_node
+			if( dom ) dom.innerHTML = value
+		}
+	})
+
+})
+
+// the attribute catchers check against and the tagNames array to see if an attribute is valid for the tag            
+enum globalAttribs = {
+	accesskey,  _class,  contenteditable, contextmenu, dir,                 
+	draggable, dropzone, hidden, id, lang, spellcheck,                 
+	style, tabindex, title
+}
+
+var tagNames = {
+	a:{download:1,href:1,hreflang:1,media:1,ping:1,rel:1,shape:1,target:1},abbr:1,address:1,
+	area:{alt:1,coords:1,download:1,href:1,hreflang:1,media:1,ping:1,rel:1,shape:1,target:1},
+	article:1,aside:1,audio:{autoplay:1,buffered:1,controls:1,loop:1,preload:1,src:1},b:1,
+	base:{href:1,target:1},bdi:1,bdo:1,blockquote:{cite:1},body:1,br:1,
+	button:{autofocus:1,disabled:1,form:1,name:1,type:1,value:1},
+	canvas:{_width:1,_height:1},caption:{action:1},cite:1,code:1,
+	col:{action:1,span:1},colgroup:{action:1,span:1},content:1,
+	command:{checked:1,disabled:1,icon:1,radiogroup:1,type:1},
+	data:1,datalist:1,dd:1,decorator:1,del:{cite:1,datetime:1},
+	details:{open:1},dfn:1,div:1,dl:1,dt:1,element:1,em:1,
+	embed:{_width:1,_height:1,src:1,type:1},fieldset:{disabled:1,form:1,name:1},
+	figcaption:1,figure:1,footer:1,
+	form:{accept:1,acceptCharset:1,action:1,autocomplete:1,enctype:1,method:1,name:1,novalidate:1,target:1},
+	h1:1,h2:1,h3:1,h4:1,h5:1,h6:1,head:1,header:1,hr:{action:1},html:{manifest:1},i1:1,
+	iframe:{action:1,_width:1,_height:1,name:1,sandbox:1,seamless:1,src:1,srcdoc:1},
+	img:{action:1,alt:1,_width:1,_height:1,ismap:1,src:1,usemap:1},
+	input:{accept:1,alt:1,autocomplete:1,autofocus:1,checked:1,dirname:1,disabled:1,form:1,
+	width:1,height:1,list:1,max:1,maxlength:1,min:1,multiple:1,name:1,pattern:1,placeholder:1,
+	readonly:1,required:1,_size:1,src:1,step:1,type:1,usemap:1,value:1},
+	ins:{cite:1,datetime:1},kbd:1,keygen:{autofocus:1,challenge:1,disabled:1,form:1,keytype:1,name:1},
+	label:{for:1,form:1},legend:1,li:{value:1},
+	link:{href:1,hreflang:1,media:1,rel:1,sizes:1},
+	main:1,map:{name:1},mark:1,menu:{type:1},menuitem:1,
+	meta:{charset:1,content:1,httpEquiv:1,name:1},
+	meter:{form:1,high:1,low:1,max:1,min:1,optimum:1,value:1},nav:1,
+	object:{data:1,form:1,_width:1,_height:1,name:1,type:1,usemap:1},
+	ol:{reversed:1,start:1},optgroup:{disabled:1},
+	option:{disabled:1,selected:1,value:1},output:{for:1,form:1,name:1},
+	p:1,param:{name:1,value:1},pre:1,progress:{form:1,max:1,value:1},
+	q:{cite:1},rp:1,rt:1,ruby:1,s:1,samp:1,
+	script:{async:1,charset:1,defer:1,language:1,src:1,type:1},
+	section:1,select:{autofocus:1,disabled:1,form:1,multiple:1,name:1,required:1,_size:1},
+	small:1,source:{media:1,src:1,type:1},span:1,
+	strong:1,style:{media:1,scoped:1,type:1},sub:1,summary:1,sup:1,
+	table:{action:1,summary:1},tbody:{action:1},
+	td:{action:1,colspan:1,headers:1,rowspan:1},template:1,
+	textarea:{autofocus:1,cols:1,disabled:1,form:1,maxlength:1,name:1,placeholder:1,readonly:1,required:1,rows:1,wrap:1},
+	tfoot:{action:1},th:{action:1,colspan:1,headers:1,rowspan:1,scope:1},
+	thead:{action:1},time:{datetime:1,pubdate:1},title:1,
+	tr:{action:1},_track:{default:1,kind:1,label:1,src:1,srclang:1},u:1,ul:1,var:1,
+	video:{autoplay:1,buffered:1,controls:1,_width:1,_height:1,loop:1,poster:1,preload:1,src:1},wbr:1
+}
+
+mouseCursors = [
+	'default'
+	'none'
+	'wait'
+	'text'
+	'pointer'
+
+	'zoom-in'
+	'zoom-out'
+	'grab'
+	'grabbing'
+
+	'ns-resize'
+	'ew-resize'
+	'nwse-resize'
+	'nesw-resize'
+
+	'w-resize'
+	'e-resize'
+	'n-resize'
+	's-resize'
+	'nw-resize'
+	'ne-resize'
+	'sw-resize'
+	'se-resize'
+
+	'help'
+	'crosshair'
+	'move'
+
+	'col-resize'
+	'row-resize'
+
+	'vertical-text'
+	'context-menu'
+	'no-drop'
+	'not-allowed'
+	'alias'
+	'cell'
+	'copy'
+]
+
+// animation frame requester
+class AnimFrame{
+	
+	init(cb){
+		reqframe = time => {
+			running = false
+			cb.call(owner, time, this)
+		}
+	}
+		
+	request(){
+		if(running) return
+		running = true
+		window.requestAnimationFrame( reqframe )
+	}
+}
+
+// build all the html tagnames as classes
+for( var k in tagNames ){
+	var clsName = k[0].toUpperCase() + k.slice(1)
+	this[clsName] = Node.extend() do ->{
+		tag = k
+		__onename__ = clsName
+		// make a multi argument default maker
+		make = ->( ){
+			if( arguments.length ) {
+				var len = arguments.length
+				for( var i = 0; i < len; i++){
+					var arg = arguments[ i ]
+					var type = typeof arg
+					if( type == 'object' ) apply( arg )
+					else if( type == 'function' ){
+						if( arg.hasOwnProperty('__onename__') ) learn( arg )
+						else apply( arg )
+					} else text = str
+				}
+			}
+		}
+	}
+}
+
+// define textnode, which has no tag
+class TextNode extends Node{
+	// override init
+	_init(){
+
+	}
+
+	init(str){
+		if( str !== undefined ) text = str
+	}
+}
+
+// define the platform independent tags
+class Text extends Node{
+	tag = 'span'
+	css_position = 'absolute'
+	css_box_sizing = 'border-box'
+	init(str){
+		if( str !== undefined ) text = str
+	}
+}
+
+class Float extends Node{
+	tag = 'span'
+	css_float = 'left'
+	css_box_sizing = 'border-box'
+	init(str){
+		if( str !== undefined ) text = str
+	}
+}
+
+class Break extends Node{
+	tag = 'br'
+	init(str){
+		if( str !== undefined ) text = str
+	}
+}
+
+class Rect extends Node{
+	tag = 'div'
+	css_position = 'absolute'
+	css_box_sizing = 'border-box'
+}
+
+class Root extends Node{
+	// a Root node which 
+	// takes care of all the virtual DOM rendering.
+
+	init( selector, rol ){
+		// lets inherit a class from what gets passed in.
+		var cls = extends(Node, learnfirst)
+
+				
+		for(var dom from all){
+			// create a node without calling _new
+			var node = Object.create( cls )
+			node.dom = dom
+			node.tag = dom.tagName
+			node._init()
+			node.bind_signals()
+			dom.className += ' ' + node.__allcss__
+		}
+		// always keep the root scope
+		initNew()
+	}
+
+	// TODO add track playback 
+	selectRoot( selector ){
+
+
+	}
+
+	// simply initialize new nodes
+	initNew(){
+		var nodes = $.newNodes
+		var first
+		var error, errnode
+		for( var i = 0; i < nodes.length; i++ ){
+			var node = nodes[ i ]
+			//try{ // catch errors so the DOM gets built as much as possible
+			if( node.__parent ) node.__parent.dom.appendChild( node.dom )
+			node.init()
+			node.emit('init')
+			node.bind_signals()
+			//} catch( e ) { error = e, errnode = node }
+		}
+		nodes.length = 0
+		//if( error ){
+		//    ONE.log("Error on class "+node.__onename__, node.tag, node)
+		//    throw error
+		//} 
+	}
+
+
+
+	// global new node processor
+	$.newNodes = [ ]
+	$.newNodes_timer = Timeout.new(  0, initNew )
+}
+
+// exports properties to the scope
+export('Text','Rect','Float','Break')
+
+var browserKeyTable = { // slap a usable name on keys
+	8:'backspace',9:'tab',13:'enter',16:'shift',17:'ctrl',18:'alt',
+	19:'pause',20:'caps',27:'escape',
+	32:'space',33:'pgup',34:'pgdn',
+	35:'end',36:'home',37:'left',38:'up',39:'right',40:'down',
+	45:'insert',46:'delete',
+	48:'num0',49:'num1',50:'num2',51:'num3',52:'num4',
+	53:'num5',54:'num6',55:'num7',56:'num8',57:'num9',
+	65:'a',66:'b',67:'c',68:'d',69:'e',70:'f',71:'g',
+	72:'h',73:'i',74:'j',75:'k',76:'l',77:'m',78:'n',
+	79:'o',80:'p',81:'q',82:'r',83:'s',84:'t',85:'u',
+	86:'v',87:'w',88:'x',89:'y',90:'z',
+	91:'leftmeta',92:'rightmeta',
+	96:'pad0',97:'pad1',98:'pad2',99:'pad3',100:'pad4',101:'pad5',
+	102:'pad6',103:'pad7',104:'pad8',105:'pad9',
+	106:'multiply',107:'add',109:'subtract',110:'decimal',111:'divide',
+	112:'f1',113:'f2',114:'f3',115:'f4',116:'f5',117:'f6',
+	118:'f7',119:'f8',120:'f9',121:'f10',122:'f11',123:'f12',
+	144:'numlock',145:'scrollock',186:'semicolon',187:'equals',188:'comma',
+	189:'dash',190:'period',191:'slash',192:'accent',219:'openbracket',
+	220:'backslash',221:'closebracket',222:'singlequote'
+}
+
+function mouse_toString(){
+	return 1
+}
+
+function makeMouseSignal( dom, x, y ){
+	var _dom = dom
+	var px = 0
+	var py = 0
+	do {
+		px += _dom.offsetLeft || 0
+		py += _dom.offsetTop  || 0
+		_dom = _dom.offsetParent
+	} while( _dom )
+	var rel = [ ]
+	var abs = [ ]
+	rel.abs = abs
+	rel.rel = rel
+	abs[0] = x
+	abs[1] = y
+	rel[0] = x - px
+	rel[1] = y - py
+	var c
+	if(c = mouse.cap_this){
+		var start = mouse.cap_start
+		rel.cap = [ abs[0] - start[0], abs[1] - start[1] ]
+	}
+	rel.toString = mouse_toString 
+	return rel
+}
+
+function makeAbsMouseSignal( dom, x, y ){
+	var pos = [x, y]
+	pos.toString = mouse_toString
+	if( dom && dom._oneNode ) pos.tgt = dom._oneNode
+	return pos
+}
+
+window.addEventListener('click', function(e){
+	var t = e.toElement || e.target
+	mouse.click = makeAbsMouseSignal( t, e.pageX, e.pageY )
+	if( !t || !t._oneNode ) return
+	t._oneNode.click = makeMouseSignal( t, e.pageX, e.pageY )
+})
+
+window.addEventListener('dblclick', function(e){
+	var t = e.toElement || e.target
+	mouse.dblclick = makeAbsMouseSignal( t, e.pageX, e.pageY )
+	if( !t || !t._oneNode ) return
+	t._oneNode.dblclk = makeMouseSignal( t, e.pageX, e.pageY )
+})
+
+window.addEventListener('mousedown', function(e){
+	var t = e.toElement || e.target
+
+	if(e.button === 0 ) mouse.left = 1
+	if(e.button === 1 ) mouse.middle = 1
+	if(e.button === 2 ) mouse.right = 1
+	mouse.isdown = makeAbsMouseSignal( t, e.pageX, e.pageY )
+	mouse.cap_canset = e.button + 1
+	if( !t || !t._oneNode ) return
+	// lets build a mouse event.
+	t._oneNode.isdown = 1
+	t._oneNode.mousedown = makeMouseSignal( t, e.pageX, e.pageY )
+	mouse.cap_canset = 0
+
+})
+
+
+window.addEventListener('mouseup', function(e){
+	if(e.button === 0 ) mouse.left = 0
+	if(e.button === 1 ) mouse.middle = 0
+	if(e.button === 2 ) mouse.right = 0
+	mouse.isdown = 0
+	
+	var t = e.toElement || e.target
+	if( mouse.cap_this && mouse.cap_btn == e.button ){
+		mouse._capEnd( e )
+	} 
+	else {
+		if( !t || !t._oneNode ) return
+		t._oneNode.isdown = 0
+		t._oneNode.mouseup = makeMouseSignal( t, e.pageX, e.pageY )
+	}
+})
+
+// Fancy mouse interpolation mousemove 
+var move_last = Date.now()
+window.addEventListener('mousemove', function(e){
+	
+	var px = e.pageX
+	var py = e.pageY
+
+	// send mouse signals
+	mouse.x = px
+	mouse.y = py
+	mouse.xy = [ px, py ]
+	
+	// used for animation time-skewing in mouse interp
+	var time = Date.now( )
+	var delta = time - move_last
+	move_last = time
+
+	var cap_this = mouse.cap_this
+	if( cap_this ){
+		mouse._capMove( e )
+		return
+	}
+
+	if( delta > 100 ) {
+		var t = e.toElement || e.target
+		if(! t || !t._oneNode) return
+		var node = t._oneNode
+		node.mousemove = makeMouseSignal( t, px, py)
+		return
+	} 
+	// interpolate all 
+	var dx = px - mouse._px
+	var dy = py - mouse._py
+	var x1 = px
+	var y1 = py
+	var dist = Math.sqrt(dx * dx + dy * dy )
+	var step = parseInt(dist / 4) // pixel stepsize
+	if( step == 0 ) step = 1
+	dx = dx / step
+	dy = dy / step
+	var last = null
+	for(var i = step - 1; i >= 0; i--){
+		var t = document.elementFromPoint(x1, y1)
+		if(last != t && t && t._oneNode){
+			last = t
+			ONE.mouseinterp = - (delta / (1000 * step)) * (step - i)
+			t._oneNode.mousemove = makeMouseSignal( t, x1, y1 )
+		}
+		x1 -= dx
+		y1 -= dy
+	}
+	mouse._px = px
+	mouse._py = py
+})
+
+function keyupdown_toString(){
+	return browserKeyTable[ this.code ]
+}
+
+function makeKeyUpDownSignal( repeat, code ){
+	return {
+		repeat: repeat,
+		code: code,
+		toString: keyupdown_toString
+	}
+}
+function press_toString(){
+	return String.fromCharCode( this.code )
+}
+
+window.addEventListener('keydown', function(e){
+	var t = e.toElement || e.target
+	var k = browserKeyTable[ e.keyCode ]
+	if( k ) key[ k ] = 1
+	var sig = makeKeyUpDownSignal( e.repeat, e.keyCode )
+	key.key = sig
+	if( !t || !t._oneNode ) return
+	t._oneNode.keydown = sig
+})
+
+window.addEventListener('keyup', function(e){
+	var t = e.toElement || e.target
+	var k = browserKeyTable[ e.keyCode ]
+	if( k ) key[ k ] = 0
+	var sig = makeKeyUpDownSignal( e.repeat, e.keyCode )
+
+	if( !t || !t._oneNode ) return
+	t._oneNode.keyup = sig
+})
+
+window.addEventListener('keypress', function(e){
+	var t = e.toElement || e.target
+	var sig = {
+		repeat: e.repeat,
+		code: e.charCode,
+		toString: press_toString
+	}
+	key.press = sig
+	if( !t || !t._oneNode ) return
+	t._oneNode.keypress = sig
+})
+
+class Mouse{
+
+	// define signals
+	x~
+	y~
+	xy~
+	isdown~
+	left~
+	right~
+	middle~
+	
+	capture( obj, move, end ){
+		if( cap_this && cap_end ){
+			_capEnd( {pageX:cap_start[0],pageY:cap_start[1]})
+		}
+		if( cap_canset ){
+			cap_btn = cap_canset - 1
+			cap_this = obj
+			cap_move = move
+			cap_end = end
+			cap_start = xy
+			if(document.setCapture) document.setCapture()
+		}
+	}
+	
+	_capMove( e ){
+		var sig = makeMouseSignal( cap_dom, e.pageX, e.pageY )
+		
+		if( typeof cap_move == 'function'){
+			cap_move.call( cap_this, sig )
+		}
+		else cap_this[cap_move] = sig
+	}
+	
+	_capEnd( e ){
+		var sig = makeMouseSignal( cap_dom, e.pageX, e.pageY )
+		if( typeof cap_end == 'function'){
+			cap_end.call( mouse.cap_this, sig )
+		} 
+		else cap_this[mouse.cap_end] = sig
+		if(document.releaseCapture) document.releaseCapture()
+		cap_this = undefined
+	}
+	// called by DOM
+	
+	_mouseover( node, e ){
+		if( cap_this ) return
+		node.mouseover = makeMouseSignal( this, e.pageX, e.pageY )
+	}
+	
+	_mouseout( node, e ){
+		if( cap_this ) return
+		node.mouseout = makeMouseSignal( this, e.pageX, e.pageY )
+	}    
+	
+}
+var mouse = $.mouse = Mouse{}
+
+class Key extends Base{
+
+	for(var k in browserKeyTable){
+		var key = browserKeyTable[ k ]
+		this[ k ] = key
+		signal( key, 0 )
+	}
+	signal press, key
+
+	cmd: leftmeta || rightmeta
+	meta: leftmeta || rightmeta
+	
+	wasd: [ a?-1:d?1:0, w?-1:s?1:0 ]
+	arrows: [ left?-1:right?1:0, up?-1:down?1:0 ]
+}
+
+var key = $.key = Key.new()
+key.init!
+
+window.addEventListener('resize', function(event){
+	var w = window.innerWidth
+	var h = window.innerHeight
+	screen.w = w
+	screen.h = h
+	screen.wh = [w,h]
+});
+
+class Screen{
+	var _w = window.innerWidth
+	var _h = window.innerHeight        
+	w:=_w
+	h:=_h
+	wh:=[_w, _h]
+}
+screen = Screen.new()
 }

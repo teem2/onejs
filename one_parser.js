@@ -11,7 +11,7 @@
 // which is JS + ES6, Julia, Coffeescript, CSS, Dart and C++ / GLSL constructs
 // Its designed to target JS, Asm.js and GLSL with codegeneration
 // It tries to be entirely backwards compatible with JS
-// and follows the current ES6 proposals as closely as possible
+// and follows the current ES6 proposals as closely as practical
 //
 // The Parser AST has been designed to be human friendly,
 // and with the quote operator makes ASTs a first class citizen of the language
@@ -38,7 +38,7 @@
 // ONE   use of : to signify lazy/signal assigns (label syntax)
 // ONE   Create instance object with block args x{}
 // ONE   function defs can drop the identifier 'x = (param){}'
-// ONE   two arrow function types: => .bind(this) -> unbound
+// ONE   two arrow function types: => .bind(this) ~> unbound
 // ONE   for To 'for(x = 0 to 10 in 3){}'
 // ONE   ! is postfixable,  % * & are prefixable 
 // ONE   do catch for promise-then: 'v(x) do y catch z' -> 'v(x,y,z)' 'v do x' -> 'v(x)'
@@ -68,7 +68,7 @@
 
 // Doing 'x\n()' or 'x\n[]' subscripts is now 2 statements, not an accidental call/index
 // This makes coding without semicolons completely predictable and safe.
-// Loose blocks in program scope like '{x:1}' are now interpreted as objects
+// MIGHT REVERT: Loose blocks in program scope like '{x:1}' are now interpreted as objects
 // Only 'new identifier' is treated as a the JS new keyword calling new() and new{} is usable syntax
 // Dont parse 0131 as octal, its almost always a  typo
 // label: syntax has been depricated and is used as lazy-eval and signal assigns
@@ -76,20 +76,15 @@
 // Code generation features depend on the target language
 
 // Todo
-// Binary/octal numeric literals
-// Add ES6 enum type
-// add step/in to for to and for from
+// Support C like pointer access using -> and * and &
 // For from and for to have a step / in argument
+// ES6 let block scoped variables
+// Parse inline markup mixed with code
 //
 // items not done
-// ES6 classes, will add to parser when settled
 // Ranges '[0 to 1]' '[0 to 3]' maybe.
-// parse inline XML. perhaps. String templating works too and xml sucks
 // add catch to await
-// Allow if/else/try/catch/switch in expressions like coffeescript? 
-// allow try expr catch expr finally expr?
-// Auto objects in sequences for named args x(10, 20, y:10,z:20) -> x(10,20, {y:10, z:20})
-// let as in ES6 ( not polyfillable )
+// ES6 generator comprehensions
 // 
 // Acorn was written by Marijn Haverbeke and released under an MIT
 // license. The Unicode regexps (for identifiers and whitespace) were
@@ -1530,6 +1525,8 @@ ONE.parser_strict_ = function(){
 		if( kind == "enum"){
 			node.id = this.parseIdent()
 			if( this.tokType !== this._braceL ) this.unexpected()
+			// TODO we should parse key, key = expr, sets
+			// otherwise you cant use keywords in the enum set
 			node.enums = this.parseBlock()
 			return this.finishNode(node, "Enum")
 		}
@@ -1760,7 +1757,11 @@ ONE.parser_strict_ = function(){
 				node.left = expr
 				if(this.eat(this._eq)) node.lazy = 0
 				else node.lazy = 1
-				node.right = this.parseExpression()
+
+				if(this.tokType != this._braceR && !this.lastSkippedNewlines){
+					node.right = this.parseExpression(true)
+				}
+				this.eat(this._comma)
 				return this.finishNode(node, "Signal")
 			} else {
 				if(this.tokType != this._else) this.semicolon()
@@ -1944,24 +1945,6 @@ ONE.parser_strict_ = function(){
 		node.kind = "var"
 		node.defs = this.parseDefs( noIn )
 		return node
-	}
-	
-	this.parseExtends = function(left){
-		var node = this.startNode(left)
-		this.eat(this._doublecolon)
-		if(this.tokType !== this._braceL){
-			node.right = this.parseSubscripts(this.parseIdent(true), true)
-		}
-		if(left) node.left = left
-		if(this.tokType == this._parenL){ // we are a call or a parameterized extends
-			if(!left) throw new Error("Cannot call function by :: without identifier")
-			var call = this.parseCall(this.finishNode(node,"Extends"))
-			if(call.type == 'Function') this.raise(call.start,"Block following class-specified call has no meaning")
-			return call
-		} else { // a normal extends
-			node.body = this.parseStatementBlock()
-			return this.finishNode(node, "Extends")
-		}
 	}
 
 	// Determines if a comma injection is safe
@@ -2407,8 +2390,8 @@ ONE.parser_strict_ = function(){
 				return this.parseSubscripts(this.finishNode(node, "Key"))
 			} 
 			return this.parseSubscripts(base)
-		case this._doublecolon:
-			return this.parseExtends()
+		//case this._doublecolon:
+		//	return this.parseExtends()
 		default:
 			this.unexpected()
 		}
