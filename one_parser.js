@@ -60,6 +60,7 @@
 // CS    existential assignments '?=' if(lhs===undefined)lhs = rhs
 // CS    existential prefix operator ?x -> (x===undefined)
 // CS    existential or '?|' lhs!==undefined?lhs:rhs
+
 // CS    pow '**'
 // CS    Mathematical modulus '%%'
 // CS    Integer divide '%/' ( cant parse // )
@@ -381,6 +382,8 @@ ONE.parser_strict_ = function(){
 	this._existkey = {type: "?."}
 	this._existor = {type: "?|", binop:1, beforeExpr:true}
 	this._existeq = {type: "?=",isAssign: true, binop:0, beforeExpr: true}
+	this._wtfeq = {type: "??=",isAssign: true, binop:0, beforeExpr: true}
+	this._wtf = {type: "??", binop:1, beforeExpr:true}
 
 	this._question = {type: "?", prefix: true, beforeExpr: true}
 	this._fatArrow = {type:"=>"}
@@ -406,7 +409,7 @@ ONE.parser_strict_ = function(){
 	this._eq = {isAssign: true, beforeExpr: true}
 	this._assign = {isAssign: true, binop:0, beforeExpr: true}
 	this._incDec = {postfix: true, prefix: true, isUpdate: true}
-	this._notxor = {prefix: true, postfix:true, beforeExpr: true}
+	this._notxor = {prefix: true, beforeExpr: true}
 	this._exists = {prefix: true, beforeExpr: true}
 
 	this._logicalOR = {binop: 1, beforeExpr: true}
@@ -831,6 +834,15 @@ ONE.parser_strict_ = function(){
 			if(next == 124){
 				++this.tokPos
 				return this.finishToken(this._existor,'?|')
+			}
+			if(next == 63){
+				++this.tokPos
+				var next = this.input.charCodeAt(this.tokPos)
+				if(next == 61){
+					++this.tokPos
+					return this.finishToken(this._haspropeq,'??=')
+				}
+				return this.finishToken(this._hasprop,'??')
 			}
 			if(next == 61){
 				++this.tokPos
@@ -1524,10 +1536,40 @@ ONE.parser_strict_ = function(){
 
 		if( kind == "enum"){
 			node.id = this.parseIdent()
-			if( this.tokType !== this._braceL ) this.unexpected()
+			this.expect(this._braceL)
+			node.enums = []
+			for(;;){
+				var enm = this.startNode()
+				if(this.tokType == this._string){
+					var str = this.startNode()
+					str.kind = "string"
+					str.value = this.tokVal
+					str.multi = this.isMultiLine
+					str.raw = this.input.slice(this.tokStart, this.tokEnd)
+					this.finishNode(str, 'Value')
+					this.next()
+					enm.id = str
+				} 
+				else{
+					enm.id = this.parseIdent(true)
+				}
+				if(this.eat(this._eq)){
+					enm.init = this.parseExpression(true)
+				}
+				node.enums.push(this.finishNode(enm, "Def"))
+				if(!this.canInjectComma(this.tokType) && !this.eat(this._comma)){
+					break
+				}
+			}
+			this.expect(this._braceR)
+
 			// TODO we should parse key, key = expr, sets
 			// otherwise you cant use keywords in the enum set
-			node.enums = this.parseBlock()
+			// alright so. we parse an identifier or
+			// a string,
+			// then we parse a = number, or a ; or a , or an insertComma
+			// we have to parse enums differently
+
 			return this.finishNode(node, "Enum")
 		}
 
@@ -2135,7 +2177,8 @@ ONE.parser_strict_ = function(){
 		else if (this.tokType == this._dotdot){
 			if( this.lastSkippedNewlines ) return base
 			this.eat(this._dotdot)
-			base.store = 1
+			base.store = base.store || 0
+			base.store |= 1
 			if( this.lastSkippedNewlines ) return base
 			if( this.tokType === this._name || this.tokType.keyword){
 				var node = this.startNodeFrom(base)
@@ -2144,6 +2187,14 @@ ONE.parser_strict_ = function(){
 				return this.parseSubscripts(this.finishNode(node, "Key"), noCalls)
 			}
 			return this.parseSubscripts(base, noCalls)
+		}
+		else if (this.tokType == this._notxor){
+			if( this.lastSkippedNewlines ) return base
+			if(this.tokVal == '!') base.store |= 2
+			else base.store |= 4
+			this.eat(this._notxor)
+			base.store = base.store || 0
+			return base
 		}
 		else if (this.tokType == this._bracketL) {
 			// we also dont do this._bracketL on new line

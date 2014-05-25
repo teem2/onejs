@@ -36,7 +36,7 @@ ONE.browser_boot_ = function(){
 		var obj = ONE.Base.create(ONE,function(){ this.__class__='Root'})
 		ONE.$.http_load(obj, root)
 		
-		console.log("profile init "+(Date.now() - dt)+'ms')
+		//console.log("profile init "+(Date.now() - dt)+'ms')
 	})
 
 	window.onerror = function(msg, url, line) {
@@ -69,8 +69,8 @@ ONE.browser_boot_ = function(){
 					obj.$[module] = obj.eval(ast, 1, url)
 				//})
 				if(typeof callback == 'function') callback()
-				//obj.profile("run "+module,1,function run(){
-				else obj.$[module].call(obj)
+				else //obj.profile("run "+module,1,function run(){
+					obj.$[module].call(obj)
 				//})
 			}
 			// lets analyze our data and load all our deps.

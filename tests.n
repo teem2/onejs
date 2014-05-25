@@ -1,15 +1,23 @@
 var assert = load('assert')
 
-//var {Root, Div} = load('dom')
-/*
+var {Root, Rect} = load('dom')
+
 Dom1(){
 	Root{
-		init("#testarea")
-		Div{
-			text = "yeallo"
+		init(document.body)
+		class MyDiv extends Rect{
+			w = 10
+			h = 10
+		}
+		profile(3000) do(){
+			MyDiv{
+				fill = [random(),random(),random()]
+				x = random() * 300
+				y = random() * 300
+			}
 		}
 	}
-}*/
+}
 
 Signals(){
 	var t = Base{
@@ -121,15 +129,15 @@ Language(){
 
 	// array splats
 	var s1 = [1,2,3], s2 = [5,6,7]
-	var s3 = [...s1, 4, ...s2]
+	var s3 = [...s1, 4, ...s2, 8]
 
-	assert(s3.join('') == '1234567')
+	assert(s3.join('') == '12345678')
 
 	// argument splats
 	func(){
 		return [...]
 	}
-	assert(func(...s1,4,...s2).join('') == '1234567')
+	assert(func(...s1,4,...s2, 8).join('') == '12345678')
 
 	// member functions
 	member(a){ return a + 10 }

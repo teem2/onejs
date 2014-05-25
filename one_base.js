@@ -34,12 +34,12 @@ ONE.base_ = function(){
 	// new an object with variable arguments and automatic owner
 	this.new = function( owner ){
 
-		if(this.owner) throw new Error("You are newing an instance")
+		if(this.owner !== undefined) throw new Error("You are newing an instance")
 
 		var obj = Object.create(this)
 
 		var len = arguments.length
-		obj.owner = owner
+		obj.owner = owner || null
 
 		if(len > 1) {
 			if(obj._init) obj._init.apply(obj, Array.prototype.slice.call(arguments, 1))
@@ -56,11 +56,11 @@ ONE.base_ = function(){
 	// create object with owner and role
 	this.create = function( owner, role ){
 
-		if(this.owner) throw new Error("You are newing an instance")
+		if(this.owner !== undefined) throw new Error("You are newing an instance")
 
 		var obj = Object.create(this)
 
-		obj.owner = owner
+		obj.owner = owner || null
 
 		if(obj._init) obj._init()
 		else if(obj.init) obj.init()
@@ -490,11 +490,11 @@ ONE.base_ = function(){
 		// look up function name
 		var name = me.__supername__
 		if( name !== undefined ){ // we can find our overload directly
-			var fn = this.overloads( name, me )
-			if( fn && typeof fn == 'function' ) return fn.apply( this, fnargs )
+			var fn = this.overloads(name, me)
+			if(fn && typeof fn == 'function') return fn.apply(this, fnargs)
 		} 
 		else { // we have to find our overload in the entire keyspace
-			for( var k in this ) {
+			for(var k in this) {
 				// filter out the internal properties
 				if( !(k in ONE.Base) && k[0] != '_' && (k[1] != '$' || k[1] != '_') && 
 					(k[0] != '$' || k.length > 1 )){
@@ -620,7 +620,7 @@ ONE.base_ = function(){
 
 		// fork a signal
 		this.fork = function( owner ){
-			var sig = Object.create( sig )
+			var sig = Object.create( this )
 			sig.owner = owner
 			return sig
 		}
@@ -637,6 +637,8 @@ ONE.base_ = function(){
 			if(!this.hasOwnProperty('onSet')) this.onSet = cb
 			else if(!Array.isArray(this.onSet)) this.onSet = [this.onSet, cb]
 			else this.onSet.push( cb )
+
+			if(this.monitor) this.monitor()
 		}
 
 		this.off = function( cb ){

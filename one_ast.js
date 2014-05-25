@@ -228,7 +228,7 @@ ONE.ast_ = function(){
 			Const: { defs:2 },
 			TypeVar: { kind:1, defs:2, dim:1 },
 			Struct: { id:1, struct:1, defs:2, dim:1 },
-			Enum: { id:1, enums:1 },
+			Enum: { id:1, enums:2 },
 
 			Def: { id:1, init:1, dim:1 },
 
@@ -442,8 +442,8 @@ ONE.ast_ = function(){
 		this.isKeyChain = function(){
 			var node = this
 			while(node){
-				if(node.type == 'Id') return true
-				if(node.type != 'Key') return false
+				if(node.type == 'Id' || node.type == 'This') return true
+				if(node.type != 'Key' && node.type != 'Index') return false
 				node = node.object
 			}
 			return false
@@ -483,14 +483,20 @@ ONE.ast_ = function(){
 
 
 			this.store = function( n, value ){
-				return value + '..'
+				var ret = value
+				if(n.store & 1) ret = ret + '..'
+				if(n.store & 2) ret = ret + '!'
+				if(n.store & 4) ret = ret + '~'
+				return ret
 			}
 
 			this.expand = function( n, parent, parens, term ){ // recursive expansion
 				if( !n || !n.type ) return term || ''
+				//if(!parent) throw new Error('Incorrect parent')
 				n.parent = parent
 				n.genstart = this.line
-				var ret = this[ n.type ]( n, parens )
+				if(! this[n.type] )throw new Error(n.type)
+				var ret = this[ n.type ](n, parens)
 				n.genend = this.line
 
 				if(n.store){ // someone wants a tempstore
@@ -735,11 +741,11 @@ ONE.ast_ = function(){
 				var ret = 'if('
 				ret += this.expand( n.test, n )
 				if( ret[ret.length - 1] == '\n') ret += this.depth + this.indent
-				ret += ')' + this.space + this.expand( n.then, n, true ) 
+				ret += ')' + this.space + this.expand( n.then, n ) 
 				if(n.else){
 					var ch = ret[ret.length - 1]
 					if( ch !== '\n' ) ret += this.newline
-					ret += this.depth + 'else ' + this.expand( n.else, n, true )
+					ret += this.depth + 'else ' + this.expand( n.else, n )
 				}
 				return ret
 			}
@@ -821,6 +827,12 @@ ONE.ast_ = function(){
 					this.expand( n.loop, n )
 			}
 
+			this.ForFrom = function( n ){
+				return 'for(' + this.expand( n.left, n ) + ' from ' +
+					this.expand( n.right, n ) + ')' + 
+					this.expand( n.loop, n )
+			}
+
 			this.ForTo = function( n ){
 				return 'for(' + this.expand( n.left, n ) + ' to ' +
 					this.expand( n.right, n ) + 
@@ -858,7 +870,7 @@ ONE.ast_ = function(){
 			}
 
 			this.Enum = function( n ){
-				return 'enum ' + this.expand( n.id, n) + this.expand( n.enums, n)
+				return 'enum ' + this.expand( n.id, n, false, '{') +this.depth+this.indent+ this.list( n.enums, n) +'}'
 			}
 
 			this.Function = function( n, parens ){
@@ -913,13 +925,14 @@ ONE.ast_ = function(){
 
 			this.Binary = function( n, parens ){
 				var ret
-				if( n.left.op && n.left.prio < n.prio ){
-					ret = '(' + this.expand( n.left, n ) + ')' + this.space + n.op + this.space + this.expand( n.right, n )
+				if( n.left.type == 'Condition' || n.right.type == 'Condition' || n.left.op && n.left.prio < n.prio ){
+					ret =  this.expand( n.left, n, true ) + this.space + n.op + this.space + this.expand( n.right, n, true )
 				} 
 				else {
+					var rparen =  n.right.op && n.right.prio < n.prio
 					ret = this.expand( n.left, n, false, this.space + n.op )
 					if(ret[ ret.length - 1 ] == '\n') ret += this.indent + this.depth
-					ret += this.space + this.expand( n.right, n )
+					ret += this.space + this.expand( n.right, n, rparen )
 				}
 				if( parens ) return '(' + ret + ')'
 				return ret
@@ -972,8 +985,10 @@ ONE.ast_ = function(){
 				return ret
 			}
 
-			this.Condition = function( n ){
-				return this.expand( n.test, n )+ this.space +'?'+ this.space +this.expand( n.then, n )+ this.space +':'+ this.space +this.expand( n.else, n )
+			this.Condition = function( n, parens ){
+				var ret = this.expand( n.test, n, true )+ this.space +'?'+ this.space +this.expand( n.then, n, true )+ this.space +':'+ this.space +this.expand( n.else, n, true )
+				if(parens) return '(' + ret + ')'
+				return ret			
 			}
 
 			this.New = function( n ){
@@ -1130,14 +1145,150 @@ ONE.ast_ = function(){
 				clearTimeout:1,
 				console:1,
 				window:1,
+				document:1,
 				require:1,
 				__dirname:1
 			}
 
+			// destructuring helpers
+			this._destructureArrayOrObject = function(v, acc, nest, fn, vars){
+				// alright we must store our object fetch on a ref
+				if(nest >= fn.destruc_vars) fn.destruc_vars = nest + 1
+				var ret = ''
+				var od = this.depth
+				this.depth = this.depth + this.indent
+				ret += '('+this.destruc_prefix+nest+'='+this.destruc_prefix+(nest-1)+acc+')===undefined||('+this.newline+this.depth
+				if(v.type == 'Object') ret += this._destructureObject(v, nest + 1, fn, vars)
+				else ret += this._destructureArray(v, nest + 1, fn, vars)
+				this.depth = od
+				ret += this.newline+this.depth + ')'
+				return ret
+			}
+
+			this._destructureArray = function(arr, nest, fn, vars){
+				var ret = ''
+				var elems = arr.elems
+				var midrest
+				var tmpvar = this.destruc_prefix +(nest - 1)
+				for(var i = 0;i<elems.length;i++){
+					var v = elems[i]
+					if(!v) continue
+					var acc
+					if(midrest){
+						acc = '['+tmpvar+'.length-'+(elems.length - i)+']'
+					}
+					else acc = '[' + i + ']' 
+
+					if(v.type == 'Rest'){
+						if(midrest){
+							throw new Error('cannot have multiple rest variables in one destructure array')
+						}
+						if(!v.id){
+							midrest = i + 1
+							continue
+						}
+						if(v.id.type !=='Id') throw new Error('Unknown rest id type')
+						if(i) ret += ',' + this.newline + this.depth
+						var name = v.id.name 
+						if(vars){ vars.push(v); if(v.flag == 46) name = 'this.'+name}
+						else name = this.resolve(name)
+						// what if we have elems following?
+						ret += name + '=' + tmpvar
+						if(i < elems.length - 1) ret += '.slice('+i+')'
+						else {
+							midrest = i + 1
+							ret += '.slice('+i+',' + (elems.length - i)+')'
+						}
+					}
+					else if(v.type == 'Id') {
+						if(i) ret += ',' + this.newline + this.depth
+						var name = v.name 
+						if(vars){ vars.push(v); if(v.flag == 46) name = 'this.'+name}
+						else name = this.resolve(name)
+						ret += name + '='+ tmpvar + acc
+					} 
+					else if(v.type == 'Object' || v.type == 'Array') {
+						if(i) ret += ',' + this.newline + this.depth
+						ret += this._destructureArrayOrObject(v, acc, nest, fn, vars)
+					}  else throw new Error('Cannot destructure array item '+i)
+				}
+				return ret
+			}
+
+			this._destructureObject = function( obj, nest, fn, vars ){
+				var ret = ''
+				var keys = obj.keys
+				for(var i = 0;i<keys.length;i++){
+					k = keys[i]
+					var acc
+					if(k.key.type == 'Value'){
+						acc = '['+k.key.raw+']'
+					} else acc = '.'+k.key.name
+					var v = k.value
+					if(k.short){
+						// lets output a prop
+						if(i) ret += ',' + this.newline + this.depth
+						var name = k.key.name 
+						if(vars) vars.push(k.key)
+						else name = this.resolve(name)							
+						ret += name + '='+this.destruc_prefix+(nest - 1)+acc
+					} 
+					else if(v.type == 'Id') {
+						if(i) ret += ',' + this.newline + this.depth
+						var name = v.name 
+						if(vars){ vars.push(v); if(v.flag == 46) name = 'this.'+name}
+						else name = this.resolve(name)
+						ret += name + '='+this.destruc_prefix +(nest - 1)+acc
+					} 
+					else if(v.type == 'Object' || v.type == 'Array') {
+						if(i) ret += ',' + this.newline + this.depth
+						ret += this._destructureArrayOrObject(v, acc, nest, fn, vars)
+					}
+					else throw new Error('Cannot destructure property '+acc)
+				}
+				return ret
+			}
+
+			this.destructure = function( n, left, init, fn, vars, def ){
+				if(!fn) throw new Error('Destructuring assign cant find enclosing function')
+				if(!fn.destruc_vars) fn.destruc_vars = 1
+
+				var ret = ''
+				var olddepth = this.depth
+				this.depth = this.depth + this.indent					
+
+				var oldcmt = this.comments
+				this.comments = 0
+				if( init )
+					ret = '('+this.destruc_prefix+'0='+(def?def+'||':'') + 
+						(typeof init == 'string'?init:this.expand( init, n, true)) + 
+						',('+this.newline+this.depth
+				else{
+					if(!def) throw new Error('Destructuring assignment without init value')
+					ret = '('+this.destruc_prefix+'0='+(def?def:'') +',('+this.newline+this.depth
+				}
+				this.comments = 1
+
+				if( left.type == 'Object' ) ret += this._destructureObject(left, 1, fn, vars)
+				else ret += this._destructureArray(left, 1, fn, vars)
+
+				this.depth = olddepth
+				ret += this.newline+this.depth+'))' + this.comments_or_newline( left )
+				return ret
+			}
+
 			this.store = function(n, value ){
-				var fn = this.find_function( n )
-				if(!fn.store_var) fn.store_var = 1
-				return '('+this.store_prefix+'='+value + ')'
+				var ret = value
+				if(n.store & 1){
+					var fn = this.find_function( n )
+					if(!fn.store_var) fn.store_var = 1
+					ret = '('+this.store_prefix+'='+ret + ')'
+				}
+				if(n.store & 2) throw new Error("Postfix ! not implemented")
+				if(n.store & 4){
+					ret = 'this.out(' + ret + ')'
+				}
+				return ret
 			}
 
 			this.resolve = function( name ){
@@ -1286,7 +1437,7 @@ ONE.ast_ = function(){
 				var olddepth = this.depth
 				this.depth += this.indent
 				ret += '{'
-				var elem = n.enums.steps
+				var elem = n.enums
 				if(!elem || !elem.length) return ret + '}'
 				ret += this.newline
 
@@ -1294,18 +1445,19 @@ ONE.ast_ = function(){
 				for(var i = 0;i<elem.length;i++){
 					var item = elem[i]
 					var nocomma = i == elem.length - 1
-					if(! outer.IsExpr[ item.type ] ) throw new Error("Unexpected enum item")
-					// lets check our property 
-					if(item.type == 'Id'){
-						ret += this.depth + item.name + ':' + (++last) + (nocomma?'':',')+this.newline
+					var name = ''
+
+					if(item.id.type == 'Id') name = item.id.name
+					else if(item.id.type == 'Value') name = item.id.raw
+
+					if(item.init){
+						if(item.init.type !== 'Value') throw new Error("Unexpected enum assign")
+						ret += this.depth + name + ':' + item.init.raw + (nocomma?'':',')+this.newline
+						last = item.init.value
 					}
-					else if(item.type == 'Assign'){
-						if(item.left.type !== 'Id') throw new Error("Unexpected enum assign")
-						if(item.right.type !== 'Value') throw new Error("Unexpected enum assign")
-						ret += this.depth + item.left.name + ':' + item.right.raw + (nocomma?'':',')+this.newline
-						last = item.right.value
-					} 
-					else throw new Error("Unexpected enum item "+item.type)
+					else{
+						ret += this.depth + name + ':' + (++last) + (nocomma?'':',')+this.newline
+					}
 				}
 				ret += olddepth + '}'
 				this.depth = olddepth
@@ -1325,7 +1477,7 @@ ONE.ast_ = function(){
 
 				var old_compr = this.compr_assign
 				this.compr_assign = tmp +'.push'
-				ret += this.depth + this.expand(n.for) +this.newline
+				ret += this.depth + this.expand(n.for, n) +this.newline
 				ret += this.depth +'return '+tmp
 				this.compr_assign = old_compr
 				this.depth = odepth
@@ -1341,8 +1493,7 @@ ONE.ast_ = function(){
 				for(var i = 0; i < len; i++){
 					var item = chain[i]
 					if(item.type == 'Block'){
-						if(item.steps.length == 1 &&
-							outer.IsExpr[item.steps[0].type]){
+						if(item.steps.length == 1 && outer.IsExpr[item.steps[0].type]){
 							ret += '"+' + this.expand(item.steps[0], n, true) + '+"'
 						} 
 						// we dont support non expression blocks
@@ -1391,6 +1542,7 @@ ONE.ast_ = function(){
 				else ret += loop
 				return ret
 			}
+
 			// Complete for of polyfill with iterator and destructuring support
 			this.ForOf = function( n ){
 				// lets allocate some 
@@ -1428,7 +1580,7 @@ ONE.ast_ = function(){
 				var iter = this.tmp_prefix + (fn.tmp_vars++)
 				
 				var ret = 'for('
-				ret += iter+'=ONE.iterator(' + this.expand(n.right) + '),'+result+'=null;' +
+				ret += iter+'=ONE.iterator(' + this.expand(n.right, n) + '),'+result+'=null;' +
 						iter+'&&(!'+result+'||!'+result+'.done);){'+this.newline
 				var odepth = this.depth
 				this.depth += this.indent 
@@ -1462,7 +1614,8 @@ ONE.ast_ = function(){
 				}
 				ret += '}'
 				return ret
-			},
+			}
+
 			// a high perf for over an array, nothing more.
 			this.ForFrom = function( n ){
 				// lets allocate some 
@@ -1502,12 +1655,13 @@ ONE.ast_ = function(){
 				if(!value) throw new Error('No iterator found in for from')
 				if(!iter) iter = this.tmp_prefix + (fn.tmp_vars++)
 				if(!alen) alen = this.tmp_prefix + (fn.tmp_vars++)
+
 				arr = this.tmp_prefix + (fn.tmp_vars++)
 				// and then we have to allocate two or three tmpvars.
 				// we fetch the 
 				var ret = 'for('
 				if( isvar ) ret += 'var '
-				ret += arr+'='+this.expand(n.right)+','+alen+'='+arr+'.length,'+
+				ret += arr+'='+this.expand(n.right, n)+','+alen+'='+arr+'.length,'+
 					iter+'=0,'+value+'='+arr+'[0];'+iter+'<'+alen+';'+value+'='+arr+'[++'+iter+'])' 
 				var loop = this.expand(n.loop, n)
 
@@ -1515,6 +1669,7 @@ ONE.ast_ = function(){
 				else ret += loop
 				return ret
 			}
+
 			// a simple for to loop on integers
 			this.ForTo = function( n ){
 
@@ -1586,10 +1741,14 @@ ONE.ast_ = function(){
 				if(n.id.type == 'Array' || n.id.type == 'Object'){
 					var vars = []
 					var ret = this.destructure(n, n.id, n.init, this.find_function( n ), vars)
+
+					var pre = ''
 					for(var i = 0;i<vars.length;i++){
 						this.scope[ vars[i].name ] = 1
+						if(i) pre += ','+this.space
+						pre += this.expand(vars[i], n)
 					}
-					return vars.join(','+this.space)+','+this.space+this.destruc_prefix+'0='+ret
+					return pre+','+this.space+this.destruc_prefix+'0='+ret
 				}
 				else if( n.id.type !== 'Id' ) throw new Error('Unknown id type')
 
@@ -1816,137 +1975,13 @@ ONE.ast_ = function(){
 				var ret 
 				if( n.prefix ) ret = n.op + this.expand( n.arg, n )
 				else {
-					if( n.op === '~' || n.op === '!') throw new Error("Postfix ~ or ! not implemented")					
-					ret = this.expand ( n.arg, n ) + n.op
+					if( n.op === '!') throw new Error("Postfix ! not implemented")					
+					if(n.op ==='~'){
+						ret = 'this.out('+this.expand ( n.arg, n ) + ')'
+					}
+					else ret = this.expand ( n.arg, n ) + n.op
 				}
 				if( parens ) return '(' + ret + ')'
-				return ret
-			}
-
-			// destructuring helpers
-			this._destructureArrayOrObject = function(v, acc, nest, fn, vars){
-				// alright we must store our object fetch on a ref
-				if(nest >= fn.destruc_vars) fn.destruc_vars = nest + 1
-				var ret = ''
-				var od = this.depth
-				this.depth = this.depth + this.indent
-				ret += '('+this.destruc_prefix+nest+'='+this.destruc_prefix+(nest-1)+acc+')===undefined||('+this.newline+this.depth
-				if(v.type == 'Object') ret += this._destructureObject(v, nest + 1, fn, vars)
-				else ret += this._destructureArray(v, nest + 1, fn, vars)
-				this.depth = od
-				ret += this.newline+this.depth + ')'
-				return ret
-			}
-
-			this._destructureArray = function(arr, nest, fn, vars){
-				var ret = ''
-				var elems = arr.elems
-				var midrest
-				var tmpvar = this.destruc_prefix +(nest - 1)
-				for(var i = 0;i<elems.length;i++){
-					var v = elems[i]
-					if(!v) continue
-					var acc
-					if(midrest){
-						acc = '['+tmpvar+'.length-'+(elems.length - i)+']'
-					}
-					else acc = '[' + i + ']' 
-
-					if(v.type == 'Rest'){
-						if(midrest){
-							throw new Error('cannot have multiple rest variables in one destructure array')
-						}
-						if(!v.id){
-							midrest = i + 1
-							continue
-						}
-						if(v.id.type !=='Id') throw new Error('Unknown rest id type')
-						if(i) ret += ',' + this.newline + this.depth
-						var name = v.id.name 
-						if(vars){ vars.push(v); if(v.flag == 46) name = 'this.'+name}
-						else name = this.resolve(name)
-						// what if we have elems following?
-						ret += name + '=' + tmpvar
-						if(i < elems.length - 1) ret += '.slice('+i+')'
-						else {
-							midrest = i + 1
-							ret += '.slice('+i+',' + (elems.length - i)+')'
-						}
-					}
-					else if(v.type == 'Id') {
-						if(i) ret += ',' + this.newline + this.depth
-						var name = v.name 
-						if(vars){ vars.push(v); if(v.flag == 46) name = 'this.'+name}
-						else name = this.resolve(name)
-						ret += name + '='+ tmpvar + acc
-					} 
-					else if(v.type == 'Object' || v.type == 'Array') {
-						if(i) ret += ',' + this.newline + this.depth
-						ret += this._destructureArrayOrObject(v, acc, nest, fn, vars)
-					}  else throw new Error('Cannot destructure array item '+i)
-				}
-				return ret
-			}
-
-			this._destructureObject = function( obj, nest, fn, vars ){
-				var ret = ''
-				var keys = obj.keys
-				for(var i = 0;i<keys.length;i++){
-					k = keys[i]
-					var acc
-					if(k.key.type == 'Value'){
-						acc = '['+k.key.raw+']'
-					} else acc = '.'+k.key.name
-					var v = k.value
-					if(k.enum){
-						// lets output a prop
-						if(i) ret += ',' + this.newline + this.depth
-						var name = k.key.name 
-						if(vars) vars.push(k.key)
-						else name = this.resolve(name)							
-						ret += name + '='+this.destruc_prefix+(nest - 1)+acc
-					} 
-					else if(v.type == 'Id') {
-						if(i) ret += ',' + this.newline + this.depth
-						var name = v.name 
-						if(vars){ vars.push(v); if(v.flag == 46) name = 'this.'+name}
-						else name = this.resolve(name)
-						ret += name + '='+this.destruc_prefix +(nest - 1)+acc
-					} 
-					else if(v.type == 'Object' || v.type == 'Array') {
-						if(i) ret += ',' + this.newline + this.depth
-						ret += this._destructureArrayOrObject(v, acc, nest, fn, vars)
-					}
-					else throw new Error('Cannot destructure property '+acc)
-				}
-				return ret
-			}
-
-			this.destructure = function( n, left, init, fn, vars, def ){
-				if(!fn) throw new Error('Destructuring assign cant find enclosing function')
-				if(!fn.destruc_vars) fn.destruc_vars = 1
-
-				var ret = ''
-				var olddepth = this.depth
-				this.depth = this.depth + this.indent					
-
-				var oldcmt = this.comments
-				this.comments = 0
-				if( init )
-					ret = '('+this.destruc_prefix+'0='+(def?def+'||':'') + 
-						(typeof init == 'string'?init:this.expand( init, n, true)) + 
-						',('+this.newline+this.depth
-				else{
-					if(!def) throw new Error('Destructuring assignment without init value')
-					ret = '('+this.destruc_prefix+'0='+(def?def:'') +',('+this.newline+this.depth
-				}
-				this.comments = 1
-
-				if( left.type == 'Object' ) ret += this._destructureObject(left, 1, fn, vars)
-				else ret += this._destructureArray(left, 1, fn, vars)
-
-				this.depth = olddepth
-				ret += this.newline+this.depth+'))' + this.comments_or_newline( left )
 				return ret
 			}
 
@@ -2022,31 +2057,32 @@ ONE.ast_ = function(){
 				// obvious string multiply
 				if(n.op == '*' && (((leftstr=n.left.type == 'Value' && n.left.kind == 'string'))||
 					(n.right.type == 'Value' && n.right.kind == 'string'))){
-					if(leftstr) return 'Array('+this.expand(n.right, n,false,').join('+this.expand(n.left,n,false,')'))
-					return 'Array('+this.expand(n.left, n,false,').join('+this.expand(n.right,n,false,')'))
+					if(leftstr) return 'Array('+this.expand(n.right, n,false,').join('+this.expand(n.left, n,false,')'))
+					return 'Array('+this.expand(n.left, n,false,').join('+this.expand(n.right, n,false,')'))
 				} // mathematical modulus
 				else if(n.op == '%%'){
-					ret = 'this.mod(' + this.expand( n.left, n ) + ',' + this.expand( n.right, n, false, ')') 
+					ret = 'this.mod(' + this.expand(n.left, n) + ',' + this.expand(n.right, n, false, ')') 
 				} // floor division
 				else if(n.op == '%/'){
-					ret = 'Math.floor(' + this.expand( n.left, n ) + '/' + this.expand( n.right, n, false, ')') 
+					ret = 'Math.floor(' + this.expand(n.left, n) + '/' + this.expand(n.right, n, false, ')') 
 				}
 				else if(n.op == '**'){
-					ret = 'Math.pow(' + this.expand( n.left, n ) + ',' + this.expand( n.right, n, false, ')') 
+					ret = 'Math.pow(' + this.expand(n.left, n) + ',' + this.expand(n.right, n, false, ')') 
 				} // existential assign
 				else if(n.op == '?='){
-					var left = this.expand( n.left, n )
-					ret = '('+left+'===undefined?('+left+'='+this.expand(n.right)+'):'+left+')'
+					var left = this.expand(n.left, n)
+					ret = '('+left+'===undefined?('+left+'='+this.expand(n.right, n)+'):'+left+')'
 
 				} // normal
-				else if( n.left.op && n.left.prio < n.prio ){
-					ret = '(' + this.expand( n.left, n ) + ')' + this.space + n.op + 
-						this.space + this.expand( n.right, n )
+				else if( n.left.type == 'Condition' || n.right.type == 'Condition' || n.left.op && n.left.prio < n.prio ){
+					ret = this.expand(n.left, n, true) + this.space + n.op + 
+						this.space + this.expand(n.right, n, true)
 				} 
 				else {
+					var rparen =  n.right.op && n.right.prio < n.prio
 					ret = this.expand( n.left, n, false, this.space + n.op )
 					if(ret[ ret.length - 1 ] == '\n') ret += this.indent + this.depth
-					ret += this.space + this.expand( n.right, n )
+					ret += this.space + this.expand(n.right, n, rparen)
 				}
 				if( parens ) return '(' + ret + ')'
 				return ret
@@ -2092,19 +2128,22 @@ ONE.ast_ = function(){
 			}
 
 			// convert new
-			this.New = function( n ){
+			this.New = function( n, parens ){
 				var fn = this.expand( n.fn, n, true )
 				var arg = this.list( n.args, n )
 				if(this.globals[fn]){
 					return 'new ' + fn + '(' + arg + ')'
 				}
 				// forward to Call
+				// WARNING we might have double calls if you fetch
+				// the class via functioncall.
+				return this.Call( n, parens, undefined, true )
 				return  fn + '.new(this'+(arg?', '+arg:arg)+')'
 			}
 
-			this.Call = function( n, parens, extra ){
+			this.Call = function( n, parens, extra, isnew ){
 				var fn  = n.fn
-				fn.parent = this
+				fn.parent = n
 				// assert macro
 				if(fn.type == 'Id' && fn.name == 'assert'){
 					var argl = n.args
@@ -2112,7 +2151,6 @@ ONE.ast_ = function(){
 					var arg = this.expand(argl[0], n)
 					var msg = argl.length>1?this.expand(argl[1], n):'""'
 					var value = 'undefined'
-					var paren
 					if(argl[0].type == 'Logic' && argl[0].left.type !== 'Call'){
 						value = this.expand( argl[0].left, n )
 					}
@@ -2128,13 +2166,10 @@ ONE.ast_ = function(){
 					return '(('+arg+') || '+body+')'
 				}
 
-				// alright so. we need to support splatting arrays into arguments.
-				// lets support a single ...bla 
-				// or ones anywhere using splices?
-				// lets also 'always' do a .call or .apply
 				var args = n.args
 				// add extra args for processing
 				if(extra) args = Array.prototype.concat.apply(args, extra)
+				if(isnew) args = Array.prototype.concat.apply(['this'], args)
 
 				if(fn.type == 'Id'){
 					var name = fn.name
@@ -2178,8 +2213,7 @@ ONE.ast_ = function(){
 						for(var i = 0; i < arglen; i++){
 							var arg = args[i]
 							if(arg.type == 'Rest'){
-								// alright so we check what we have.
-								if(i == 0){
+								if(i == 0){ // is first arg
 									if(arglen == 1){ // we are the only one
 										var id = arg.id
 										if(id === undefined  || id.name == 'arguments'){
@@ -2225,6 +2259,8 @@ ONE.ast_ = function(){
 								else sarg += this.expand(arg, n)
 							}
 						}
+						if(last == 1) sarg += ']'
+						else if(last == 2) sarg += ')'						
 					}
 					else {
 						for(var i = 0; i < arglen; i++){
@@ -2245,25 +2281,36 @@ ONE.ast_ = function(){
 				}
 				else {
 					// check if we are a property chain
-					if(fn.type == 'Key'){
+					if(fn.type == 'Key' || fn.type == 'Index'){
 						if(fn.isKeyChain()){
 							// no tempvar
 							cthis = this.expand(fn.object, fn)
-							call = cthis + '.' + fn.key.name
+							if(fn.type == 'Index') call = cthis + '[' + this.expand(fn.index, fn) + ']'
+							else call = cthis + '.' + fn.key.name
+
 						}
 						else { // we might be a chain on a call.
 							// use a tempvar for the object part of the key
 							this.find_function(n).call_var = 1
 							cthis = this.call_tmpvar
-							call = '('+this.call_tmpvar+'=' + this.expand(fn.object, fn) + ')' +
-								'.' + fn.key.name
+							call = '('+this.call_tmpvar+'=' + this.expand(fn.object, fn) + ')'
+							if(fn.type == 'Index') call +=  '[' + this.expand(fn.index, fn) + ']'
+							else call += '.' + fn.key.name
 						}
 					}
-					else {
+					else if(fn.type == 'Index'){
+
+					}
+					else{
 						cthis = 'this'
 						call = this.expand(fn, n)
 					}
 				}
+				if(isnew){
+					cthis = call
+					call += '.new'	
+				}
+
 				if(isapply) return call +'.apply(' + cthis + (sarg?','+this.space+sarg:'') + ')'
 				return call +'.call(' + cthis + (sarg?','+this.space+sarg:'') + ')'
 			}
