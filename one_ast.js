@@ -544,8 +544,8 @@ ONE.ast_ = function(){
 				if(!noindent) this.depth += this.indent
 				var ret = ''
 				for( var i = 0; i < n.length; i++ ){
-					var b = n[ i ]
-					var blk = this.expand( b, parent )
+					var R = n[ i ]
+					var blk = this.expand( R, parent )
 					if(blk[0] == '(' || blk[0] == '[') ret += this.depth + this.semi + blk
 					else ret += this.depth + blk
 					var ch = ret[ret.length - 1]
@@ -1101,6 +1101,7 @@ ONE.ast_ = function(){
 				Object:1,
 				Array:1, 
 				String:1, 
+				Number:1,
 				Date:1, 
 				Boolean:1,
 				Error:1,
@@ -2428,43 +2429,6 @@ ONE.ast_ = function(){
 
 	}, "AST")
 
-	this.clamp = function(v, min, max){
-		return v < min ? min : ( v > max ? max : v )
-	}
-
-	this.E = Math.E
-	this.LN2 = Math.LN2
-	this.LN10 = Math.LN10
-	this.LOG2E = Math.LOG2E
-	this.LOG10E = Math.LOG10E
-	this.PI = Math.PI
-	this.SQRT1_2 = Math.SQRT1_2
-	this.SQRT2 = Math.SQRT2
-
-	// TODO fix this and add all GLSL functions
-
-	this.abs   = function(v){ return Array.isArray(v)?v.map( Math.abs ):Math.abs(v) }
-	this.acos  = function(v){ return Array.isArray(v)?v.map( Math.acos ):Math.acos(v) }
-	this.asin  = function(v){ return Array.isArray(v)?v.map( Math.asin ):Math.asin(v) }
-	this.atan  = function(v){ return Array.isArray(v)?v.map( Math.atan ):Math.atan(v) }
-	this.sin   = function(v){ return Array.isArray(v)?v.map( Math.sin ):Math.sin(v) }
-	this.cos   = function(v){ return Array.isArray(v)?v.map( Math.cos ):Math.cos(v) }
-	this.tan   = function(v){ return Array.isArray(v)?v.map( Math.tan ):Math.tran(v) }
-	this.sqrt  = function(v){ return Array.isArray(v)?v.map( Math.sqrt ):Math.sqrt(v) }
-	this.ceil  = function(v){ return Array.isArray(v)?v.map( Math.ceil ):Math.ceil(v) }
-	this.floor = function(v){ return Array.isArray(v)?v.map( Math.floor ):Math.floor(v) }
-
-	this.atan2 = function(v){ return Array.isArray(v)?v.map( Math.atan2 ):Math.atan2(v) }
-	this.exp   = function(v){ return Array.isArray(v)?v.map( Math.exp ):Math.exp(v) }
-	this.imul  = function(v){ return Array.isArray(v)?v.map( Math.imul ):Math.imul(v) }
-	this.log   = function(v){ return Array.isArray(v)?v.map( Math.log ):Math.log(v) }
-	this.max   = function(v){ return Array.isArray(v)?v.map( Math.max ):Math.max(v) }
-	this.min   = function(v){ return Array.isArray(v)?v.map( Math.min ):Math.min(v) }
-	this.pow   = function(v){ return Array.isArray(v)?v.map( Math.pow ):Math.pow(v) }
-	this.random= function(v){ return Array.isArray(v)?v.map( Math.random ):Math.random(v) }
-	this.round = function(v){ return Array.isArray(v)?v.map( Math.round ):Math.round(v) }
-	this.mod = function(a,b){ return (a%b+b)%b }
-
 	this.color = (function(){
 		// compressed version of CSS color name lookup table
 		var ci = [130,15792383,388,16444375,5,65535,6,8388564,7,15794175,8,16119260,9,16770244,10,0,1420,16772045,2,255,269,
@@ -2513,7 +2477,7 @@ ONE.ast_ = function(){
 				var c = parseInt(col, 16)
 				if(col.length == 4) return [ ((c&0xf00)>>8|(c&0xf00)>>4) /255, ((c&0xf0)|(c&0xf0)>>4) /255, ((c&0xf)|(c&0xf)<<4) /255 ]
 				else return [ ((c >> 16)&0xff) /255, ((c >> 8)&0xff) /255, (c&0xff) /255 ]
-			}
+			}{}
 			if( typeof col == 'object' && Array.isArray( col ) && (col.length == 3 || col.length == 4) && typeof col[0] == 'number' ) return col
 		}
 	})()
@@ -2521,5 +2485,3 @@ ONE.ast_ = function(){
 	return this
 
 }
-
-

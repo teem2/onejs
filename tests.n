@@ -3,15 +3,16 @@ var assert = load('assert')
 var {Root, Rect} = load('dom')
 
 Dom1(){
+	class MyDiv extends Rect{
+		w = 10
+		h = 10
+		mouseover(){}
+	}
 	Root{
 		init(document.body)
-		class MyDiv extends Rect{
-			w = 10
-			h = 10
-		}
 		profile(3000) do(){
 			MyDiv{
-				fill = [random(),random(),random()]
+				fill = vec3(random(),random(),random())
 				x = random() * 300
 				y = random() * 300
 			}

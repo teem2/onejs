@@ -638,7 +638,7 @@ ONE.base_ = function(){
 			else if(!Array.isArray(this.onSet)) this.onSet = [this.onSet, cb]
 			else this.onSet.push( cb )
 
-			if(this.monitor) this.monitor()
+			if(this.monitor) this.monitor.call( this.owner, cb )
 		}
 
 		this.off = function( cb ){
@@ -693,6 +693,10 @@ ONE.base_ = function(){
 		// set the signal value
 		this.set = function( value ){
 			if(this.ended) throw new Error('Cant set an ended signal')
+
+			if(typeof value == 'function'){
+				return this.on( value )
+			}
 
 			var owner = this.owner
 
@@ -762,6 +766,7 @@ ONE.base_ = function(){
 
 	this.signal = function( key, value, setter ){
 		var signalStore = '__' + key
+		var fastStore = '__$' + key
 		var sig =  this[ signalStore ]
 		if( !sig ){ 
 			sig = this[ signalStore ] = this.Signal.prop( this, key, setter )
@@ -773,11 +778,25 @@ ONE.base_ = function(){
 				get:function(){
 					var sig = this[ signalStore ]					
 					// make an instance copy if needed
-					if( sig.owner != this ) sig = this[ signalStore ] = sig.fork( this )
+					if( sig.owner != this ){
+						sig = this[ signalStore ] = sig.fork( this )
+						if( fastStore in this ) sig.value = this[fastStore]
+					}
 					return sig
 				},
 				set:function(value){
-					var sig = this[ signalStore ]					
+					var sig = this[ signalStore ]
+					// fast path property setter
+					if(!sig.onSet && sig.setter && 
+						(typeof value == 'number' || Array.isArray(value))){
+						if( sig.owner != this ){
+							sig = this[ signalStore ] = Object.create( sig )
+							sig.owner = this
+						}
+						sig.value = value
+						sig.setter.call( this, value )
+						return
+					}
 					// make an instance copy if needed
 					if( sig.owner != this ) sig = this[ signalStore ] = sig.fork( this )
 					sig.set( value )

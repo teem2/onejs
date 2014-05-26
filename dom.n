@@ -63,7 +63,7 @@ class Node{
 		// this is the has own property existential assign
 		if(!hasOwnProperty('_events')) _events = Object.create(_events)
 		_events.onmouseover(e){
-			one_node.$.mouse._mouseover(node, e)
+			one_node.$.mouse._mouseover( one_node, e)
 		}
 	}
 
@@ -71,7 +71,7 @@ class Node{
 	mouseout.monitor(){
 		if(!hasOwnProperty('_events')) _events = Object.create(_events)
 		_events.onmouseout(e){
-			one_node.$.mouse._mouseout( node, e )
+			one_node.$.mouse._mouseout( one_node, e )
 		}
 	}
 
@@ -219,48 +219,56 @@ class Node{
 	}
 
 	x.setter(value){
-		var c = hasOwnProperty('_css') ? _css : ( _css = Object.create(_css) )
 		var v = parseInt(value)
-		c.css_left =  v
 		var s = dom_style
-		if(s) s.left = v
+		if(s){
+			s.left = v
+			return
+		}
+		var c = hasOwnProperty('_css') ? _css : ( _css = Object.create(_css) )
+		c.css_left =  v
 	}
 
 	y.setter(value){
-		var c = hasOwnProperty('_css') ? _css : ( _css = Object.create(_css) )
 		var v = parseInt(value)
-		c.css_top = v
 		var s = dom_style
-		if(s) s.top = v
+		if(s){
+			s.top = v
+			return
+		}
+		var c = hasOwnProperty('_css') ? _css : ( _css = Object.create(_css) )
+		c.css_top = v
 	}
 
 	w.setter(value){
-		var c = hasOwnProperty('_css') ? _css : ( _css = Object.create(_css) )
 		var v = parseInt(value)
-		c.css_width =  v
 		var s = dom_style
-		if(s) s.width = v
+		if(s) return s.width = v
+		var c = hasOwnProperty('_css') ? _css : ( _css = Object.create(_css) )
+		c.css_width =  v
 	}
 	
 	h.setter(value){
-		var c = hasOwnProperty('_css') ? _css : ( _css = Object.create(_css) )
 		var v = parseInt(value)
-		c.css_height = v
 		var s = dom_style
-		if(s) s.height = v
+		if(s) return s.height = v
+
+		var c = hasOwnProperty('_css') ? _css : ( _css = Object.create(_css) )
+		c.css_height = v
 	}
 
 	fill.setter(value){
-		var c = hasOwnProperty('_css') ? _css : ( _css = Object.create(_css) )
 		var s = dom_style
 		var str = '#' + ('000000' + ( ( ( ( ( value[ 0 ]*255 ) & 0xff ) << 8 | ( ( value[ 1 ]*255 ) & 0xff ) ) << 8 ) | ( ( value[ 2 ]*255 ) & 0xff ) ).toString( 16 ) ).slice( -6 )
-		if(c) c.css_background_color = str
-		var a = value[ 3 ]
-		if( a !== undefined ) c.css_opacity = a
 		if(s) {
 			s.backgroundColor = str
 			if( a !== undefined ) s.opacity = a
+			return
 		}
+		var c = hasOwnProperty('_css') ? _css : ( _css = Object.create(_css) )
+		if(c) c.css_background_color = str
+		var a = value[ 3 ]
+		if( a !== undefined ) c.css_opacity = a
 	}
 
 	// the attribute catch sink
@@ -539,53 +547,21 @@ class Mouse{
 		
 		var mouse = this
 
-		function makeMouseSignal( dom, x, y ){
-			var _dom = dom
-			var px = 0
-			var py = 0
-			do {
-				px += _dom.offsetLeft || 0
-				py += _dom.offsetTop  || 0
-				_dom = _dom.offsetParent
-			} while( _dom )
-			var rel = [ ]
-			var abs = [ ]
-			rel.abs = abs
-			rel.rel = rel
-			abs[0] = x
-			abs[1] = y
-			rel[0] = x - px
-			rel[1] = y - py
-			var c
-			if(c = mouse.cap_this){
-				var start = mouse.cap_start
-				rel.cap = [ abs[0] - start[0], abs[1] - start[1] ]
-			}
-			return rel
-		}
-
-		function makeAbsMouseSignal( dom, x, y ){
-			var pos = [x, y]
-			pos.toString = mouse_toString
-			if( dom && dom.one_node ) pos.tgt = dom.one_node
-			return pos
-		}
-
-		window.addEventListener('click', function(e){
+		window.addEventListener('click', e => {
 			var t = e.toElement || e.target
 			mouse.click = makeAbsMouseSignal( t, e.pageX, e.pageY )
 			if( !t || !t.one_node ) return
 			t.one_node.click = makeMouseSignal( t, e.pageX, e.pageY )
 		})
 
-		window.addEventListener('dblclick', function(e){
+		window.addEventListener('dblclick', e => {
 			var t = e.toElement || e.target
 			mouse.dblclick = makeAbsMouseSignal( t, e.pageX, e.pageY )
 			if( !t || !t.one_node ) return
 			t.one_node.dblclk = makeMouseSignal( t, e.pageX, e.pageY )
 		})
 
-		window.addEventListener('mousedown', function(e){
+		window.addEventListener('mousedown', e => {
 			var t = e.toElement || e.target
 
 			if(e.button === 0 ) mouse.left = 1
@@ -602,7 +578,7 @@ class Mouse{
 		})
 
 
-		window.addEventListener('mouseup', function(e){
+		window.addEventListener('mouseup', e => {
 			if(e.button === 0 ) mouse.left = 0
 			if(e.button === 1 ) mouse.middle = 0
 			if(e.button === 2 ) mouse.right = 0
@@ -621,7 +597,7 @@ class Mouse{
 
 		// Fancy mouse interpolation mousemove 
 		var move_last = Date.now()
-		window.addEventListener('mousemove', function(e){
+		window.addEventListener('mousemove', e => {
 			
 			var px = e.pageX
 			var py = e.pageY
@@ -664,7 +640,7 @@ class Mouse{
 				var t = document.elementFromPoint(x1, y1)
 				if(last != t && t && t.one_node){
 					last = t
-					ONE.mouseinterp = - (delta / (1000 * step)) * (step - i)
+					Base.mouseinterp = - (delta / (1000 * step)) * (step - i)
 					t.one_node.mousemove = makeMouseSignal( t, x1, y1 )
 				}
 				x1 -= dx
@@ -673,6 +649,37 @@ class Mouse{
 			mouse._px = px
 			mouse._py = py
 		})
+	}
+
+	makeAbsMouseSignal( dom, x, y ){
+		var pos = [x, y]
+		if( dom && dom.one_node ) pos.tgt = dom.one_node
+		return pos
+	}
+
+	makeMouseSignal( dom, x, y ){
+		var _dom = dom
+		var px = 0
+		var py = 0
+		do {
+			px += _dom.offsetLeft || 0
+			py += _dom.offsetTop  || 0
+			_dom = _dom.offsetParent
+		} while( _dom )
+		var rel = [ ]
+		var abs = [ ]
+		rel.abs = abs
+		rel.rel = rel
+		abs[0] = x
+		abs[1] = y
+		rel[0] = x - px
+		rel[1] = y - py
+		var c
+		if(c = cap_this){
+			var start = cap_start
+			rel.cap = [ abs[0] - start[0], abs[1] - start[1] ]
+		}
+		return rel
 	}
 
 	capture( obj, move, end ){
