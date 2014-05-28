@@ -1,4 +1,4 @@
-
+"use strict"
 // ONEJS AST code generators
 ONE.ast_ = function(){
 
@@ -14,7 +14,6 @@ ONE.ast_ = function(){
 		var node = parserCache[source]
 		if (! node ){
 			node = parser.parse_strict( source )
-			
 			// scan up to pull ret the essential ast node			
 			if(node.steps.length == 1){
 				var cm = node.comments
@@ -79,7 +78,6 @@ ONE.ast_ = function(){
 		// if passing a function we return that
 		if(ast.type == 'Function'){
 			var steps = ast.body.steps
-
 			if(steps && steps[0] && steps[0].flag == 35){
 				var dump = steps[0].name
 				steps.splice(0,1)
@@ -93,7 +91,7 @@ ONE.ast_ = function(){
 			// name anonmous function with a filename if possible
 			var nametag
 			if(filename) nametag = 'file__'+filename.replace(/[\.\/]/g,'_')
-			var code = 'return ' + js.Function( ast, false, nametag )
+			var code = '"use strict";return ' + js.Function( ast, false, nametag )
 			if(dump && dump.indexOf('js')!=-1) ONE.out( code )
 
 			try{
@@ -191,7 +189,7 @@ ONE.ast_ = function(){
 			Program:{ steps:2 },
 			Empty:{},
 
-			Id: { name:0, flag:0, isType:0 },
+			Id: { name:0, flag:0, kind:1 },
 			Type: { name:0 },
 			Value: { value:0, raw:0, kind:0, multi:0 },
 			This: { },
@@ -270,7 +268,7 @@ ONE.ast_ = function(){
 			var ast = this.Structure;
 
 			var ret = ''
-			for( type in ast ){
+			for( var type in ast ){
 				var tag = ast[ type ]
 				var walk = '\tn.parent = p\n'
 
@@ -602,6 +600,7 @@ ONE.ast_ = function(){
 					if(flag === 64) return '@'+n.name
 					if(flag === 35) return '#'+n.name
 				}
+				if(n.kind) return this.expand(n.kind, n) + ' ' + n.name
 				return n.name
 			}
 
@@ -1084,11 +1083,26 @@ ONE.ast_ = function(){
 			}
 		})
 
+		this.typeMap = {
+			bool:   { size:1, view:'Int8' },
+			int8:   { size:1, view:'Int8' },
+			uint8:  { size:2, view:'Uint8' },
+			int16:  { size:2, view:'Int16' },
+			int:    { size:4, view:'Int32' },
+			int32:  { size:4, view:'Int32' },
+			uint32: { size:4, view:'Uint32' },
+			float:  { size:4, view:'Float32' },
+			float32:{ size:4, view:'Float32' },
+			double: { size:8, view:'Float64' },
+			float64:{ size:8, view:'Float64' },
+		}
+
 		this.ToJS = this.ToCode.extend(this, function(outer){
 			
 			this.newline = '\n'
 			this.semi = ';'
 			this.scope = {}
+			this.typelib = Object.create(outer.typeMap)
 			this.promise_catch = 1
 			this.expand_short_object = 1
 			this.destruc_prefix = '_\u0441'
@@ -1220,7 +1234,7 @@ ONE.ast_ = function(){
 				var ret = ''
 				var keys = obj.keys
 				for(var i = 0;i<keys.length;i++){
-					k = keys[i]
+					var k = keys[i]
 					var acc
 					if(k.key.type == 'Value'){
 						acc = '['+k.key.raw+']'
@@ -1433,7 +1447,7 @@ ONE.ast_ = function(){
 
 				var name = n.id.name 
 
-				ret = 'var '+name+' = this.'+name+' = '
+				var ret = 'var '+name+' = this.'+name+' = '
 
 				var olddepth = this.depth
 				this.depth += this.indent
@@ -1453,11 +1467,13 @@ ONE.ast_ = function(){
 
 					if(item.init){
 						if(item.init.type !== 'Value') throw new Error("Unexpected enum assign")
-						ret += this.depth + name + ':' + item.init.raw + (nocomma?'':',')+this.newline
 						last = item.init.value
+						ret += this.depth + ''+last+':"' + name + '",'+this.newline
+						ret += this.depth + name + ':' + item.init.raw + (nocomma?'':',')+this.newline
 					}
 					else{
-						ret += this.depth + name + ':' + (++last) + (nocomma?'':',')+this.newline
+						ret += this.depth + ''+(++last)+':"' + name + '",'+this.newline
+						ret += this.depth + name + ':' + (last) + (nocomma?'':',')+this.newline
 					}
 				}
 				ret += olddepth + '}'
@@ -1717,22 +1733,8 @@ ONE.ast_ = function(){
 						ret += ')'
 					}
 					return ret
-				}else 
-				if(name == 'get' || name == 'set'){
-					var fn = name == 'get' ? '__defineGetter__' : '__defineSetter__'
-					var ret = ''
-					var defs = n.defs
-					var len = defs.length
-					for( var i = 0; i < len; i++ ){
-						var def = defs[i]
-						def.parent = n
-						if(i) ret += this.newline + this.depth
-						if(!def.init || def.init.type !== 'Function') throw new Error('Cannot define non function getter/setter')
-						ret += 'this.'+fn+'("' + def.id.name + '",'+
-							this.expand( def.init, def) + ')'
-					}
-					return ret
 				}
+				// we can define a typevar
 				
 				throw new Error("implement TypeVar")
 			}
@@ -1744,25 +1746,75 @@ ONE.ast_ = function(){
 					var ret = this.destructure(n, n.id, n.init, this.find_function( n ), vars)
 
 					var pre = ''
-					for(var i = 0;i<vars.length;i++){
+					for(var i = 0; i < vars.length; i++){
 						this.scope[ vars[i].name ] = 1
 						if(i) pre += ','+this.space
 						pre += this.expand(vars[i], n)
 					}
 					return pre+','+this.space+this.destruc_prefix+'0='+ret
 				}
-				else if( n.id.type !== 'Id' ) throw new Error('Unknown id type')
+				else if(n.id.type !== 'Id') throw new Error('Unknown id type')
 
-				if( n.dim !== undefined ) throw new Error('Dont know what to do with dimensions')
+				if(n.dim !== undefined) throw new Error('Dont know what to do with dimensions')
 
 				this.scope[ n.id.name ] = 1
 
-				return this.expand( n.id, n ) + 
+				return this.expand(n.id, n) + 
 					(n.init ? this.space+'='+this.space + this.expand(n.init, n) : '')
 			}
 
 			this.Struct = function( n ){
-				throw new Error("implement Struct")
+				// so now what..`
+				// lets parse it and create a typedecl structure
+				// alright what shall we pull out.
+				if(this.typelib[n.id.name]) throw new Error('Cant redefine type ' + n.id.name)
+
+				var type = this.typelib[n.id.name] = {}
+				type.fields = {}
+				type.methods = {}
+				type.size = 0
+				type.view = undefined
+				var steps = n.struct.steps
+				for(var i = 0, il = steps.length; i < il; i++){
+					var step = steps[i]
+
+					// this one adds a field to a struct
+					if(step.type == 'TypeVar'){
+						// lets fetch the size
+						var kind = step.kind.name
+						var field = this.typelib[kind]
+						if(!field) throw new Error('Cant find type ' + step.kind.name )
+						// lets add all the defs as fields
+						var defs = step.defs
+						for(var j = 0, jl = defs.length; j < jl; j++){
+							var def = defs[j]
+							// create field
+							var name = def.id.name
+							if(name in type.fields) throw new Error('Cant redefine field ' + name)
+							var fieldcpy = type.fields[name] = Object.create(field)
+							fieldcpy.off = type.size
+							type.size += field.size
+							if(type.view === undefined){
+								type.view = field.view
+							}
+							else if(type.view !== field.view){
+								throw new Error('Dont support mixed type structs yet in JS')
+								type.view = 0
+							}
+						}
+					}
+					// this one adds a method
+					else if (step.type == 'Function'){
+						// store the function on the struct
+						var name = step.name.name
+						if(name in type.methods) type.methods[name].push(step)
+						else type.methods[name] = [step]
+					}
+					else {
+						throw new Error('Cannot use ' + step.type + ' in struct definition')
+					}
+				}
+				return ''
 			}
 
 			this.Class = function( n ){
@@ -1871,13 +1923,22 @@ ONE.ast_ = function(){
 
 				var ret = ''
 				var isvarbind
+				var isgetset
 				if(n.name){
 					if(n.name.name == 'bind' && !n.name.flag){
 						ret += '('
 						isvarbind = true
 					} 
 					else {
-						ret += this.expand(n.name, n) + this.space + '=' + this.space
+						var kind = n.name.kind
+						if(kind && (kind.name == 'get' || kind.name == 'set')){
+							if(kind.name == 'get') ret += 'this.__defineGetter__("'
+							else ret += 'this.__defineSetter__("'
+							ret += n.name.name+'",'
+							isgetset = true
+						}
+						else 
+							ret += this.expand(n.name, n) + this.space + '=' + this.space
 					}
 				}
 
@@ -1934,7 +1995,7 @@ ONE.ast_ = function(){
 					ret += ')'
 				}
 				else if( bind )ret += '.bind(this)'
-
+				if(isgetset) ret += ')'
 				if(isvarbind){
 					ret += ').call(this'
 					for(var i = 0; i < plen;i ++){
@@ -2036,7 +2097,7 @@ ONE.ast_ = function(){
 			}
 
 			this.Assign = function( n, parens ){
-
+				var ret = ''
 				if(n.left.type == 'Object' || n.left.type == 'Array'){
 					return this.destructure(n, n.left, n.right, this.find_function( n ))
 				}

@@ -1,3 +1,4 @@
+"use strict"
 // ONEJS JS and GLSL Math mappings and matrices
 
 ONE.math_ = function(){
@@ -119,7 +120,7 @@ ONE.math_ = function(){
 		return Math.sqrt(x * x + y * y)
 	}
 
-	this.vec2.length = function( V ){
+	this.vec2.len = function( V ){
 		var x = V[0], y = V[1]
 		return Math.sqrt(x * x + y * y)
 	}
@@ -500,7 +501,7 @@ ONE.math_ = function(){
 		return Math.sqrt(x * x + y * y + z * z)
 	}
 
-	this.vec3.length = function( V ){
+	this.vec3.len = function( V ){
 		var x = V[0], y = V[1], z = V[2]
 		return Math.sqrt(x * x + y * y + z * z)
 	}
@@ -862,7 +863,7 @@ ONE.math_ = function(){
 		return Math.sqrt(x * x + y * y + z * z + w * w)
 	}
 
-	this.vec4.length = function( V ){
+	this.vec4.len = function( V ){
 		var x = V[0], y = V[1], z = V[2], w = V[3]
 		return Math.sqrt(x * x + y * y + z * z + w * w)
 	}
@@ -2089,7 +2090,7 @@ ONE.math_ = function(){
 		return O
 	}
 
-	this.quat.length = this.vec4.length
+	this.quat.len = this.vec4.len
 	this.quat.normalize = this.vec4.normalize;
 
 	this.quat.fromMat3 = function( M, O ){

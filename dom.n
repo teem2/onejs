@@ -259,16 +259,18 @@ class Node{
 
 	fill.setter(value){
 		var s = dom_style
-		var str = '#' + ('000000' + ( ( ( ( ( value[ 0 ]*255 ) & 0xff ) << 8 | ( ( value[ 1 ]*255 ) & 0xff ) ) << 8 ) | ( ( value[ 2 ]*255 ) & 0xff ) ).toString( 16 ) ).slice( -6 )
+		//var str = '#' + ('000000' + ( ( ( ( ( value.getFloat32(0)*255 ) & 0xff ) << 8 | ( ( value.getFloat32(4)*255 ) & 0xff ) ) << 8 ) | ( ( value.getFloat32(8)*255 ) & 0xff ) ).toString( 16 ) ).slice( -6 )
+		var str = '#' + ('000000' + ( ( ( ( ( value[0]*255 ) & 0xff ) << 8 | ( ( value[1]*255 ) & 0xff ) ) << 8 ) | ( ( value[2]*255 ) & 0xff ) ).toString( 16 ) ).slice( -6 )
+
 		if(s) {
 			s.backgroundColor = str
-			if( a !== undefined ) s.opacity = a
+			//if( a !== undefined ) s.opacity = a
 			return
 		}
 		var c = hasOwnProperty('_css') ? _css : ( _css = Object.create(_css) )
 		if(c) c.css_background_color = str
-		var a = value[ 3 ]
-		if( a !== undefined ) c.css_opacity = a
+		var a = value.getFloat32(3)
+		if( a ) c.css_opacity = a
 	}
 
 	// the attribute catch sink
@@ -327,7 +329,7 @@ class Node{
 	
 	set html( value ){
 		_html = value
-		if(dom_node) dom.innerHTML = value
+		if(dom_node) dom_node.innerHTML = value
 	}
 	
 	get html(){

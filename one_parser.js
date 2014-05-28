@@ -1,4 +1,4 @@
-
+"use strict"
 //  ONEJS parser
 // 
 //  Parts Copyright (C) 2014 ONEJS
@@ -251,10 +251,10 @@ ONE.parser_strict_ = function(){
 
 	// These are the general types. 
 
-	this._num = {type: "num"}
-	this._regexp = {type: "regexp"}
-	this._string = {type: "string"}
-	this._name = {type: "name"}
+	this._num = {type: "num", canInj:1}
+	this._regexp = {type: "regexp", canInj:1}
+	this._string = {type: "string", canInj:1}
+	this._name = {type: "name", canInj:1}
 	this._eof = {type: "eof"}
 	// templated string type
 	this._template = {}
@@ -298,52 +298,11 @@ ONE.parser_strict_ = function(){
 	this._new = {keyword: "new", beforeExpr: true}
 	this._this = {keyword: "this"}
 
-	// allow for type defs
-	this.typeKeywords = {
-		float:1,
-		double:1,
-		bool:1,
-		int:1,
-		enum:1,
-		uint:1,
-		bvec2:1,
-		bvec3:1,
-		bvec4:1,
-		ivec2:1,
-		ivec3:1,
-		ivec4:1,
-		uvec2:1,
-		uvec3:1,
-		uvec4:1,
-		dvec2:1,
-		dvec3:1,
-		dvec4:1,
-		vec2:1,
-		vec3:1,
-		vec4:1,
-		mat2x2:1,
-		mat2x3:1,
-		mat2x4:1,
-		mat3x2:1,
-		mat3x3:1,
-		mat3x4:1,
-		mat4x2:1,
-		mat4x3:1,
-		mat4x4:1,
-		mat2:1,
-		mat3:1,
-		mat4:1,
-		mixer:1,
-		signal:1,
-		struct:1,
-		get:1,
-		set:1,
-		local:1
-	}
-
 	// class extends 
 	this._extends = {keyword:"extends"}
 	this._class = {keyword:"class"}
+	this._struct = {keyword:"struct"}
+	this._enum = {keyword:"enum"}
 
 	// The keywords that denote values.
 	this._null = {keyword: "null", isValue:1, atomValue: null}
@@ -365,22 +324,22 @@ ONE.parser_strict_ = function(){
 	this._delete = {keyword: "delete", prefix: true, beforeExpr: true}
 
 	// Punctuation token types.
-	this._bracketL = {type: "[", beforeExpr: true}
+	this._bracketL = {type: "[", beforeExpr: true, canInj:1}
 	this._bracketR = {type: "]"}
-	this._braceL = {type: "{", beforeExpr: true}
+	this._braceL = {type: "{", beforeExpr: true, canInj:1}
 	this._braceR = {type: "}"}
-	this._parenL = {type: "(", beforeExpr: true}
+	this._parenL = {type: "(", beforeExpr: true, canInj:1}
 	this._parenR = {type: ")"}
 	this._comma = {type: ",", beforeExpr: true}
 	this._semi = {type: ";", beforeExpr: true}
 	this._colon = {type: ":", prefix: 1, beforeExpr: true}
 	this._doublecolon = {type:"::"}
-	this._dot = {type: "."}
+	this._dot = {type: ".", canInj:1}
 	this._dotdot = {type: ".."}
 	this._tripledot = {type: "..."}
 
 	this._existkey = {type: "?."}
-	this._existor = {type: "?|", binop:1, beforeExpr:true}
+	this._existor = {type: "?|", binop:1, beforeExpr:true, logic:1}
 	this._existeq = {type: "?=",isAssign: true, binop:0, beforeExpr: true}
 	this._wtfeq = {type: "??=",isAssign: true, binop:0, beforeExpr: true}
 	this._wtf = {type: "??", binop:1, beforeExpr:true}
@@ -412,13 +371,13 @@ ONE.parser_strict_ = function(){
 	this._notxor = {prefix: true, beforeExpr: true}
 	this._exists = {prefix: true, beforeExpr: true}
 
-	this._logicalOR = {binop: 1, beforeExpr: true}
-	this._logicalAND = {binop: 2, beforeExpr: true}
+	this._logicalOR = {binop: 1, beforeExpr: true, logic:1}
+	this._logicalAND = {binop: 2, beforeExpr: true, logic:1}
 	this._bitwiseOR = {binop: 3, beforeExpr: true}
 	this._bitwiseXOR = {binop: 4, beforeExpr: true}
 	this._bitwiseAND = {binop: 5, prefix:true, beforeExpr: true}
-	this._equality = {binop: 6, beforeExpr: true}
-	this._relational = {binop: 7, beforeExpr: true}
+	this._equality = {binop: 6, beforeExpr: true, logic:1}
+	this._relational = {binop: 7, beforeExpr: true, logic:1}
 	this._bitShift = {binop: 8, beforeExpr: true}
 	this._plusMin = {binop: 9, prefix: true, beforeExpr: true}
 	this._multiplyModulo = {binop: 10, prefix:true, beforeExpr: true}
@@ -486,11 +445,11 @@ ONE.parser_strict_ = function(){
 	this.initKeywords = function(){
 		var isKeyword = ''
 		this.keywordTypes = {}
-		var tokTypes = {}
-		for( k in this ){
+		this.tokTypes = {}
+		for( var k in this ){
 			var v = this[ k ]
 			if(k[0] == '_' && (v.binop || v.type || v.keyword)){ // its a token
-				tokTypes[ k.slice(1) ] = v
+				this.tokTypes[ k.slice(1) ] = v
 				if(v.keyword){
 					this.keywordTypes[ v.keyword ] = v
 					isKeyword += (isKeyword.length?' ':'') + v.keyword
@@ -576,7 +535,7 @@ ONE.parser_strict_ = function(){
 	this.finishToken = function(type, val) {
 		this.tokEnd = this.tokPos
 		this.tokType = type
-		this.tokIsType = this.typeKeywords[val]
+		//this.tokIsType = this.typeKeywords[val]
 		this.skipSpace()
 		this.tokVal = val
 		this.tokRegexpAllowed = type.beforeExpr
@@ -1446,7 +1405,8 @@ ONE.parser_strict_ = function(){
 	this.switchLabel = {kind: "switch"}
 
 	// parse array dimensions
-	this.parseDims = function( node, check ) {
+	/*
+	this.parseDims = function( node, check ){
 		 if( this.eat(this._bracketL) ){
 			if( check && check.dim !== undefined ) this.unexpected()
 			if( this.tokType == this._num ){
@@ -1459,12 +1419,12 @@ ONE.parser_strict_ = function(){
 			else node.dim = 0
 			if( !this.eat(this._bracketR) ) this.unexpected()
 		}
-	}
+	}*/
 
 	// parse function args or variable defines with inits
 	// and destructuring and and and it makes coffee too.
-	this.parseDefs = function( noIn, node ) {
-		var defs = []
+	this.parseDefs = function( noIn, defs ){
+		defs = defs || []
 
 		for (;;) {
 			var def
@@ -1474,14 +1434,14 @@ ONE.parser_strict_ = function(){
 				def = this.startNode()
 				def.id = this.parseArray()
 				if(this.eat(this._eq)){
-					def.init = this.parseExpression(true, noIn)
+					def.init = this.parseNoCommaExpression(noIn)
 				}
 			} 
 			else if(this.tokType == this._braceL){ // destructure array
 				def = this.startNode()
 				def.id = this.parseObj()
 				if(this.eat(this._eq)){
-					def.init = this.parseExpression(true, noIn)
+					def.init = this.parseNoCommaExpression(noIn)
 				}
 			} 
 			else if(this.tokType !== this._name)break
@@ -1495,14 +1455,14 @@ ONE.parser_strict_ = function(){
 				// dont allow newline before a function-init
 
 				if( !this.lastSkippedNewlines && this.tokType == this._parenL){
-					var fn = this.startNode()
-					def.init = this.parseFunction(fn)
-					def.init.arrow = '->'
+					def.init = this.parseCall(def.id)
+					// remove the name as its duplicate
+					def.init.name = undefined
 				}
 				else {
-					this.parseDims(def, node)
+					//this.parseDims(def, node)
 					if(this.eat(this._eq)){
-						def.init = this.parseExpression(true, noIn)
+						def.init = this.parseNoCommaExpression(noIn)
 					}
 				}
 			}
@@ -1521,7 +1481,7 @@ ONE.parser_strict_ = function(){
 		var type = 'TypeVar'
 		this.next()
 
-		node.kind = this.finishNode(kind_node, 'Type')
+		node.kind = this.finishNode(kind_node, 'Id')
 
 		// if we are a struct, we can this.eat a struct identifier or a {
 		if( kind === "struct"){
@@ -1554,7 +1514,7 @@ ONE.parser_strict_ = function(){
 					enm.id = this.parseIdent(true)
 				}
 				if(this.eat(this._eq)){
-					enm.init = this.parseExpression(true)
+					enm.init = this.parseNoCommaExpression()
 				}
 				node.enums.push(this.finishNode(enm, "Def"))
 				if(!this.canInjectComma(this.tokType) && !this.eat(this._comma)){
@@ -1603,14 +1563,6 @@ ONE.parser_strict_ = function(){
 		if (this.tokType === this._slash || this.tokType === this._assign && this.tokVal == "/=")
 			this.readToken(true)
 
-		if( this.tokIsType ){
-			// allow the types to fall back to being an identifier if they are not used
-			// as a type definition
-			if(this.isIdentifierStart( this.input.charCodeAt(this.tokPos) ) ){
-				return this.parseTypeVar()
-			}
-		}
-
 		var starttype = this.tokType, node = this.startNode()
 
 		this.currentStatement = node
@@ -1644,6 +1596,45 @@ ONE.parser_strict_ = function(){
 			node.test = this.parseParenExpression()
 			this.semicolon()
 			return this.finishNode(node, "DoWhile")
+
+		case this._struct:
+			this.next()
+			if( this.tokType !== this._name ) this.unexpected()
+			node.id = this.parseIdent()
+			node.struct = this.parseBlock()
+			return this.finishNode(node, "Struct")
+		
+		case this._enum:
+			this.next()
+			node.id = this.parseIdent()
+			this.expect(this._braceL)
+			node.enums = []
+			for(;;){
+				if(this.tokType == this._braceR) break
+				var enm = this.startNode()
+				if(this.tokType == this._string){
+					var str = this.startNode()
+					str.kind = "string"
+					str.value = this.tokVal
+					str.multi = this.isMultiLine
+					str.raw = this.input.slice(this.tokStart, this.tokEnd)
+					this.finishNode(str, 'Value')
+					this.next()
+					enm.id = str
+				} 
+				else{
+					enm.id = this.parseIdent(true)
+				}
+				if(this.eat(this._eq)){
+					enm.init = this.parseNoCommaExpression()
+				}
+				node.enums.push(this.finishNode(enm, "Def"))
+				if(!this.canInjectComma(this.tokType) && !this.eat(this._comma)){
+					break
+				}
+			}
+			this.expect(this._braceR)
+			return this.finishNode(node, "Enum")
 
 			// Disambiguating between a `for` and a `for`/`in` loop is
 			// non-trivial. Basically, we have to parse the init `var`
@@ -1706,7 +1697,7 @@ ONE.parser_strict_ = function(){
 					node.cases.push(cur = this.startNode())
 					cur.then = []
 					this.next()
-					if (isCase) cur.test = this.parseExpression(false, false, true)
+					if (isCase) cur.test = this.parseExpression(false, true)
 					else {
 						if (sawDefault) this.raise(this.lastStart, "Multiple default clauses"); sawDefault = true
 						cur.test = null
@@ -1787,25 +1778,21 @@ ONE.parser_strict_ = function(){
 			this.next()
 			return this.finishNode(node, "Empty")
 
-			// If the statement does not start with a statement keyword or a
-			// brace, it's an ExpressionStatement or LabeledStatement. We
-			// simply start parsing an expression, and afterwards, if the
-			// next token is a colon and the expression was a simple
-			// Identifier node, we switch to interpreting it as a label.
-
 		default:
-			var maybeName = this.tokVal, expr = this.parseExpression()
+			var maybeName = this.tokVal, expr = this.parseExpression(false, false, true)
+
 			if (starttype === this._name && expr.type === "Id" && this.eat(this._colon)) {
 				node.left = expr
 				if(this.eat(this._eq)) node.lazy = 0
 				else node.lazy = 1
 
 				if(this.tokType != this._braceR && !this.lastSkippedNewlines){
-					node.right = this.parseExpression(true)
+					node.right = this.parseNoCommaExpression()
 				}
 				this.eat(this._comma)
 				return this.finishNode(node, "Signal")
-			} else {
+			} 
+			else {
 				if(this.tokType != this._else) this.semicolon()
 				return expr
 			}
@@ -1860,7 +1847,7 @@ ONE.parser_strict_ = function(){
 			this.next()
 			// if we dont have a paren, we switch to if .. then
 			if( this.tokType !== this._parenL ){
-				node.test = this.parseExpression(true)
+				node.test = this.parseNoCommaExpression()
 				if( this.tokVal != 'then' ) this.unexpected()
 				this.next()
 			} else {
@@ -1898,7 +1885,7 @@ ONE.parser_strict_ = function(){
 
 			return this.parseFor(node, init)
 		}
-		var init = this.parseExpression(false, true)
+		var init = this.parseExpression(true)
 
 		if (this.eat(this._in)) return this.parseForIn(node, init, compr)
 		if (this.eat(this._to)) return this.parseForTo(node, init, compr)
@@ -1939,9 +1926,9 @@ ONE.parser_strict_ = function(){
 	this.parseForTo = function(node, init, compr) {
 
 		node.left = init
-		node.right = this.parseExpression(true, true)
+		node.right = this.parseNoCommaExpression(true)
 		if( this.eat(this._in) ){
-			node.in = this.parseExpression(true, true)
+			node.in = this.parseNoCommaExpression(true)
 		}
 		this.expect(this._parenR)
 		if(compr){
@@ -1993,16 +1980,8 @@ ONE.parser_strict_ = function(){
 	this.canInjectComma = function( type ) {
 		return  this.injectCommas && 
 			this.lastSkippedNewlines && (
-			type === this._name || 
-			type === this._braceL ||
-			type === this._bracketL ||
-			type === this._parenL || 
-			type === this._num || 
-			type === this._string ||
-			type === this._regexp || 
-			type === this._dot ||
+			type.canInj ||
 			type.isValue ||
-			type.isType ||
 			type.prefix)
 	}
 
@@ -2018,27 +1997,75 @@ ONE.parser_strict_ = function(){
 	// sequences (in argument lists, array literals, or object literals)
 	// or the `in` operator (in for loops initalization expressions).
 
-	this.parseExpression = function(noComma, noIn, termColon) {
+	this.parseExpression = function(noIn, termColon, inStatement) {
 
-		var expr = this.parseMaybeQuote(noIn, termColon)
-		
-		if ( (this.tokType !== this._colon || !termColon) && !noComma && this.tokType === this._comma ) {
+		var expr = this.parseMaybeQuote(noIn)
 
+		// parse float x, y to be a TypeVar not (float x), y
+		if(inStatement && (
+			expr.type == 'Index' && expr.object.kind ||
+			expr.type == 'Id' && expr.kind || 
+			expr.type == 'Assign' && expr.left.kind || 
+			expr.type == 'Call' && expr.fn.kind)){
+			// lets convert to something that looks like a var decl
+
+			var node = this.startNodeFrom(expr)
+			var defs = node.defs = []
+			if(expr.type == 'Index'){ // lets rewrite the syntax
+				this.raise(node.start, "Please use 'type[] x', not 'type x[]' for array types")
+			}
+			else if(expr.type == 'Assign'){
+				// make an init def
+				node.kind = expr.left.kind
+				expr.left.kind = undefined
+				var def = this.startNodeFrom(expr)
+				def.id = expr.left
+				def.init = expr.right
+				defs[0] = this.finishNode(def, "Def")
+			}
+			else if(expr.type == 'Call'){
+				// make a call init def
+				node.kind = expr.fn.kind
+				expr.fn.kind = undefined
+				var def = this.startNodeFrom(expr)
+				def.id = expr.fn
+				expr.name = undefined
+				def.init = expr
+				defs[0] = this.finishNode(def, "Def")
+			}
+			else {
+				// normal def
+				node.kind = expr.kind
+				expr.kind = undefined
+				def = this.startNodeFrom(expr)
+				def.id = expr
+				defs[0] = this.finishNode(def, "Def")
+			}
+			if(this.tokType === this._comma){
+				this.eat(this._comma)
+				this.parseDefs(noIn, defs)
+			}
+			return this.finishNode(node, 'TypeVar')
+		}
+
+		if(this.tokType === this._comma){
 			var node = this.startNodeFrom(expr)
 			node.items = [expr]
 
-			while( (this.tokType !== this._colon || !termColon) && this.eat(this._comma)) {
-				if( this.tokType === this._else ) break
+			while(this.eat(this._comma)){
+				if(this.tokType === this._else) break
 				node.items.push(this.parseMaybeQuote(noIn, termColon))
 			}
-			//while (this.eat(this._comma)) node.expressions.push(this.parseMaybeAssign(noIn))
 			return this.finishNode(node, "List")
 		}
 		return expr
 	}
 
-	// parse quoting of expressions
+	this.parseNoCommaExpression = function(noIn) {
+		return this.parseMaybeQuote(noIn)
+	}
 
+	// parse quoting of expressions
 	this.parseMaybeQuote = function(noIn) {
 		if(this.tokType == this._colon ){
 			var node = this.startNode()
@@ -2073,9 +2100,9 @@ ONE.parser_strict_ = function(){
 		if (this.eat(this._question)) {
 			var node = this.startNodeFrom(expr)
 			node.test = expr
-			node.then = this.parseExpression(true)
+			node.then = this.parseNoCommaExpression(noIn)
 			this.expect(this._colon)
-			node.else = this.parseExpression(true, noIn)
+			node.else = this.parseNoCommaExpression(noIn)
 			return this.finishNode(node, "Condition")
 		}
 		return expr
@@ -2105,12 +2132,7 @@ ONE.parser_strict_ = function(){
 				var op = this.tokType.replaceOp || this.tokType
 				this.next()
 				node.right = this.parseExprOp(this.parseMaybeUnary(), prec, noIn)
-				var exprNode = this.finishNode(node, 
-					(op === this._logicalOR ||
-					 op === this._logicalAND || 
-					 op === this._relational || 
-					 op === this._equality ||
-					 op === this._existor ) ? "Logic" : "Binary")
+				var exprNode = this.finishNode(node, op.logic ? "Logic" : "Binary")
 				return this.parseExprOp(exprNode, minPrec, noIn)
 			}
 		}
@@ -2154,16 +2176,41 @@ ONE.parser_strict_ = function(){
 		return this.parseSubscripts(this.parseExprAtom())
 	}
 
+	this.bench = {}
+
 	this.parseSubscripts = function(base, noCalls) {
-		
-		if (this.tokType == this._dot) {
+
+		switch(this.tokType){
+		case this._bracketL:
+			// we also dont do this._bracketL on new line
+			if( this.lastSkippedNewlines ) return base
+			this.eat(this._bracketL)
+			var node = this.startNodeFrom(base)
+			node.object = base
+			if( this.tokType != this._bracketR){
+				node.index = this.parseExpression()
+			}
+			this.expect(this._bracketR)
+			return this.parseSubscripts(this.finishNode(node, "Index"), noCalls)
+
+		case this._dot:
 			this.eat(this._dot)
 			var node = this.startNodeFrom(base)
 			node.object = base
 			node.key = this.parseIdent(true)
 			return this.parseSubscripts(this.finishNode(node, "Key"), noCalls)
-		} 
-		else if (this.tokType == this._existkey) {
+		
+		case this._bracketR:
+		case this._multiplyModulo:
+		case this._parenR:
+		case this._comma:
+			return base
+		
+		case this._parenL:
+			if(noCalls) return base
+			return this.parseCall( base )
+
+		case this._existkey:
 			this.eat(this._existkey)
 			var node = this.startNodeFrom(base)
 			node.object = base
@@ -2173,8 +2220,22 @@ ONE.parser_strict_ = function(){
 			node.key = this.parseIdent(true)
 			node.exist = 1
 			return this.parseSubscripts(this.finishNode(node, "Key"), noCalls)
-		} 
-		else if (this.tokType == this._dotdot){
+		case this._string:
+		case this._name:
+			if( this.lastSkippedNewlines ) return base
+			// alright we might be a type annotation.
+			// we only support a base which is a Id
+			// or an Index or a Key
+			if(base.type !== 'Id' && base.type !== 'Index' && base.type !== 'Key')
+				return base
+			if(base.kind) this.raise(base.start, "Chaining multiple types has no purpose(yet)")
+			var node = this.startNodeFrom(base)
+			node.kind = base
+			node.name = this.tokVal
+			this.eat(this._name) || this.eat(this._string)
+			return this.parseSubscripts(this.finishNode(node, "Id"))
+
+		case this._dotdot:
 			if( this.lastSkippedNewlines ) return base
 			this.eat(this._dotdot)
 			base.store = base.store || 0
@@ -2187,63 +2248,51 @@ ONE.parser_strict_ = function(){
 				return this.parseSubscripts(this.finishNode(node, "Key"), noCalls)
 			}
 			return this.parseSubscripts(base, noCalls)
-		}
-		else if (this.tokType == this._notxor){
+
+		case this._notxor:
 			if( this.lastSkippedNewlines ) return base
 			if(this.tokVal == '!') base.store |= 2
 			else base.store |= 4
 			this.eat(this._notxor)
 			base.store = base.store || 0
 			return base
-		}
-		else if (this.tokType == this._bracketL) {
-			// we also dont do this._bracketL on new line
-			if( this.lastSkippedNewlines ) return base
-			this.eat(this._bracketL)
-			var node = this.startNodeFrom(base)
-			node.object = base
-			if( this.tokType != this._bracketR){
-				node.index = this.parseExpression()
-			}
-			this.expect(this._bracketR)
-			return this.parseSubscripts(this.finishNode(node, "Index"), noCalls)
-		} 
-		else if(this.tokType == this._doublecolon){
+
+
+		case this._doublecolon:
 			this.eat(this._doublecolon)
 			var node = this.startNodeFrom(base)
 			node.object = base
 			node.key = this.parseIdent(true)
 			return this.parseSubscripts(this.finishNode(node, "ThisCall"), noCalls)
-		} 
-		else if (this.tokType == this._braceL && !noCalls){
-
+		
+		case this._braceL:
 			// we also dont do this._braceL on new line
-			if( this.lastSkippedNewlines ) return base
+			if( noCalls || this.lastSkippedNewlines ) return base
 			
 			// we have to figure out if we are a Function or not.
 			// if base has parens, we are a short arrow funciton
 			if(base.parens || base.type == 'Call'){
 				var node = this.startNodeFrom(base)
-				node.arrow = '->'
+				//node.arrow = '->'
 				return this.parseArrowFunction(node, base)
 			} 
 			else {
 				var node = this.startNodeFrom(base)
 				node.fn = base
-				node.arrow = '->'
+				//node.arrow = '->'
 				node.body = this.parseBlock(true)
 				return this.parseSubscripts(this.finishNode(node, "Create"), noCalls)
 			}
-		} 
-		else if( this.tokType == this._thinArrow || this.tokType == this._fatArrow || this.tokType == this._thinArrow ){
+		case this._thinArrow:
+		case this._fatArrow:
 			// you cant separate an arrow from its args with a this.newline
 			if( this.lastSkippedNewlines ) return base
 			var node = this.startNodeFrom(base)
 			node.arrow = this.tokType.type
 			this.next()
 			return this.parseArrowFunction(node, base)
-		} 
-		else if( this.tokType == this._do ){
+
+		case this._do:
 			// do on next line followed by { } is interpreted as the JS do/while
 			if( this.lastSkippedNewlines && this.input.charCodeAt(this.tokPos) == 123)return base
 			// if we are a catch, we must scan up to
@@ -2252,10 +2301,10 @@ ONE.parser_strict_ = function(){
 			node.call = base
 			node.kind = this.tokVal
 			this.next()
-			node.arg = this.parseExpression()
+			node.arg = this.parseNoCommaExpression()
 			// we can parse other _do's or catch's
 			if(this.eat(this._catch)){
-				node.catch = this.parseExpression()
+				node.catch = this.parseNoCommaExpression()
 			}
 
 			if(this.tokType == this._name && this.tokVal == 'then'){
@@ -2271,12 +2320,9 @@ ONE.parser_strict_ = function(){
 			}
 			return this.finishNode( node, 'Do')
 		} 
-		else if (!noCalls && this.tokType == this._parenL) {
-			return this.parseCall( base )
-		} 
-		else return base
+		return base
 	}
-	
+
 	this.parseCall = function(base){
 		if( this.lastSkippedNewlines ) return base
 		this.eat(this._parenL)
@@ -2292,9 +2338,7 @@ ONE.parser_strict_ = function(){
 	// or `{}`.
 
 	this.parseExprAtom = function() {
-
-		if( this.tokType.isType ) return this.parseType()
-
+	
 		switch (this.tokType) {
 		case this._this:
 			var node = this.startNode()
@@ -2308,6 +2352,13 @@ ONE.parser_strict_ = function(){
 			this.tokType = this._name
 			return this.parseIdent()
 		case this._name:
+			if(!this.skippedNewlines && this.isIdentifierStart( this.input.charCodeAt(this.tokPos) )){
+				// this is a typed identifier
+				var kind = this.parseIdent()
+				var node = this.parseIdent()
+				node.kind = kind
+				return node
+			}
 			return this.parseIdent()
 		case this._num: 
 			var node = this.startNode()
@@ -2491,7 +2542,7 @@ ONE.parser_strict_ = function(){
 			var prop = {key: this.parsePropertyName()}, isGetSet = false, kind
 			
 			if (this.eat(this._colon)) {
-				prop.value = this.parseExpression(true)
+				prop.value = this.parseNoCommaExpression()
 				kind = prop.kind = "init"
 			} else if (this.ecmaVersion >= 5 && prop.key.type === "Id" &&
 								 (prop.key.name === "get" || prop.key.name === "set")) {
@@ -2577,7 +2628,7 @@ ONE.parser_strict_ = function(){
 			} 
 		} 
 		if(this.tokType == this._braceL) node.body = this.parseBlock(true)
-		else  node.body = this.parseExpression(true)
+		else  node.body = this.parseNoCommaExpression()
 
 		return this.finishNode(node, 'Function')
 	}
@@ -2639,18 +2690,9 @@ ONE.parser_strict_ = function(){
 				if (allowTrailingComma && this.allowTrailingCommas && this.eat(close)) break
 			} else first = false
 			if (allowEmpty && this.tokType === this._comma) elts.push(null)
-			else elts.push(this.parseExpression(true))
+			else elts.push(this.parseNoCommaExpression())
 		}
 		return elts
-	}
-
-	// Parse the next token as a type
-	this.parseType = function() {
-		var node = this.startNode()
-		if( !this.tokType.isType ) this.unexpected()
-		node.name = this.tokType.keyword
-		this.next()
-		return this.finishNode(node, "Type")
 	}
 
 	// Parse the next token as an identifier. If `liberal` is true (used

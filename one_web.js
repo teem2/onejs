@@ -1,7 +1,8 @@
+"use strict"
 // ONEJS Runtime
 // Copyright (C) 2014 ONEJS 
 
-ONE = {}
+window.ONE = {}
 
 // Bootstrap code for the browser, started at the bottom of the file
 ONE.browser_boot_ = function(){

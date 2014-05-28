@@ -12,7 +12,7 @@ Dom1(){
 		init(document.body)
 		profile(3000) do(){
 			MyDiv{
-				fill = vec3(random(),random(),random())
+				fill = vec3(random(), random(), random())
 				x = random() * 300
 				y = random() * 300
 			}
@@ -22,7 +22,7 @@ Dom1(){
 
 Signals(){
 	var t = Base{
-		x: 10,
+		x: 10
 		y: x + 10
 		assert( y == 20 )
 		x:20
@@ -231,11 +231,11 @@ Language(){
 	// getter setter syntax
 	class getset{
 		var v
-		get gs(){ return v }
+		get gs(){ return v + 10 }
 		set gs(e){ v = e }
 	}
 	var val = getset{ gs = 20 }.gs
-	assert( val == 20 )
+	assert( val == 30 )
 
 	// const
 	const cst = 10

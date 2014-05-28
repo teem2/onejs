@@ -1,4 +1,4 @@
-
+"use strict"
 // Base class
 
 ONE.base_ = function(){
@@ -549,7 +549,7 @@ ONE.base_ = function(){
 	}
 
 	// flush an entire property stack
-	this.flush = function( key ){
+	this.stackFlush = function( key ){
 		if( !this.hasOwnProperty('__overloads__') ) return
 		var overloads = this.__overloads__
 		var stack = overloads[ key ]
@@ -558,7 +558,7 @@ ONE.base_ = function(){
 	}
 	
 	// return the property at index in the stack
-	this.index = function( key, idx ){
+	this.stackAt = function( key, idx ){
 		if( !this.hasOwnProperty('__overloads__') ) return
 		var overloads = this.__overloads__
 		var stack = overloads[ key ]
@@ -593,7 +593,8 @@ ONE.base_ = function(){
 	function signal_(){
 
 		this.__class__ = 'Signal'
-
+		this.__signal__ = 1
+		
 		// create a new signal
 		this.new = function( owner ){
 			this.owner = owner
