@@ -1458,6 +1458,7 @@ ONE.parser_strict_ = function(){
 					def.init = this.parseCall(def.id)
 					// remove the name as its duplicate
 					def.init.name = undefined
+					def.init.fn = undefined
 				}
 				else {
 					//this.parseDims(def, node)
@@ -1470,78 +1471,6 @@ ONE.parser_strict_ = function(){
 			if (!this.eat(this._comma)) break
 		}
 		return defs
-	}
-
-	this.parseTypeVar = function( noIn, noSemi ) {
-
-		var kind = this.tokVal
-		var kind_node = this.startNode()
-		kind_node.name = kind
-		var node = this.startNode()
-		var type = 'TypeVar'
-		this.next()
-
-		node.kind = this.finishNode(kind_node, 'Id')
-
-		// if we are a struct, we can this.eat a struct identifier or a {
-		if( kind === "struct"){
-			if( this.tokType !== this._name ) this.unexpected()
-			node.id = this.parseIdent()
-			if( this.tokType === this._braceL ){
-				node.struct = this.parseBlock()
-				return this.finishNode(node, "Struct")
-			}
-			type = "Struct"
-		}
-
-		if( kind == "enum"){
-			node.id = this.parseIdent()
-			this.expect(this._braceL)
-			node.enums = []
-			for(;;){
-				var enm = this.startNode()
-				if(this.tokType == this._string){
-					var str = this.startNode()
-					str.kind = "string"
-					str.value = this.tokVal
-					str.multi = this.isMultiLine
-					str.raw = this.input.slice(this.tokStart, this.tokEnd)
-					this.finishNode(str, 'Value')
-					this.next()
-					enm.id = str
-				} 
-				else{
-					enm.id = this.parseIdent(true)
-				}
-				if(this.eat(this._eq)){
-					enm.init = this.parseNoCommaExpression()
-				}
-				node.enums.push(this.finishNode(enm, "Def"))
-				if(!this.canInjectComma(this.tokType) && !this.eat(this._comma)){
-					break
-				}
-			}
-			this.expect(this._braceR)
-
-			// TODO we should parse key, key = expr, sets
-			// otherwise you cant use keywords in the enum set
-			// alright so. we parse an identifier or
-			// a string,
-			// then we parse a = number, or a ; or a , or an insertComma
-			// we have to parse enums differently
-
-			return this.finishNode(node, "Enum")
-		}
-
-		//this.parseDims(node)
-		node.defs = this.parseDefs( noIn, node )
-
-		if(node.defs.length == 0){ // someone is using our type as a normal value, fine.
-
-		}
-
-		if(!noSemi) this.semicolon()
-		return this.finishNode(node, type)
 	}
 
 	this.parseStatementBlock = function(){
@@ -1597,10 +1526,20 @@ ONE.parser_strict_ = function(){
 			this.semicolon()
 			return this.finishNode(node, "DoWhile")
 
+		case this._macro:
+			this.next()
+			// we parse a function def
+			var node = this.parseFunction(node, true)
+			node.type = 'Macro'
+			return node
+
 		case this._struct:
 			this.next()
 			if( this.tokType !== this._name ) this.unexpected()
 			node.id = this.parseIdent()
+			if(this.eat(this._extends)){
+				node.base = this.parseIdent()
+			}
 			node.struct = this.parseBlock()
 			return this.finishNode(node, "Struct")
 		
@@ -1760,6 +1699,7 @@ ONE.parser_strict_ = function(){
 			return this.finishNode(node, "Class")
 
 		case this._while:
+
 			this.next()
 			node.test = this.parseParenExpression()
 			this.labels.push(this.loopLabel)
@@ -1779,6 +1719,17 @@ ONE.parser_strict_ = function(){
 			return this.finishNode(node, "Empty")
 
 		default:
+			// parse #define here
+			if(this.tokType == this._name && this.tokVal == 'define' && 
+				this.isIdentifierStart(this.input.charCodeAt(this.tokPos))){
+				this.next()
+				if(this.lastSkippedNewlines) this.unexpected()
+				node.id = this.parseExpression()
+				if(this.lastSkippedNewlines) this.unexpected()
+				node.value = this.parseExpression()
+				return this.finishNode(node, "Define")
+			}
+
 			var maybeName = this.tokVal, expr = this.parseExpression(false, false, true)
 
 			if (starttype === this._name && expr.type === "Id" && this.eat(this._colon)) {
@@ -1866,14 +1817,10 @@ ONE.parser_strict_ = function(){
 
 		if (this.tokType === this._semi) return this.parseFor(node, null, compr)
 		if (this.tokType === this._var || this.tokType.isType) {
-			if( this.tokType.isType ){
-				var init = this.parseTypeVar(true,true)
-			} else {
-				var init = this.startNode()
-				this.next()
-				this.parseVar(init, true)
-				this.finishNode(init, "Var")
-			}
+			var init = this.startNode()
+			this.next()
+			this.parseVar(init, true)
+			this.finishNode(init, "Var")
 
 			if (this.eat(this._of)) return this.parseForOf(node, init, compr)
 			if (this.eat(this._from)) return this.parseForFrom(node, init, compr)
@@ -2001,6 +1948,11 @@ ONE.parser_strict_ = function(){
 
 		var expr = this.parseMaybeQuote(noIn)
 
+		if(inStatement && (
+			expr.type == 'Index' && expr.object.kind || 
+			expr.type == 'Assign' && expr.left.type == 'Index' && expr.left.object.kind)){
+			this.raise(expr.start, "Please use 'type[] x', not 'type x[]' for array types")
+		}
 		// parse float x, y to be a TypeVar not (float x), y
 		if(inStatement && (
 			expr.type == 'Index' && expr.object.kind ||
@@ -2011,10 +1963,7 @@ ONE.parser_strict_ = function(){
 
 			var node = this.startNodeFrom(expr)
 			var defs = node.defs = []
-			if(expr.type == 'Index'){ // lets rewrite the syntax
-				this.raise(node.start, "Please use 'type[] x', not 'type x[]' for array types")
-			}
-			else if(expr.type == 'Assign'){
+			if(expr.type == 'Assign'){
 				// make an init def
 				node.kind = expr.left.kind
 				expr.left.kind = undefined
@@ -2031,6 +1980,7 @@ ONE.parser_strict_ = function(){
 				def.id = expr.fn
 				expr.name = undefined
 				def.init = expr
+				def.init.fn = node.kind
 				defs[0] = this.finishNode(def, "Def")
 			}
 			else {
@@ -2122,8 +2072,7 @@ ONE.parser_strict_ = function(){
 
 	this.parseExprOp = function(left, minPrec, noIn) {
 		var prec = this.tokType.binop
-
-		if (prec != null && (!noIn || (this.tokType !== this._in && this.tokType !== this._of && this.tokType !== this._to) )) {
+		if (prec != null && !this.tokType.isAssign && (!noIn || (this.tokType !== this._in && this.tokType !== this._of && this.tokType !== this._to) )) {
 			if (prec > minPrec) {
 				var node = this.startNodeFrom(left)
 				node.left = left

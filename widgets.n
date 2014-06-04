@@ -1,0 +1,235 @@
+/**
+ *  ONEJS Basic widget set
+ * 
+ *  Copyright (C) 2014 ONEJS 
+ *
+ *  MIT license: Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * 
+ */
+
+$.keymap = Base{
+	open_console: when($.key.ctrl and $.key.accent)
+	close_console: when($.key.escape)
+}
+
+SlideV:{
+	fill: #darkgrey
+	css_border: '1px solid gray'
+	Nob:{
+		fill: #white
+		css_border: '1px solid black'
+		css_border_radius: '3px'
+		select_fill: #ffafaf
+	}
+}
+
+class SlideV extends $.Rect{
+	class Nob extends $.Rect{
+		x: 0
+		y: 0
+		w: parent.w - 2
+		h: 15
+
+		move( v ){
+			y = clamp( start.y + v.cap[1], 
+				0, parent.h - h )
+		}
+
+		end(){
+			pop('fill')
+		}
+  
+		mousedown(){
+			capture( move, end )
+			starty = y
+			push('fill', select_fill)
+		}
+
+		mousedown(){
+		}
+	}
+	init(){
+		nob = Nob{}
+	}
+}
+
+
+ONE.scrollbars_ = function(){
+	
+	this.ScrollV = {
+		fill: this.color('darkgray'),
+		css_border: '1px solid grey',
+		Nob:{
+			fill: this.color('white'),
+			css_border: '1px solid black',
+			css_border_radius:'3px',
+			select_fill:this.color('ffafaf')
+		}
+	}
+
+	this.extends( 'ScrollV', this.$.Rect, function(){
+
+		this.extends( 'Nob', this.$.Rect, function(){
+
+			this.x = 0
+			this.y = 0
+			
+			this.w = this.parse('parent.w - 2')
+			this.h = 15
+			
+			function move( v ){
+				this.y = this.clamp( this.starty + v.cap[1], 0, this.parent.h - this.h - 4 )
+			}
+
+			function end( ){
+				this.pop( 'fill' )
+			}
+
+			this.mousedown = function( s ){
+				this.capture( move, end )
+				this.starty = this.y
+				this.push('fill', this.select_fill)
+			}
+		})
+
+		this.make = function(){
+			this.nob = this.Nob.new(this)
+			if(arguments.length ) this.load.apply( this, arguments )
+		}
+	})
+}
+
+ONE.debug_log_ = function(){
+	
+	this._logwrite = function(level, data){
+		if( ONE.$.debuglog ) return ONE.$.debuglog.write.call( ONE.$.debuglog, level, data )
+	}
+
+	ONE.$.Dom.new( null, document.body, function(){
+
+		this.Logger = {
+			css_z_index:10000,
+			fill:this.color("2f2f2f"),
+			css_color:'black',
+			show_anim:{ease:'linear',0:0,0.1:300,chain:-1},
+			hide_anim:{ease:'linear',0.1:0,chain:-1},
+			level0:{
+				css_color:'red'
+			},
+			level1:{
+				css_color:'orange'
+			},
+			level2:{
+				css_color:'white'
+			},
+			Chunk:{
+				css_padding:5
+			},
+			Plain:{
+				css_font_family:'Monaco',
+				css_font_size:'12px'
+			},
+			SplitH:{
+				fill:this.color('9f9f9f'),
+				select_fill:this.color('bfbfbf'),
+				css_cursor:'ns-resize'
+			}
+		}
+
+		this.extends( 'Logger', this.$.Rect, function(){
+			// positioning
+			this.css_position = 'fixed'
+			this.css_overflow = 'scroll'
+			this.x = 0
+			this.y = this.parse("$.screen.h - h")
+			this.w = this.parse("$.screen.w")
+			this.h = 0//this.parse("$.screen.h")
+
+			// responding to the slide signal
+			this.signal('slide', 1)
+
+			this.extends( 'SplitH', this.$.Rect, function(){
+				this.h = 1
+				this.w = this.parse('parent.w')
+				this.x = 0
+				this.y = 0
+		
+				this.signal('delta')
+				
+				function move( v ){
+					this.emit('delta', this.starty - v.abs[1])
+					this.starty = v.abs[1]
+				}
+				
+				function end(){
+					this.pop('fill')
+				}
+				
+				this.mousedown = function( v ){
+					this.capture( move, end )
+					this.starty = v.abs[1]
+					this.push('fill', this.select_fill)
+				}
+			})
+
+			this.when(this.parse("init || slide"), function(){
+				if(!this.h) this.h = this.$.T(this.show_anim)
+			})
+
+			this.when(this.parse("!slide"), function(){
+				this.h = this.$.T(this.hide_anim)
+			})
+
+			this.extends('Chunk', this.$.Rect, function(){
+			})
+
+			this.extends( 'Plain', this.$.Float, function(){
+				this.make = function( txt, level ){
+					this.load(level)
+					this.text = txt
+				}
+			})
+			this.Break = this.$.Break
+
+			// write new chunks
+			this.write = function( level, data ){
+				// the strings we are going to build.
+				var txt = data[0]
+				var last = this.lastChunk || (this.lastChunk = this.Chunk.new(this))
+				for(var c = 0;c<data.length;c++){
+					if(!data[c] || !data[c].split) continue
+					var lines = data[c].split(/\n/)
+					for(var i = 0;i<lines.length;i++){
+						// count leading tabs
+						var line = lines[i]
+						var m =line.match(/^\t+/)
+						var p = this.Plain.new( last, line, this['level'+level] )
+						if(m) p.css_padding_left = 10 * m[0].length
+						this.Break.new( last )
+					}
+				}
+			}
+
+			// construct our logger
+			this.make = function(){
+				this.splith = this.SplitH.new(this, {
+					delta:function(v){
+						this.parent.h += v
+					}
+				})
+			}
+		})
+		
+		this.init = function(){
+			this.$.keymap.open_console = function(){
+				if(ONE.$.debuglog) ONE.$.debuglog.slide = !this.$.debuglog.slide
+				else ONE.$.debuglog = this.Logger.new( this )
+			}.bind(this)
+
+			this.$.keymap.close_console = function(){
+				if(ONE.$.debuglog) ONE.$.debuglog.show = 0
+			}.bind(this)
+			this.$.keymap.emit('open_console')
+		}
+	})
+}

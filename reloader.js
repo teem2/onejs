@@ -26,7 +26,7 @@ function browser(){
 }
 
 function nodejs(){
-	var addr = "127.0.0.1"
+	var addr = "0.0.0.0"
 	var port = 2000
 	
 	var http = require('http')

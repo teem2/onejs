@@ -1,3 +1,4 @@
+
 /**
  *  ONEJS DOM To class structure mapping
  * 
@@ -10,7 +11,7 @@
 // where styling, attributes, events and classinheritance are all the same thing.
 class Node{
 
-	// define our signals, without init value
+	// define signals
 	signal click, dblclick, mouseup, mousedown, mousemove, mouseover,
 		mouseout, isdown, keydown, keyup, keypress
 
@@ -257,9 +258,12 @@ class Node{
 		c.css_height = v
 	}
 
-	fill.setter(value){
+	struct vec4{
+		float a,b,c,d
+	}
+
+	fill.setter(vec4 value){
 		var s = dom_style
-		//var str = '#' + ('000000' + ( ( ( ( ( value.getFloat32(0)*255 ) & 0xff ) << 8 | ( ( value.getFloat32(4)*255 ) & 0xff ) ) << 8 ) | ( ( value.getFloat32(8)*255 ) & 0xff ) ).toString( 16 ) ).slice( -6 )
 		var str = '#' + ('000000' + ( ( ( ( ( value[0]*255 ) & 0xff ) << 8 | ( ( value[1]*255 ) & 0xff ) ) << 8 ) | ( ( value[2]*255 ) & 0xff ) ).toString( 16 ) ).slice( -6 )
 
 		if(s) {
@@ -269,7 +273,7 @@ class Node{
 		}
 		var c = hasOwnProperty('_css') ? _css : ( _css = Object.create(_css) )
 		if(c) c.css_background_color = str
-		var a = value.getFloat32(3)
+		var a = value[3]
 		if( a ) c.css_opacity = a
 	}
 

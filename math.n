@@ -1,0 +1,158 @@
+#js
+define sqrt(x)      Math.sqrt(x)
+define sqrt(vec2 x) vec2.sqrt(x)
+define sqrt(vec3 x) vec3.sqrt(x)
+define sqrt(vec4 x) vec4.sqrt(x)
+define sin(x)       Math.sin(x)
+
+define PI        3.141592653589793
+define E         2.718281828459045
+define LN2       0.6931471805599453
+define LN10      2.302585092994046
+define LOG2E     1.4426950408889634
+define LOG10E    0.4342944819032518
+define SQRT_1_2  0.7071067811865476
+define SQRT2     1.4142135623730951
+
+// abstract base vector
+struct vec{
+
+	zero(){
+		_[#] = 0
+	}
+
+	distance( vec v ){
+		var d = 0
+		d += (v[#] - _[#]) ** 2
+		return sqrt(d)
+	}
+
+	len(){
+		var d = 0
+		d += _[#] ** 2
+		return sqrt(d)
+	}
+
+	negate( vec v ){
+		_[#] = -v[#]
+	}
+
+	inverse( vec v ){
+		_[#] = 1 / v[#]
+	}
+
+	mix( vec a, vec b, f ){
+		_[#] = a[#] + f * (a[#] - b[#])
+	}
+
+	greater( vec v ){
+		if( _[#] < v[#] ) return false
+		return true
+	}
+
+	sin( vec v ){
+		_[#] = sin(v[#])
+	}
+
+	cos( vec v ){
+		_[#] = cos(v[#])
+	}
+
+	normalize( vec v ){
+		var d = 0
+		d += v[#] ** 2
+		d = sqrt(d)
+		if(d == 0){
+			_[#] = 0
+		} 
+		else {
+			_[#] = v[#] / d
+		}
+	}
+
+	clamp( vec v, float min, float max ){
+		_[#] = v[#] < min? min: v[#] > max? max: v[#]
+	}
+
+	clamp( vec v, vec min, vec max ){
+		_[#] = v[#] < min[#]? min[#]: v[#] > max[#]? max[#]: v[#]
+	}
+
+	step( vec v, float s ){
+		_[#] = v[#] < s? 0: 1
+	}
+
+	step( vec v, vec s ){
+		_[#] = v[#] < s[#]? 0: 1
+	}
+
+	sign( vec v ){
+		_[#] = v[#] < 0? -1: v[#] > 0? 1: 0
+	}
+
+	dot( vec v ){
+		var d = 0
+		d += _[#] * v[#]
+		return d
+	}
+
+	mul( vec a, vec b ){
+		_[#] = a[#] * b[#]
+	}
+}
+
+struct vec2 extends vec{
+	float x
+	float y
+
+	random( float scale = 1 ){
+		var r = 2PI * random()
+		x = cos(r) * scale
+		y = sin(r) * scale
+	}
+
+	vec2_mul_mat2( mat3 m, vec2 v ){
+		x = m[0] * v.x + m[2] * v.y
+		y = m[1] * v.x + m[3] * v.y
+	}
+
+	vec2_mul_mat3( mat3 m, vec2 v ){
+		x = m[0] * v.x + m[2] * v.y + m[4]
+		y = m[1] * v.x + m[3] * v.y + m[5]
+	}
+
+	vec2_mul_mat4( mat4 m, vec2 v ){
+		x = m[0] * v.x + m[4] * v.y + m[12]
+		y = m[1] * v.x + m[5] * v.y + m[13]
+	}
+}
+
+define macro1(x)	x
+
+vec2[2] x(1, PI)
+
+var y = vec2.normalize(x)
+
+struct vec3 extends vec{
+}
+
+struct vec4 extends vec{
+}
+
+struct mat{
+	zero(){
+		_[#] = 0
+	}
+}
+
+struct mat2 extends mat{
+	float a,b
+	float c,d
+}
+
+struct mat3 extends mat{
+	float a,b,c
+	float d,e,f
+	float g,h,i
+}
+

@@ -1,4 +1,3 @@
-"use strict"
 // ONEJS AST code generators
 ONE.ast_ = function(){
 
@@ -27,7 +26,8 @@ ONE.ast_ = function(){
 			if( template ){
 				var template_nodes = []
 				node = node.clone( template_nodes )
-			} else {
+			} 
+			else {
 				node = node.clone()
 			}
 		}
@@ -72,9 +72,10 @@ ONE.ast_ = function(){
 		var js = this.AST.ToJS
 		// make a fresh scope and signals store
 		js.scope = {}
+		js.typemethods = {}
 		js.signals = []
 		js.line = 0
-		js.comments = comments
+		//js.comments = comments
 		// if passing a function we return that
 		if(ast.type == 'Function'){
 			var steps = ast.body.steps
@@ -91,7 +92,11 @@ ONE.ast_ = function(){
 			// name anonmous function with a filename if possible
 			var nametag
 			if(filename) nametag = 'file__'+filename.replace(/[\.\/]/g,'_')
-			var code = '"use strict";return ' + js.Function( ast, false, nametag )
+			var code = 'return ' + js.Function( ast, false, nametag )
+			// prepend type methods
+			for(var k in js.typemethods){
+				code = js.typemethods[k] + code
+			}
 			if(dump && dump.indexOf('js')!=-1) ONE.out( code )
 
 			try{
@@ -109,6 +114,10 @@ ONE.ast_ = function(){
 		}
 
 		var code = (ast.isExpr()?'return ':'') + js.expand( ast )
+		for(var k in js.typemethods){
+			code = js.typemethods[k] + code
+		}
+
 		var run = Function(code)
 		return run.call(this)
 	}
@@ -225,7 +234,8 @@ ONE.ast_ = function(){
 			Var: { defs:2, const:0 },
 			Const: { defs:2 },
 			TypeVar: { kind:1, defs:2, dim:1 },
-			Struct: { id:1, struct:1, defs:2, dim:1 },
+			Struct: { id:1, struct:1, base:1, defs:2, dim:1 },
+			Define: { id:1, value:1 },
 			Enum: { id:1, enums:2 },
 
 			Def: { id:1, init:1, dim:1 },
@@ -295,14 +305,16 @@ ONE.ast_ = function(){
 					if( t === 0){
 						clone += '\tvar _'+v+' = n.'+k+'\n\tif(_'+v+')c.'+k+'=_'+v+'\n'
 
-					} else if( t === 1){
+					} 
+					else if( t === 1){
 						clone += '\tvar _'+v+' = n.'+k+'\n'+
 							'\tif(_'+v+') c.'+k+' = this[_'+v+'.type](_'+v+')\n'
 
 						walk += '\tvar _'+v+' = n.'+k+'\n'+
 							'\tif(_'+v+' && this[_'+v+'.type](_'+v+', n)) return 1\n'
 
-					} else if(t === 2){
+					} 
+					else if(t === 2){
 						clone += '\tvar _'+v+' = n.'+k+'\n'+
 							'\tif(_'+v+'){\n'+
 								'\t\tvar x, y = []\n'+
@@ -322,7 +334,8 @@ ONE.ast_ = function(){
 								'\t\t}\n'+
 							'\t}\n'
 
-					}else if(t === 3){
+					}
+					else if(t === 3){
 						clone += '\tvar _'+v+' = n.'+k+'\n'+
 								'\tif(_'+v+'){\n'+
 								'\t\tvar x, y = []\n'+
@@ -440,18 +453,18 @@ ONE.ast_ = function(){
 		this.isKeyChain = function(){
 			var node = this
 			while(node){
-				if(node.type == 'Id' || node.type == 'This') return true
-				if(node.type != 'Key' && node.type != 'Index') return false
+				if(node.type == 'Id' || node.type == 'This') return node
+				if(node.type != 'Key' && node.type != 'Index') return
 				node = node.object
 			}
-			return false
+			return
 		}
 
 		this.toJS = function(comments){
 			var js = this.ToJS
 			js.line = 0
 			js.scope = {}
-			js.comments = comments
+			//js.comments = comments
 			return js.expand( this )
 		}
 
@@ -459,7 +472,7 @@ ONE.ast_ = function(){
 		this.toCode = function(comments){
 			var code = this.ToCode
 			code.line = 0
-			code.comments = comments
+			//code.comments = comments
 			return code.expand( this )
 		}
 
@@ -473,7 +486,7 @@ ONE.ast_ = function(){
 			
 			// comment restoration
 			this.cignore = 0
-			this.comments = 1
+			this.comments = 0
 			this.line = 0
 
 			this.array_fix = 0 //!TODO do this nicely
@@ -493,13 +506,14 @@ ONE.ast_ = function(){
 				//if(!parent) throw new Error('Incorrect parent')
 				n.parent = parent
 				n.genstart = this.line
-				if(! this[n.type] )throw new Error(n.type)
-				var ret = this[ n.type ](n, parens)
+				if(!this[n.type])throw new Error(n.type)
+				var ret = this[n.type](n, parens)
 				n.genend = this.line
 
 				if(n.store){ // someone wants a tempstore
 					ret = this.store(n, ret)
 				}
+
 				// do some comments restoration
 				var comments = n.comments
 				if( this.comments && comments && !this.cignore ){
@@ -597,22 +611,26 @@ ONE.ast_ = function(){
 					if(flag === 46) return '.' + n.name
 					if(flag === 126) return n.name+'~'
 					if(flag === 33) return n.name+'!'
-					if(flag === 64) return '@'+n.name
-					if(flag === 35) return '#'+n.name
+					if(flag === 64) return '@'+(n.name!==undefined?n.name:'')
+					if(flag === 35) return '#'+(n.name!==undefined?n.name:'')
 				}
 				if(n.kind) return this.expand(n.kind, n) + ' ' + n.name
 				return n.name
+			}
+
+			this.Define = function( n ){
+				return 'define ' + this.expand(n.id, n) + ' ' + this.expand(n.value, n)
 			}
 
 			this.Type = function( n ){
 				return n.name
 			}
 
-			this.Value = function( n ){ 
+			this.Value = function( n ){
 				return n.raw 
 			}
 			 // string, number, bool
-			this.This = function( n ){ 
+			this.This = function( n ){
 				return 'this'
 			}
 
@@ -752,9 +770,9 @@ ONE.ast_ = function(){
 			this.Switch = function( n ){
 				var old_cmt = this.comments
 				this.comments = 0 // dont allow comments in the switch on
-				var ret = 'switch('+this.expand( n.on, n )+'){'
+				var ret = 'switch('+this.expand(n.on, n)+'){'
 				this.comments = old_cmt
-				ret += this.comments_or_newline( n.on )
+				ret += this.comments_or_newline(n.on)
 				var old = this.depth
 				this.depth += this.indent				
 				var cases = n.cases
@@ -848,18 +866,12 @@ ONE.ast_ = function(){
 			}
 
 			this.TypeVar = function( n ){
-				return this.expand(n.kind, n) + 
-					( n.dim !== undefined ? '[' + 
-						( n.dim ? this.expand(n.dim, n):'') + 
-						']': '') + ' ' + 
+				return this.expand(n.kind, n) + ' ' + 
 					this.flat( n.defs, n )
 			}
 
 			this.Def = function( n ){
 				return this.expand( n.id, n ) + 
-					( n.dim !== undefined ? '[' + 
-						(n.dim?this.expand(n.dim, n):'') + 
-						']':'') +
 					(n.init ? this.space + '=' + this.space + this.expand(n.init, n) : '')
 			}
 
@@ -880,7 +892,7 @@ ONE.ast_ = function(){
 						return this.expand( n.params[0].id, n ) + arrow + this.expand( n.body, n )
 					}
 					var ret = ''
-					if(n.name)  ret += this.expand(n.name)
+					if(n.name) ret += this.expand(n.name)
 
 					ret += '(' +(n.params?this.list( n.params, n ):'') + 
 						(n.rest ? ',' + this.space + this.expand( n.rest, n ) : '' )+ ')' 
@@ -1083,18 +1095,28 @@ ONE.ast_ = function(){
 			}
 		})
 
-		this.typeMap = {
-			bool:   { size:1, view:'Int8' },
-			int8:   { size:1, view:'Int8' },
-			uint8:  { size:2, view:'Uint8' },
-			int16:  { size:2, view:'Int16' },
-			int:    { size:4, view:'Int32' },
-			int32:  { size:4, view:'Int32' },
-			uint32: { size:4, view:'Uint32' },
-			float:  { size:4, view:'Float32' },
-			float32:{ size:4, view:'Float32' },
-			double: { size:8, view:'Float64' },
-			float64:{ size:8, view:'Float64' },
+		this.typeMap = Object.create(null)
+		this.typeMap.bool    = { size:1, slots:1, view:'Int32', arr:'i4', prim:1 }
+		this.typeMap.int8    = { size:1, slots:1, view:'Int8', arr:'i1', prim:1 }
+		this.typeMap.uint8   = { size:2, slots:1, view:'Uint8', arr:'u1', prim:1 }
+		this.typeMap.int16   = { size:2, slots:1, view:'Int16', arr:'i2', prim:1 }
+		this.typeMap.uint16  = { size:2, slots:1, view:'Uint16', arr:'u2', prim:1 }
+		this.typeMap.int     = { size:4, slots:1, view:'Int32', arr:'i4', prim:1 }
+		this.typeMap.int32   = { size:4, slots:1, view:'Int32', arr:'i4', prim:1 }
+		this.typeMap.uint32  = { size:4, slots:1, view:'Uint32', arr:'u4', prim:1 }
+		this.typeMap.float   = { size:4, slots:1, view:'Float32', arr:'f4', prim:1 }
+		this.typeMap.float32 = { size:4, slots:1, view:'Float32', arr:'f4', prim:1 }
+		this.typeMap.double  = { size:8, slots:1, view:'Float64', arr:'f8', prim:1 }
+		this.typeMap.float64 = { size:8, slots:1, view:'Float64', arr:'f8', prim:1 }
+		this.viewSize = {
+			Int8:1,
+			Uint8:1,
+			Int16:2,
+			Uint16:2,
+			Int32:4,
+			Uint32:4,
+			Float32:4,
+			Float64:8
 		}
 
 		this.ToJS = this.ToCode.extend(this, function(outer){
@@ -1103,6 +1125,9 @@ ONE.ast_ = function(){
 			this.semi = ';'
 			this.scope = {}
 			this.typelib = Object.create(outer.typeMap)
+			this.defines = Object.create(null)
+			this.macros = Object.create(null)
+			this.macroarg = Object.create(null)
 			this.promise_catch = 1
 			this.expand_short_object = 1
 			this.destruc_prefix = '_\u0441'
@@ -1110,7 +1135,8 @@ ONE.ast_ = function(){
 			this.tmp_prefix = '_\u0442'
 			this.call_tmpvar = '_\u0441'
 			this.store_prefix = '_\u0455'
-
+			this.template_marker = '\_\u0445_'
+			this.template_regex = /\_\u0445\_/g
 			this.globals = {
 				Object:1,
 				Array:1, 
@@ -1273,7 +1299,7 @@ ONE.ast_ = function(){
 				this.depth = this.depth + this.indent					
 
 				var oldcmt = this.comments
-				this.comments = 0
+				//this.comments = 0
 				if( init )
 					ret = '('+this.destruc_prefix+'0='+(def?def+'||':'') + 
 						(typeof init == 'string'?init:this.expand( init, n, true)) + 
@@ -1282,7 +1308,7 @@ ONE.ast_ = function(){
 					if(!def) throw new Error('Destructuring assignment without init value')
 					ret = '('+this.destruc_prefix+'0='+(def?def:'') +',('+this.newline+this.depth
 				}
-				this.comments = 1
+				//this.comments = 1
 
 				if( left.type == 'Object' ) ret += this._destructureObject(left, 1, fn, vars)
 				else ret += this._destructureArray(left, 1, fn, vars)
@@ -1306,28 +1332,89 @@ ONE.ast_ = function(){
 				return ret
 			}
 
-			this.resolve = function( name ){
-				if( name in this.scope ) return name
+			this.resolve = function( name, n ){
+				if( name in this.macroarg ){
+					return this.expand(this.macroarg[name] )
+				}
+				var type = this.typemethod, field
+				if(type && (field = type.fields[name])){
+					return '_.'+type.arr+'[_.o+'+(field.off / outer.viewSize[type.view])+']'
+				}
+				if( name in this.scope ){
+					var type = this.scope[name]
+					if(n && type !== 1){
+						n.infer = type
+					}
+					return name
+				}
 				if( name in this.globals ) return name
+				if( name in this.defines ){
+					return this.expand(this.defines[name])
+				}
 				return 'this.'+name
+			}
+
+			this.block = function( n, parent, noindent ){ // term split array
+				var old_depth = this.depth
+				if(!noindent) this.depth += this.indent
+				var ret = ''
+				for( var i = 0; i < n.length; i++ ){
+					var step = n[ i ]
+					var blk = this.expand( step, parent )
+
+					if(this.template_marked){
+						if(blk.indexOf(this.template_marker)!= -1){
+							// lets loop blk n times
+							var type = this.typemethod
+							if(!type) throw new Error('template found but no typemethod')
+							var total = type.slots
+							for(var j = 0; j < total; j++){
+								ret += this.depth + blk.replace(this.template_regex, j)
+							}
+							var ch = ret[ret.length - 1]
+							if(ch !== '\n' ){
+								ret += this.newline, this.line++
+							}
+						}
+						this.template_marked = false
+					}
+					else if(blk!==''){
+						if(blk[0] == '(' || blk[0] == '[') ret += this.depth + this.semi + blk
+						else ret += this.depth + blk
+					}
+
+					var ch = ret[ret.length - 1]
+					if((!this.comments || ch !== '\n') && (blk!=='') ){
+						ret += this.newline, this.line++
+					}
+				}
+				this.depth = old_depth
+				return ret
 			}
 
 			this.Id = function( n ){
 				var flag = n.flag
 				if( flag ){
 					if(flag === -1){
-						var fn = this.find_function( n )
+						var fn = this.find_function(n)
 						if(!fn.store_var) throw new Error("Storage .. operator read but not set in function")
 						return this.store_prefix
 					}
-					if(flag === 35) return 'this.color("'+n.name+'")'
+					if(flag === 35){ 
+						if(!n.name){
+							if(!this.typemethod) throw new Error('Type method template found outside of typemethod')
+							this.template_marked = true
+							return this.template_marker
+						}
+						return 'this.color("'+n.name+'")'
+					}
 					if(flag === 64){
 						if(n.name == undefined) return 'this'
 						return 'this.' + n.name
 					}
 				}
 
-				return this.resolve( n.name )
+				return this.resolve( n.name, n )
 			}
 
 			this.Value = function( n ){ 
@@ -1348,25 +1435,92 @@ ONE.ast_ = function(){
 				return n.raw 
 			}
 
+			this.decodeStructAccess = function( n ){
+				var node = n
+				while(node){
+					if(node.type == 'Id'){
+						// check 
+						var base = node.name
+						var type = this.scope[base]
+
+						var isthis 
+						if(type && type !== 1 || (isthis = type = this.typemethod)){
+							// alright so now we need to walk back down
+							// the parent chain and decode our offset
+							if(!isthis) node = node.parent
+							else base = '_'
+							if(type.size == 0) throw new Error("Trying to access member on abstract value")
+							var off = 0, field = type
+							var idx = ''
+							for(;;){
+								// if we are doing an index, we have to have an array type
+								if(node.index){
+									if(node.object.index) throw new Error('Dont support double indexes on structs')
+									// we can only support indexes on fields with primitive
+									// subtypes or on fields with dimensions.
+									if(!field.dim && field.prim) throw new Error('cannot index primitive field')
+									if(!field.size) throw new Error('cannot index 0 size field')
+
+									// so if we have dim, we want index calcs.
+									if(field.dim) idx += '('+this.expand( node.index, n ) + ')*' + (field.size / outer.viewSize[type.view]) + '+'
+									else idx += '('+this.expand( node.index, n ) + ')+'
+								}
+								else {
+									field = field.fields[node.key && node.key.name || node.name]
+									if(!field){
+										throw new Error('Invalid field')
+										return
+									}
+									off += field.off
+								}
+								if(node == n) break
+								node = node.parent
+							}
+							// alright so what we can do is actually take the pointer and assign to it
+							// what if its not 
+							// check if we terminated at a value field or a compound field
+							var voff = base+'.o+' +idx+ (off / outer.viewSize[type.view])
+							if((!node.index || field.dim) && !field.prim){
+								n.infer = field
+								n.inferptr = 1
+								return '{o:' + voff+', '+type.arr+':'+base+'.'+type.arr+'}'
+							}
+							return base + '.'+type.arr+'[' + voff+ ']'
+						}
+					}
+					if(node.type != 'Key' && node.type != 'Index') break
+					node.object.parent = node
+					node = node.object
+				}
+			}
+
 			this.Index = function( n ){
-				return this.expand( n.object, n, true ) + '[' + this.expand( n.index, n ) + ']'
+				var ret = this.decodeStructAccess(n)
+				if(ret) return ret
+				return this.expand(n.object, n, true) + '[' + this.expand(n.index, n) + ']'
 			}
 
 			this.Key = function( n, paren ){
-				if( n.key.type !== 'Id' ) throw new Error('Unknown key type')
+				if(n.key.type !== 'Id') throw new Error('Unknown key type')
 				var key = n.key
+				var obj = n.object
 				var comments = key.comments
 				var cmt = ''
-				if( comments ) cmt = this.comments_flush( comments )
-				if( n.exist ){
-					var fn = this.find_function( n )
+
+				// do static memory offset calculation for typed access
+				var ret = this.decodeStructAccess(n)
+				if(ret) return ret
+
+				if(comments) cmt = this.comments_flush(comments)
+				if(n.exist){
+					var fn = this.find_function(n)
 					if(!fn.tmp_vars) fn.tmp_vars = 0
 					var tmp = this.tmp_prefix + (fn.tmp_vars++)
-					var ret = '('+tmp+'='+this.expand( n.object, n, true )+') && '+tmp+'.'+n.key.name+cmt
+					var ret = '(' + tmp + '=' + this.expand(obj, n, true) + ') && ' + tmp + '.' + n.key.name + cmt
 					if(paren) return '(' + ret + ')'
 					return ret
-				} 
-				return this.expand( n.object, n, true ) + '.' + n.key.name + cmt
+				}
+				return this.expand(obj, n, true) + '.' + n.key.name + cmt
 			}
 			
 			this.Array = function( n ){
@@ -1605,7 +1759,7 @@ ONE.ast_ = function(){
 				// destructure result.value
 				if(destruc){
 					var vars = []
-					var destr = this.depth+';'+this.destructure(n, destruc, result+'.value', this.find_function( n ), vars)
+					var destr = ';'+this.destructure(n, destruc, result+'.value', this.find_function( n ), vars)
 					if( isvar ){
 						ret += this.depth + 'var '
 						for(var i = 0;i<vars.length;i++){
@@ -1614,7 +1768,7 @@ ONE.ast_ = function(){
 							if(i) ret += ','
 							ret += name
 						}
-						ret += this.newline
+						//ret += this.newline
 					}
 					ret += destr
 				} else {
@@ -1734,8 +1888,9 @@ ONE.ast_ = function(){
 					}
 					return ret
 				}
-				// we can define a typevar
 				
+				return 'var ' + this.flat( n.defs, n )
+
 				throw new Error("implement TypeVar")
 			}
 
@@ -1757,23 +1912,82 @@ ONE.ast_ = function(){
 
 				if(n.dim !== undefined) throw new Error('Dont know what to do with dimensions')
 
-				this.scope[ n.id.name ] = 1
+				var type
+				if(n.parent.type == 'TypeVar'){
 
+					var kind = n.parent.kind
+					var name
+					if(kind.type == 'Index'){
+						name = kind.object.name
+						type = Object.create(this.typelib[name])
+						type.dim = 1
+					}
+					else{
+						name = kind.name
+						type = this.typelib[name]
+					}
+					if(!type) throw new Error('Cannot find type ' + name)
+				}
+				else if(n.id.kind ){
+					type = this.typelib[n.id.kind.name]
+					if(!type) throw new Error('Cannot find type ' + n.id.kind.name)
+				}
+				else type = 1
+				this.scope[n.id.name] = type
+
+				// if we have a type, we need to check the init call to be a constructor.
 				return this.expand(n.id, n) + 
 					(n.init ? this.space+'='+this.space + this.expand(n.init, n) : '')
+			}
+			
+			this.Define = function( n ){
+				// alright we got a define
+				// lets splice out a macro from a define value.
+				// if we are a call, we are a macro.
+				if(n.id.type == 'Call'){
+					var name = n.id.fn.name
+					while(name in this.macros){
+						name = name + '_'
+					}
+					this.macros[name] = n
+				}
+				else {
+					var name = n.id.name
+					this.defines[name] = n.value
+				}
+				return ''
 			}
 
 			this.Struct = function( n ){
 				// so now what..`
 				// lets parse it and create a typedecl structure
 				// alright what shall we pull out.
-				if(this.typelib[n.id.name]) throw new Error('Cant redefine type ' + n.id.name)
+				var name = n.id.name
 
-				var type = this.typelib[n.id.name] = {}
-				type.fields = {}
-				type.methods = {}
-				type.size = 0
-				type.view = undefined
+				if(this.typelib[name]) throw new Error('Cant redefine type ' + n.id.name)
+
+				// in a baseclass we copy the fields and methods
+				var type = this.typelib[name] = {}
+
+				type.name = name
+				if(n.base){
+					var base = type.base = this.typelib[n.base.name]
+					if(!base) throw new Error('Struct base '+n.base.name+' undefined ')
+					// lets copy the fields
+					type.fields = Object.create(base.fields || null)
+					type.methods = Object.create(base.methods || null)
+					type.construct = Object.create(base.construct || null)
+					type.size = base.size
+					type.view = base.view
+				} 
+				else {
+					type.fields = {}
+					type.methods = {}
+					type.construct = {}
+					type.size = 0
+					type.view = undefined
+				}
+
 				var steps = n.struct.steps
 				for(var i = 0, il = steps.length; i < il; i++){
 					var step = steps[i]
@@ -1781,8 +1995,22 @@ ONE.ast_ = function(){
 					// this one adds a field to a struct
 					if(step.type == 'TypeVar'){
 						// lets fetch the size
-						var kind = step.kind.name
-						var field = this.typelib[kind]
+						var kind = step.kind
+						var typename
+						var arraydim
+						// float[10] x array defs
+						if(kind.type == 'Index'){
+							typename = kind.object.name
+							arraydim = kind.index && kind.index.value
+							if(!arraydim) throw new Error('need array dimensions on type')
+						}
+						else if(kind.type == 'Id'){
+							typename = kind.name
+						}
+						else throw new Error('Unknown type-kind in struct')
+
+						var field = this.typelib[typename]
+
 						if(!field) throw new Error('Cant find type ' + step.kind.name )
 						// lets add all the defs as fields
 						var defs = step.defs
@@ -1793,9 +2021,12 @@ ONE.ast_ = function(){
 							if(name in type.fields) throw new Error('Cant redefine field ' + name)
 							var fieldcpy = type.fields[name] = Object.create(field)
 							fieldcpy.off = type.size
-							type.size += field.size
+							fieldcpy.dim = arraydim
+							type.size += field.size * (arraydim || 1)
+
 							if(type.view === undefined){
 								type.view = field.view
+								type.arr = field.arr
 							}
 							else if(type.view !== field.view){
 								throw new Error('Dont support mixed type structs yet in JS')
@@ -1807,13 +2038,18 @@ ONE.ast_ = function(){
 					else if (step.type == 'Function'){
 						// store the function on the struct
 						var name = step.name.name
-						if(name in type.methods) type.methods[name].push(step)
-						else type.methods[name] = [step]
+						var store = type.methods
+						if( name == type.name ) store = type.construct
+ 						while(name in store) name = name + '_'
+ 						store[name] = step
 					}
 					else {
 						throw new Error('Cannot use ' + step.type + ' in struct definition')
 					}
 				}
+				type.slots = type.size / outer.viewSize[type.view]
+
+				//if(type.size == 0) throw new Error('Cannot make size 0 structs')
 				return ''
 			}
 
@@ -1827,7 +2063,7 @@ ONE.ast_ = function(){
 						', "' + n.id.name + '")'
 			}
 
-			this.Function = function( n, parens, nametag, extparams ){
+			this.Function = function( n, parens, nametag, extparams, typemethod ){
 				if( n.id ) this.scope[ n.id.name ] = 1
 				// make a new scope
 				var scope = this.scope
@@ -1855,6 +2091,10 @@ ONE.ast_ = function(){
 					else
 						str_body += this.depth + 'var '+name+' = Array.prototype.slice.call(arguments,0)' + this.newline
 				}
+				if(typemethod){
+					this.scope['_'] = typemethod
+					str_param += '_'
+				}
 				// do init
 				if( plen ){
 					var split = ',' + this.space
@@ -1879,10 +2119,11 @@ ONE.ast_ = function(){
 							}
 							str_body += this.depth + 'var ' + vardef
 							str_body += (vardef?','+this.space:'')+this.destruc_prefix+'0=' + dest
-							str_param += tmp + (i == plen - 1?'':split)
-						} else {
+							str_param +=  (str_param?split:'') + tmp
+						} 
+						else {
 							var name = param.id.name
-							str_param += name + (i == plen - 1?'':split )//name
+							str_param += (str_param?split:'') + name //name
 							if( str_param[str_param.length - 1] == '\n' ) str_param += this.depth
 							if(param.init){
 								str_body += this.depth + 'if('+name+'===undefined)' +name+'='+this.expand( param.init, param ) + this.newline 
@@ -1890,7 +2131,20 @@ ONE.ast_ = function(){
 							if(param.id.flag == 46){
 								str_body += this.depth +'this.'+name+'='+name+';'+this.newline 
 							} 
-							else this.scope[ name ] = 1
+							else {
+								var kind = param.id.kind
+								if(kind){
+									var kname 
+									if(kind.type == 'Index') kname = kind.object.name
+									else kname = kind.name
+								
+									var type = this.typelib[kname]
+
+									if(!type) throw new Error("Undefined type "+kname+" used on argument "+name)
+									this.scope[ name ] = type
+								}
+								else this.scope[ name ] =  1
+							}
 	
 						}
 					}
@@ -1901,7 +2155,7 @@ ONE.ast_ = function(){
 					for(var i = 0;i<exlen;i++){
 						var name = extparams[i]
 						this.scope[name] = 1
-						if(i) str_param += split
+						if(str_param) str_param += split
 						str_param += name
 					}
 				}
@@ -1937,8 +2191,9 @@ ONE.ast_ = function(){
 							ret += n.name.name+'",'
 							isgetset = true
 						}
-						else 
+						else if(!typemethod){
 							ret += this.expand(n.name, n) + this.space + '=' + this.space
+						}
 					}
 				}
 
@@ -1980,21 +2235,27 @@ ONE.ast_ = function(){
 				}
 
 				if(tmp){
-					ret += 'var ' + tmp +';' + this.newline
+					ret += 'var ' + tmp + this.newline
 				}
+				else ret += this.newline
 
 				this.depth = olddepth
 				this.scope = scope
 
-				ret += this.comments_or_newline(n.body) + str_body + this.depth 
+				ret += str_body + this.depth 
 
-				if( ret[ret.length - 1] != '\n') ret += this.newline + this.depth
+				//if( ret[ret.length - 1] != '\n') ret += this.newline + this.depth
+
+				if(typemethod){
+					ret += this.depth+this.indent+'return _'+this.newline + this.depth
+				}
+
 				ret += '}'
 				if( n.await ){
 					if( bind ) ret += ',this'
 					ret += ')'
 				}
-				else if( bind )ret += '.bind(this)'
+				else if( bind ) ret += '.bind(this)'
 				if(isgetset) ret += ')'
 				if(isvarbind){
 					ret += ').call(this'
@@ -2098,14 +2359,59 @@ ONE.ast_ = function(){
 
 			this.Assign = function( n, parens ){
 				var ret = ''
-				if(n.left.type == 'Object' || n.left.type == 'Array'){
+				if(n.op == '?='){
+					var left = this.expand(n.left, n)
+					ret = '('+left+'===undefined?('+left+'='+this.expand(n.right, n)+'):'+left+')'
+				}
+				else if(n.left.type == 'Object' || n.left.type == 'Array'){
 					return this.destructure(n, n.left, n.right, this.find_function( n ))
 				}
-				if(n.left.type == 'Id' || n.left.type == 'Key' || n.left.type == 'Index'){
-					ret = this.expand( n.left, n, false, this.space + n.op )
-					if(ret[ ret.length - 1 ] == '\n') ret += this.indent + this.depth
-					ret += this.space + this.expand( n.right, n )
-				} else {
+				else if(n.left.type == 'Id' || n.left.type == 'Key' || n.left.type == 'Index'){
+					var left = this.expand( n.left, n, false )
+					// so what operator are we?
+					if(n.left.inferptr){ // we are an assign to a struct type
+						// we need to know what the rhs is. 
+						n.right.assign_type = n.left.infer
+						n.right.assign_left = left
+						n.right.assign_op = n.op
+						var right = this.expand(n.right, n)
+						// lhs not consumed by rhs (constructor calls do that)
+						if(n.right.assign_left){
+							if(!n.right.infer || n.right.infer.slots != n.left.infer.slots)
+								throw new Error('Incompatible types in assignment')
+
+							// do a structure copy
+							// allocate tempvars
+							var func = this.find_function(n)
+							if(!func.type_nesting) func.type_nesting = 2
+							else func.type_nesting += 2
+
+							if(!func.destruc_vars || func.type_nesting+1 > func.destruc_vars)
+								func.destruc_vars = func.type_nesting
+
+							var tmp_l = this.destruc_prefix + (func.destruc_vars - 2)
+							var tmp_r = this.destruc_prefix + (func.destruc_vars - 1)
+							var nslots = n.left.infer.slots
+							var arr = n.left.infer.arr
+							var ret = '(' + tmp_l + '=' + left + ',' + tmp_r + '=' + right
+							for(var i = 0;i<nslots;i++){
+								ret += ',' + tmp_l + '.' + arr + '[' + tmp_l +'.o+'+ i + ']'+ 
+									n.op + tmp_r + '.' + arr + '[' + tmp_r +'.o+'+ i + ']'
+							} 
+							func.type_nesting -=2
+							ret += ','+tmp_r+')'
+						}
+						else {
+							ret = right
+						}
+					}
+					else {
+						ret += left
+						if(ret[ ret.length - 1 ] == '\n') ret += this.indent + this.depth
+						ret += n.op + this.space + this.expand( n.right, n )
+					}
+				} 
+				else {
 					ret = 'this['+this.expand( n.left, n )+']' + this.space + n.op + 
 						this.space + this.expand( n.right, n )
 				}
@@ -2116,7 +2422,12 @@ ONE.ast_ = function(){
 			this.Binary = function( n, parens ){
 				var ret
 				var leftstr
+
+				// alright. operators!.
+
+
 				// obvious string multiply
+				// alright so what do we do.
 				if(n.op == '*' && (((leftstr=n.left.type == 'Value' && n.left.kind == 'string'))||
 					(n.right.type == 'Value' && n.right.kind == 'string'))){
 					if(leftstr) return 'Array('+this.expand(n.right, n,false,').join('+this.expand(n.left, n,false,')'))
@@ -2131,11 +2442,6 @@ ONE.ast_ = function(){
 				else if(n.op == '**'){
 					ret = 'Math.pow(' + this.expand(n.left, n) + ',' + this.expand(n.right, n, false, ')') 
 				} // existential assign
-				else if(n.op == '?='){
-					var left = this.expand(n.left, n)
-					ret = '('+left+'===undefined?('+left+'='+this.expand(n.right, n)+'):'+left+')'
-
-				} // normal
 				else if( n.left.type == 'Condition' || n.right.type == 'Condition' || n.left.op && n.left.prio < n.prio ){
 					ret = this.expand(n.left, n, true) + this.space + n.op + 
 						this.space + this.expand(n.right, n, true)
@@ -2229,39 +2535,225 @@ ONE.ast_ = function(){
 				}
 
 				var args = n.args
+
 				// add extra args for processing
 				if(extra) args = Array.prototype.concat.apply(args, extra)
 				if(isnew) args = Array.prototype.concat.apply(['this'], args)
 
-				if(fn.type == 'Id'){
-					var name = fn.name
+				var arglen = args.length
+
+				if(fn.type == 'Id' || fn.type == 'Index'){
+
+					var name
+					var dims
+					if(fn.type == 'Index'){
+						name = fn.object.name
+						// dims might be dynamic
+						dims = fn.index
+					}
+					else name = fn.name
+
+
 					// we support auto-super also for roles.
+					// lets check if we are a type constructor
+					var type = this.typelib[name]
+					if(type){
+
+						// allocate tempvars
+						var func = this.find_function(n)
+						if(!func.type_nesting) func.type_nesting = 1
+						else func.type_nesting ++
+
+						if(!func.destruc_vars || func.type_nesting > func.destruc_vars)
+							func.destruc_vars = func.type_nesting
+
+						var output = this.destruc_prefix + (func.destruc_vars - 1)
+
+						var nslots = type.slots
+						var ret
+						var op = '='
+						var off
+						// consume a targetptr
+						if(n.assign_left){
+							ret = '('+output+' = '+n.assign_left
+							off = 1
+							n.assign_left = undefined
+							op = n.assign_op
+						}
+						else{
+							ret = '('+output+'= {o:0,'+type.arr+':new '+type.view+'Array(' 
+							if(dims) ret += '(' + this.expand(dims, n) + ')*' + nslots + ')}'
+							else ret += nslots + ')}'
+						}
+						var slot = 0
+
+						function walker(elem, n, issingle, type){
+							// we have a call
+							var ntype
+							if(elem.type == 'Call' && elem.fn.type == 'Id' && (ntype = this.typelib[elem.fn.name])){
+								if(ntype.view != type.view) throw new Error('Constructor args with different viewtypes are not supported')
+								// we have to walk the arguments until we hit individual values
+								var args = elem.args
+								for(var i = 0, l = args.length; i<l; i++){
+									walker.call(this, args[i], elem, l  == 1, ntype)
+								}
+							}
+							// write directly
+							else if(elem.type == 'Value'){
+								var val = this.expand(elem, n)
+								ret += ','
+								for(var i = 0, l = issingle?type.slots:1; i < l; i++){
+									ret += output+'.'+type.arr+'['
+									if(off) ret += output+'.o+'
+									ret += (slot++) +']'+op
+								}
+								ret += val
+							}
+							// expand to a var, and decide wether it is compound or primtive.
+							else {
+								var val = this.expand(elem, n)
+								if(!val.infer || !val.infer.methods){ // well assume its a single val
+									ret += ','
+									for(var i = 0, l = issingle?type.slots:1; i < l; i++){
+										ret += output+'.'+type.arr+'['
+										if(off) ret += output+'.o+'
+										ret += (slot++) +']'+op
+									}
+									ret += val
+								} 
+								else {
+									throw new Error('compound error thing')
+								}
+							}
+						}
+						for(var i = 0,l = args.length; i < l; i++ ){
+							walker.call(this, args[i], n, l == 1, type)
+						}
+						if(slot%nslots) throw new Error('Incorrect number of fields used in '+name+'() constructor, got '+slot+' expected (multiple of) '+nslots)
+						func.type_nesting--
+						
+						ret += ','+output+')'
+						
+						n.infer = type
+
+						return ret
+					}
+
+					// do macros
+					var macro = this.macros[name]
+					if(macro){
+						var a = this.macroarg
+						var marg = this.macroarg = Object.create(this.macroarg)
+						var params
+						// alright lets go and define the macro args
+						while(macro){
+							//!TODO add type checking here
+							params = macro.id.args
+							if(arglen == params.length) break
+							name = name + 'params'
+							macro = this.macros[name]
+						}
+						if(!macro) throw new Error('No matching macro found')
+						// build up macro args
+						for(var i = 0; i < arglen; i++){
+							var param = params[i]
+							// check if we have a default arg
+							if(param.type == 'Assign'){
+								throw new Error('implement macro default arg')
+							}
+							this.macroarg[param.name] = args[i]
+						}
+						var ret = this.expand( macro.value )
+						this.macroarg = a
+						return ret
+					}
+
 					if(name == 'super'){
 						if(args){
 							args = args.slice(0)
 							args.unshift('arguments')
 						}
 						else args = ['arguments']
+						arglen = args.length
 					}
 				}
 
 				// new or extend
-				if(fn.type == 'Key' && fn.key.type == 'Id'){
-					var name = fn.key.name
-					if(name == 'new' || name == 'extend' ){
-						if(args){
-							args = args.slice(0)
-							args.unshift('this')
+				if(fn.type == 'Key'){
+					// check if we are a property access on a 
+					// what we need to trace is the root object
+					var root = fn.isKeyChain()
+					if(root && root.name){
+						var isstatic
+						var type = this.scope[root.name] || (isstatic = this.typelib[root.name])
+						if(type && type !== 1){ 
+							// alright we are a method call.
+							if(fn.object.type !='Id') throw new Error('only 1 deep method calls for now')
+							// so first we are going to compile the function
+							var mname = fn.key.name
+							
+							var method = type.methods[mname]
+							while(method){
+								//!TODO add type checking here
+								if(method.params.length == args.length) break
+								mname = mname + '_'
+								method = type.methods[mname]
+							}
+							if(!method) throw new Error('No overload found for '+mname)
+
+							// lets make a name from our argument types
+							for(var i = 0, l = method.params.length; i < l; i++){
+								var kind = method.params[i].id.kind
+								mname += '_'+(kind && kind.name || 'var')
+							}
+
+							var gen = type.name + '_' + mname
+
+							if(!this.typemethods[gen]){
+								var d = this.depth
+								this.depth = ''
+								var t = this.typemethod
+								this.typemethod = type
+								this.typemethods[gen] = this.Function(method, false, gen, undefined, type ) + this.newline
+								this.typemethod = t
+								this.depth = d
+							}
+							// we need to plug this at the head of our generated function.
+
+							var ret = ''
+							ret += gen+'.call(this'
+							if(isstatic){
+								ret += ',{o:0,'+type.arr+':new ' + type.view + 'Array(' + type.slots + ')}'
+							} 
+							else ret += ', ' + root.name
+
+							// set up the call and argument list
+							for(var i = 0; i < arglen; i++){
+								var arg = args[i]
+								ret += ', ' + this.expand(arg, n)
+								if(arg.type == 'Rest') throw new Error('... is not supported in typed calls')
+							}
+							ret += ')'
+							return ret
 						}
-						else args = ['this']
 					}
-					// else dont mess with it 
-					else if(name == 'call' || name == 'apply'){
-						return this.expand( n.fn, n, true ) + '(' + this.list( n.args, n ) + ')'
+
+					if(fn.key.type == 'Id'){
+						var name = fn.key.name
+						if(name == 'new' || name == 'extend' ){
+							if(args){
+								args = args.slice(0)
+								args.unshift('this')
+							}
+							else args = ['this']
+						}
+						// else dont mess with it 
+						else if(name == 'call' || name == 'apply'){
+							return this.expand( n.fn, n, true ) + '(' + this.list( n.args, n ) + ')'
+						} 
 					}
 				}
 
-				var arglen = args.length
 				var isapply = false
 				var sarg = ''
 				if(arglen){
@@ -2349,7 +2841,6 @@ ONE.ast_ = function(){
 							cthis = this.expand(fn.object, fn)
 							if(fn.type == 'Index') call = cthis + '[' + this.expand(fn.index, fn) + ']'
 							else call = cthis + '.' + fn.key.name
-
 						}
 						else { // we might be a chain on a call.
 							// use a tempvar for the object part of the key
@@ -2374,6 +2865,10 @@ ONE.ast_ = function(){
 				}
 
 				if(isapply) return call +'.apply(' + cthis + (sarg?','+this.space+sarg:'') + ')'
+				//fastpath Math
+				if(cthis == 'Math'){
+					return call+'('+sarg+')'
+				}
 				return call +'.call(' + cthis + (sarg?','+this.space+sarg:'') + ')'
 			}
 
@@ -2527,7 +3022,11 @@ ONE.ast_ = function(){
 			while( p ) s = wd[ p & 0x7f ] + s, p = p >> 7 // rebuild the strange word
 			var c = ci[i + 1]
 			var sl = s.toLowerCase()
-			colors[sl] = colors[s] = [(c>>16)/255,((c>>8)&0xff)/255, (c&0xff)/255]
+			var a = new Float32Array(3)
+			a[0] = (c>>16)/255
+			a[1] = ((c>>8)&0xff)/255
+			a[2] = (c&0xff)/255
+			colors[sl] = colors[s] = {f4:a,o:0}
 		}
 
 		// color to array decoder
@@ -2536,10 +3035,20 @@ ONE.ast_ = function(){
 				var c = colors[ col ] // color LUT
 				if( c ) return c
 				var c = parseInt(col, 16)
-				if(col.length == 4) return [ ((c&0xf00)>>8|(c&0xf00)>>4) /255, ((c&0xf0)|(c&0xf0)>>4) /255, ((c&0xf)|(c&0xf)<<4) /255 ]
-				else return [ ((c >> 16)&0xff) /255, ((c >> 8)&0xff) /255, (c&0xff) /255 ]
-			}{}
-			if( typeof col == 'object' && Array.isArray( col ) && (col.length == 3 || col.length == 4) && typeof col[0] == 'number' ) return col
+				var a = new Float32Array(3)
+				if(col.length == 4){ 
+					a[0] = ((c&0xf00)>>8|(c&0xf00)>>4) /255
+					a[1] = ((c&0xf0)|(c&0xf0)>>4) /255
+					a[2] = ((c&0xf)|(c&0xf)<<4) /255 
+				}
+				else {
+					a[0] = ((c >> 16)&0xff) /255
+					a[1] = ((c >> 8)&0xff) /255
+					a[2] = (c&0xff) /255
+				}
+				return {f4:a, o:0}
+			}
+			//if( typeof col == 'object' && Array.isArray( col ) && (col.length == 3 || col.length == 4) && typeof col[0] == 'number' ) return col
 		}
 	})()
 
