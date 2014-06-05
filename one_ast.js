@@ -11,13 +11,11 @@ ONE.ast_ = function(){
 		parser.sourceFile = filename || ''
 
 		var node = parserCache[source]
-		if (! node ){
+		if(! node ){
 			node = parser.parse_strict( source )
 			// scan up to pull ret the essential ast node			
 			if(node.steps.length == 1){
-				var cm = node.comments
 				node = node.steps[0]
-				if(cm) node.comments = cm
 			}
 			parserCache[source] = node
 		}
@@ -64,7 +62,7 @@ ONE.ast_ = function(){
 		return node
 	}
 
-	this.eval = function( ast, comments, filename ){
+	this.eval = function( ast, filename ){
 		if( typeof ast == 'string' ) 
 			ast = this.parse( ast, undefined, undefined, filename, true )
 
@@ -75,7 +73,6 @@ ONE.ast_ = function(){
 		js.typemethods = {}
 		js.signals = []
 		js.line = 0
-		//js.comments = comments
 		// if passing a function we return that
 		if(ast.type == 'Function'){
 			var steps = ast.body.steps
@@ -85,14 +82,13 @@ ONE.ast_ = function(){
 				if(dump.indexOf('ast')!= -1) ONE.out( ast.toDump() )
 				if(dump.indexOf('code')!=-1){
 					var code = this.AST.ToCode
-					code.comments = comments
 					ONE.out( code.Function(ast) )
 				}
 			}
 			// name anonmous function with a filename if possible
 			var nametag
 			if(filename) nametag = 'file__'+filename.replace(/[\.\/]/g,'_')
-			var code = 'return ' + js.Function( ast, false, nametag )
+			var code = 'return ' + js.Function( ast, nametag )
 			// prepend type methods
 			for(var k in js.typemethods){
 				code = js.typemethods[k] + code
@@ -199,7 +195,6 @@ ONE.ast_ = function(){
 			Empty:{},
 
 			Id: { name:0, flag:0, kind:1 },
-			Type: { name:0 },
 			Value: { value:0, raw:0, kind:0, multi:0 },
 			This: { },
 
@@ -464,7 +459,6 @@ ONE.ast_ = function(){
 			var js = this.ToJS
 			js.line = 0
 			js.scope = {}
-			//js.comments = comments
 			return js.expand( this )
 		}
 
@@ -472,7 +466,6 @@ ONE.ast_ = function(){
 		this.toCode = function(comments){
 			var code = this.ToCode
 			code.line = 0
-			//code.comments = comments
 			return code.expand( this )
 		}
 
@@ -481,17 +474,10 @@ ONE.ast_ = function(){
 			this.space = ' '
 			this.newline = '\n'
 			this.indent = '\t'
-			this.semi = ''
 			this.depth = ''
-			
-			// comment restoration
-			this.cignore = 0
-			this.comments = 0
 			this.line = 0
 
-			this.array_fix = 0 //!TODO do this nicely
 			this.expand_short_object = 0
-
 
 			this.store = function( n, value ){
 				var ret = value
@@ -501,54 +487,19 @@ ONE.ast_ = function(){
 				return ret
 			}
 
-			this.expand = function( n, parent, parens, term ){ // recursive expansion
-				if( !n || !n.type ) return term || ''
-				//if(!parent) throw new Error('Incorrect parent')
+			this.expand = function( n, parent ){ // recursive expansion
+				if( !n || !n.type ) return ''
+
 				n.parent = parent
 				n.genstart = this.line
+
 				if(!this[n.type])throw new Error(n.type)
-				var ret = this[n.type](n, parens)
+
+				var ret = this[n.type](n)
 				n.genend = this.line
-
-				if(n.store){ // someone wants a tempstore
-					ret = this.store(n, ret)
-				}
-
-				// do some comments restoration
-				var comments = n.comments
-				if( this.comments && comments && !this.cignore ){
-					ret += this.comments_flush( n.comments, term )
-				} 
-				else if( term ) return ret + term
-				if( this.cignore ) this.cignore--
+				if(n.store) ret = this.store(n, ret)
 
 				return ret
-			}
-
-			this.comments_flush = function( array, term ){
-				if(!this.comments) return ''
-				var cmt = array
-				var ret = ''
-				var len = cmt.length
-				if( term && len ) ret += term
-				for(var j = 0;j<len;j++){
-					var c = cmt[j]
-					if( c === -1 ) ret += this.newline, this.line++
-					else ret += (j?this.depth:' ') + '// ' + c
-				}
-				return ret
-			}
-
-			this.comments_or_newline = function( n ){
-				if(n.comments && n.comments.length && this.comments){
-					var ret 
-					var old = this.depth
-					this.depth += this.indent
-					ret = this.comments_flush( n.comments )
-					this.depth = old
-					return ret
-				}
-				return this.newline
 			}
 
 			this.block = function( n, parent, noindent ){ // term split array
@@ -556,13 +507,12 @@ ONE.ast_ = function(){
 				if(!noindent) this.depth += this.indent
 				var ret = ''
 				for( var i = 0; i < n.length; i++ ){
-					var R = n[ i ]
-					var blk = this.expand( R, parent )
-					if(blk[0] == '(' || blk[0] == '[') ret += this.depth + this.semi + blk
+					var node = n[ i ]
+					var blk = this.expand(node, parent)
+					if(blk[0] == '(' || blk[0] == '[') ret += this.depth + ';' + blk
 					else ret += this.depth + blk
 					var ch = ret[ret.length - 1]
-					if(!this.comments || ch !== '\n' ){
-						//if( ch == '}') ret += this.newline, this.line++
+					if(ch !== '\n' ){
 						ret += this.newline, this.line++
 					}
 				}
@@ -571,33 +521,34 @@ ONE.ast_ = function(){
 			}
 
 			this.flat = function( n, parent ){
-				if(n.length == 0) return ''
-				var ret = ''
 				var len = n.length
-				for( var i = 0; i < len; i++ ){
+				if(len == 0) return ''
+				var ret = ''
+
+				for(var i = 0; i < len; i++){
 					if(i) ret += ',' + this.space
-					ret += this.expand( n[ i ], parent )
+					ret += this.expand(n[i], parent)
 				}
 				return ret
 			}
 
 			this.list = function( n, parent ){
-				if(n.length == 0) return ''
-				//var old_depth = this.depth
-				//this.depth += this.indent
-				var ret = ''
 				var len = n.length
-				var term = ',' + this.space
-				for( var i = 0; i < len; i++ ){
-					ret += this.expand( n[ i ], parent, false, i<len-1?term:'' )
-					if( ret[ ret.length - 1 ] == '\n' ) ret += i == len - 1? this.depth:this.depth+this.indent
+				if(len == 0) return ''
+				var ret = ''
+				var split = ',' + this.space
+
+				for(var i = 0; i < len; i++){
+					if(ret !== '') ret += split
+					ret += this.expand(n[ i ], parent)
+					if(ret[ret.length - 1] == '\n') ret += i == len - 1? this.depth:this.depth+this.indent
 				}
-				//this.depth = old_depth
+
 				return ret
 			}
 
 			this.Program = function( n ){ 
-				return this.block( n.steps, n, true )
+				return this.block(n.steps, n, true)
 			}
 
 			this.Empty = function( n ){ 
@@ -609,10 +560,10 @@ ONE.ast_ = function(){
 				if(flag){
 					if(flag === -1) return '..'
 					if(flag === 46) return '.' + n.name
-					if(flag === 126) return n.name+'~'
-					if(flag === 33) return n.name+'!'
-					if(flag === 64) return '@'+(n.name!==undefined?n.name:'')
-					if(flag === 35) return '#'+(n.name!==undefined?n.name:'')
+					if(flag === 126) return n.name + '~'
+					if(flag === 33) return n.name + '!'
+					if(flag === 64) return '@' + (n.name!==undefined?n.name:'')
+					if(flag === 35) return '#' + (n.name!==undefined?n.name:'')
 				}
 				if(n.kind) return this.expand(n.kind, n) + ' ' + n.name
 				return n.name
@@ -620,10 +571,6 @@ ONE.ast_ = function(){
 
 			this.Define = function( n ){
 				return 'define ' + this.expand(n.id, n) + ' ' + this.expand(n.value, n)
-			}
-
-			this.Type = function( n ){
-				return n.name
 			}
 
 			this.Value = function( n ){
@@ -635,55 +582,41 @@ ONE.ast_ = function(){
 			}
 
 			this.Array = function( n ){
-				//!TODO x = [\n[1]\n[2]] barfs up with comments
-				var old_cmt = this.comments
-				if(this.array_fix++>0) this.comments = 0
-				var ret = '['+ 
-					(n.comments&&this.comments?this.comments_flush( n.comments )+this.depth+(n.elems.length?this.indent:''):'') + 
-					this.list( n.elems, n ) + 
-				']' 
-				this.array_fix--
-				this.comments = old_cmt
-				this.cignore = 1
+				var ret = '[' +
+					this.list( n.elems, n) +
+				']'
 				return ret
 			}
 
 			this.Object = function( n ){ 
-				var old_cmt = this.comments
-				if(this.array_fix++>0) this.comments = 0
 				var old_depth = this.depth
 				this.depth += this.indent
+
 				var k = n.keys
 				var len = k.length
 				var ret = '{' + this.space
-				if(n.comments){
-					ret += this.comments_flush( n.comments )
-					if( !len ) ret += old_depth
-				}
 				var lastcm = ''
 				var vc = 0
-				for( var i = 0; i < len; i++ ){
+
+				for(var i = 0; i < len; i++){
 					var prop = k[i]
-					if( i ) ret += ',' + this.space + lastcm
+					if(i) ret += ',' + this.space + lastcm
 					lastcm = ''
-					var ch = ret[ ret.length -1 ]
-					if( ch == '\n' ) ret += this.depth
-					else if( ch == '}' ) ret +=  this.newline + this.depth
+					var ch = ret[ret.length -1]
+					if(ch == '\n') ret += this.depth
+					else if(ch == '}') ret +=  this.newline + this.depth
 					ret += (prop.key.name || prop.key.raw) 
 
 					if(prop.short === undefined){
-						ret += ':' + this.expand( prop.value, n )
+						ret += ':' + this.expand(prop.value, n)
 					}
 					else{
 						if(this.expand_short_object){
-							ret += ':' + this.resolve( prop.key.name )
-						}
-						if( prop.key.comments ){
-							lastcm = this.comments_or_newline( prop.key )
-							if( i == len - 1) ret += lastcm
+							ret += ':' + this.resolve(prop.key.name)
 						}
 					}
 				}
+
 				var ch = ret[ ret.length - 1 ]
 				if( ch == '\n') ret += old_depth +'}'
 				else{
@@ -691,45 +624,51 @@ ONE.ast_ = function(){
 					else ret += this.space + '}'
 				}
 				this.depth = old_depth
-				this.array_fix--
-				this.comments = old_cmt
-				this.cignore = 1
+
 				return ret
 			}
 
 			this.Index = function( n ){
-				return this.expand( n.object, n, true ) + '[' + this.expand( n.index, n ) + ']'
+				var obj = n.object
+				var object_t = obj.type
+				var object = this.expand(obj, n)
+				if(object_t !== 'Index' && object_t !== 'Id' && object_t !== 'Key' && object_t !== 'Call'&& object_t !== 'This')
+					object = '(' + object + ')'
+				// when do we need parens? if its not a key or block or call
+				return object + '[' + this.expand( n.index, n ) + ']'
 			}
 
 			this.Key = function( n ){
-				var left = this.expand( n.object, n, true )
-				return  left + (this.exist?'?.':(left[left.length - 1] == '.'?'':'.')) + this.expand( n.key, n )
+				var obj = n.object
+				var object_t = obj.type
+				var object = this.expand(obj, n)
+				if(object_t !== 'Index' && object_t !== 'Id' && object_t !== 'Key' && object_t !== 'Call'&& object_t !== 'This')
+					object = '(' + object + ')'
+
+				return  object + (this.exist?'?.':'.') + this.expand(n.key, n)
 			}
 
 			this.Block = function( n ){
-				var ret = '{' + this.comments_or_newline( n ) + this.block( n.steps, n ) + this.depth + '}'
-				this.cignore =1 
+				var ret = '{' + this.newline + this.block(n.steps, n) + this.depth + '}'
 				return ret
 			}
 
-			this.List = function( n, parens ){
-				if( parens ) '('+this.list( n.items, n ) +')'
-				return this.list( n.items, n )
+			this.List = function( n ){
+				return this.list(n.items, n)
 			}
 
-			this.Comprehension = function( n, parens ){
+			this.Comprehension = function( n ){
 				return '1'
 			}
 
-			this.Template = function( n, parens ){
+			this.Template = function( n ){
 				var ret = '"'
 				var chain = n.chain
 				var len = chain.length 
 				for(var i = 0; i < len; i++){
 					var item = chain[i]
 					if(item.type == 'Block'){
-						if(item.steps.length == 1 &&
-							outer.IsExpr[item.steps[0].type]){
+						if(item.steps.length == 1 && outer.IsExpr[item.steps[0].type]){
 							ret += '{' + this.expand(item.steps[0], n) + '}'
 						} 
 						else ret += this.expand(item, n)
@@ -743,320 +682,337 @@ ONE.ast_ = function(){
 			}
 
 			this.Break = function( n ){ 
-				return 'break'+(n.label?' '+this.expand( n.label, n ):'')
+				return 'break'+(n.label?' '+this.expand(n.label, n):'')
 			}
 
 			this.Continue = function( n ){
-				return 'continue'+(n.label?' '+this.expand( n.label, n ):'')
+				return 'continue'+(n.label?' '+this.expand(n.label, n):'')
 			}
 
 			this.Label = function( n ){
-				return this.expand( n.label, n )+':'+this.expand( n.body, n )
+				return this.expand(n.label, n)+':'+this.expand(n.body, n)
 			}
 
 			this.If = function( n ) {
 				var ret = 'if('
 				ret += this.expand( n.test, n )
+
 				if( ret[ret.length - 1] == '\n') ret += this.depth + this.indent
-				ret += ')' + this.space + this.expand( n.then, n ) 
+				ret += ')' + this.space + this.expand(n.then, n) 
+
 				if(n.else){
 					var ch = ret[ret.length - 1]
 					if( ch !== '\n' ) ret += this.newline
-					ret += this.depth + 'else ' + this.expand( n.else, n )
+					ret += this.depth + 'else ' + this.expand(n.else, n)
 				}
+
 				return ret
 			}
 
 			this.Switch = function( n ){
-				var old_cmt = this.comments
-				this.comments = 0 // dont allow comments in the switch on
-				var ret = 'switch('+this.expand(n.on, n)+'){'
-				this.comments = old_cmt
-				ret += this.comments_or_newline(n.on)
+				var ret = 'switch(' + this.expand(n.on, n) + '){'
+
+				ret += this.newline
+
 				var old = this.depth
 				this.depth += this.indent				
+
 				var cases = n.cases
-				if(cases) for( var i = 0; i < cases.length; i++ ) ret += this.depth + this.expand( cases[ i ], n )
+				if(cases) for( var i = 0; i < cases.length; i++ ) ret += this.depth + this.expand(cases[i], n)
+
 				this.depth = old
 				ret += this.depth + '}'
+
 				return ret
 			}
 
 			this.Case = function( n ){
-				if( !n.test) return 'default:'+( n.then.length ? this.newline+this.block( n.then, n ) : this.newline )
+				if(!n.test){
+					return 'default:' + (n.then.length? this.newline+this.block(n.then, n): this.newline)
+				}
 				var ret = 'case '
-				var old_cmt = this.comments
-				this.comments = 0
-				ret += this.expand( n.test, n ) + ':' 
-				this.comments = old_cmt
-				ret += this.comments_or_newline(n.test)
-				if (n.then.length) ret += this.block( n.then, n )
+
+				ret += this.expand(n.test, n) + ':' 
+				ret += this.newline
+
+				if(n.then.length) ret += this.block(n.then, n)
+
 				return ret
 			}
 
 			this.Throw = function( n ){
-				return 'throw ' + this.expand( n.arg, n )
+				return 'throw ' + this.expand(n.arg, n)
 			}
 
 			this.Try = function( n ){
-				var ret = 'try' + this.expand( n.try, n )
+				var ret = 'try' + this.expand(n.try, n)
 				if(n.catch){
 					if(n.arg.type !== 'Id') throw new Error("unsupported catch type")
 					var name = n.arg.name 
-					var inscope = this.scope[ name ]
-					if(!inscope) this.scope[ name ] = 1
-					ret += 'catch('+name+')'+this.expand( n.catch, n )
-					if(!inscope) this.scope[ name ] = undefined
+					var inscope = this.scope[name]
+					if(!inscope) this.scope[name] = 1
+					ret += 'catch('+name+')'+this.expand(n.catch, n)
+					if(!inscope) this.scope[name] = undefined
 
 				} 
 
-				if(n.finally) ret += 'finally'+this.expand( n.finally, n )
+				if(n.finally) ret += 'finally' + this.expand(n.finally, n)
 				return ret
 			}
 
 			this.While = function( n ){
-				return 'while(' + this.expand( n.test, n ) + ')' + 
-					this.expand( n.loop, n )
+				return 'while(' + this.expand(n.test, n) + ')' + 
+					this.expand(n.loop, n)
 			}
 
 			this.DoWhile = function( n ){
-				return 'do' + this.expand( n.loop, n ) + 
-					'while(' + this.expand( n.test, n ) + ')'
+				return 'do' + this.expand(n.loop, n) + 
+					'while(' + this.expand(n.test, n) + ')'
 			}
 
 			this.For = function( n ){
-				return 'for(' + this.expand( n.init, n )+';'+
-						this.expand( n.test, n ) + ';' +
-						this.expand( n.update, n ) + ')' + 
-						this.expand( n.loop, n )
+				return 'for(' + this.expand(n.init, n)+';'+
+						this.expand(n.test, n) + ';' +
+						this.expand(n.update, n) + ')' + 
+						this.expand(n.loop, n)
 			}
 
 			this.ForIn = function( n ){
-				return 'for(' + this.expand( n.left, n ) + ' in ' +
-					this.expand( n.right, n ) + ')' + 
-					this.expand( n.loop, n )
+				return 'for(' + this.expand(n.left, n) + ' in ' +
+					this.expand(n.right, n) + ')' + 
+					this.expand(n.loop, n)
 			}
 
 			this.ForOf = function( n ){
 
-				return 'for(' + this.expand( n.left, n ) + ' of ' +
-					this.expand( n.right, n ) + ')' + 
-					this.expand( n.loop, n )
+				return 'for(' + this.expand(n.left, n) + ' of ' +
+					this.expand(n.right, n) + ')' + 
+					this.expand(n.loop, n)
 			}
 
 			this.ForFrom = function( n ){
-				return 'for(' + this.expand( n.left, n ) + ' from ' +
-					this.expand( n.right, n ) + ')' + 
-					this.expand( n.loop, n )
+				return 'for(' + this.expand(n.left, n) + ' from ' +
+					this.expand(n.right, n) + ')' + 
+					this.expand(n.loop, n)
 			}
 
 			this.ForTo = function( n ){
-				return 'for(' + this.expand( n.left, n ) + ' to ' +
-					this.expand( n.right, n ) + 
-					(n.in?' in ' + this.expand( n.in, n ):'') + ')' + 
-					this.expand( n.loop, n )
+				return 'for(' + this.expand(n.left, n) + ' to ' +
+					this.expand(n.right, n) + 
+					(n.in?' in ' + this.expand(n.in, n):'') + ')' + 
+					this.expand(n.loop, n)
 			}
 
 			this.Var = function( n ){
-				return (n.const?'const ':'var ') + this.flat( n.defs, n )
+				return (n.const?'const ':'var ') + this.flat(n.defs, n)
 			}
 
 			this.Const = function( n ){
-				return 'const ' + this.flat( n.defs, n )
+				return 'const ' + this.flat(n.defs, n)
 			}
 
 			this.TypeVar = function( n ){
 				return this.expand(n.kind, n) + ' ' + 
-					this.flat( n.defs, n )
+					this.flat(n.defs, n)
 			}
 
 			this.Def = function( n ){
-				return this.expand( n.id, n ) + 
+				return this.expand(n.id, n) + 
 					(n.init ? this.space + '=' + this.space + this.expand(n.init, n) : '')
 			}
 
 			this.Struct = function( n ){
-				return 'struct ' + this.expand( n.id, n) + 
-					(n.struct ? this.expand( n.struct, n): ' '+this.list( n.defs, n ) )
+				return 'struct ' + this.expand(n.id, n) + this.expand(n.struct, n)
 			}
 
 			this.Enum = function( n ){
-				return 'enum ' + this.expand( n.id, n, false, '{') +this.depth+this.indent+ this.list( n.enums, n) +'}'
+				return 'enum ' + this.expand( n.id, n) + '{' + this.newline + 
+					this.depth + this.indent + this.list(n.enums, n) +'}'
 			}
 
-			this.Function = function( n, parens ){
+			this.Function = function( n ){
 				if(n.arrow){
 					var arrow = n.arrow
 					// if an arrow has just one Id as arg leave off ( )
 					if( !n.rest && n.params && n.params.length == 1 && !n.params[0].init && n.params[0].id.type == 'Id' ){
-						return this.expand( n.params[0].id, n ) + arrow + this.expand( n.body, n )
+						return this.expand(n.params[0].id, n) + arrow + this.expand(n.body, n)
 					}
 					var ret = ''
 					if(n.name) ret += this.expand(n.name)
 
-					ret += '(' +(n.params?this.list( n.params, n ):'') + 
-						(n.rest ? ',' + this.space + this.expand( n.rest, n ) : '' )+ ')' 
+					ret += '(' +(n.params?this.list(n.params, n):'') + 
+						(n.rest ? ',' + this.space + this.expand(n.rest, n) : '' )+ ')' 
 					if(!n.name || n.body.type != 'Block' || arrow != '->') ret += arrow
-					ret += this.expand( n.body, n )
+					ret += this.expand(n.body, n)
 					this.cignore = 1
 					return ret
 				}
 				var ret = 'function'
 				if( n.gen ) ret += '*'
-				if( n.id ) ret += ' '+this.expand( n.id, n )
-				ret += '('+this.list( n.params, n )
+				if( n.id ) ret += ' '+this.expand(n.id, n)
+				ret += '('+this.list(n.params, n)
 				if( n.rest ) ret += ',' + this.expand(n.rest, n) 
 				ret += ')'
-				ret += this.expand( n.body, n )
-				this.cignore = 1
-				if( parens ) return '(' +ret + ')'
+				ret += this.expand(n.body, n)
 				return ret
 			}
 
 			this.Return = function( n ){
-				return 'return' + (n.arg ? ' ' + this.expand( n.arg, n ):'')
+				if(!n.arg) return 'return'
+				return 'return ' + this.expand(n.arg, n)
 			}
 
 			this.Yield = function( n ){
-				return 'yield' + (n.arg ? ' ' + this.expand( n.arg, n ):'')
+				if(!n.arg) return 'yield'
+				return 'yield ' + this.expand(n.arg, n)
 			}
 
 			this.Await = function( n ){
-				return 'await' + (n.arg ? ' ' + this.expand( n.arg, n ):'')
+				if(!n.arg) return 'await'
+				return 'await ' + this.expand(n.arg, n)
 			}
 
 			this.Unary = function( n ){
+				var arg = this.expand(n.arg, n)
+				var atype = n.arg.type
+
 				if( n.prefix ){
-					if(n.op.length != 1)
-						return n.op + ' ' + this.expand( n.arg, n )
-					return n.op + this.expand( n.arg, n )
+					if(atype == 'Assign' || atype == 'Binary' ||
+						atype == 'Logic' || atype == 'Condition')
+						arg = '(' + arg + ')'
+
+					if(n.op.length != 1) return n.op + ' ' + arg
+
+					return n.op + arg
 				}
-				return this.expand ( n.arg, n ) + n.op
+				return arg + n.op
 			}
 
-			this.Binary = function( n, parens ){
-				var ret
-				if( n.left.type == 'Condition' || n.right.type == 'Condition' || n.left.op && n.left.prio < n.prio ){
-					ret =  this.expand( n.left, n, true ) + this.space + n.op + this.space + this.expand( n.right, n, true )
-				} 
-				else {
-					var rparen =  n.right.op && n.right.prio < n.prio
-					ret = this.expand( n.left, n, false, this.space + n.op )
-					if(ret[ ret.length - 1 ] == '\n') ret += this.indent + this.depth
-					ret += this.space + this.expand( n.right, n, rparen )
-				}
-				if( parens ) return '(' + ret + ')'
-				return ret
+			// alright so how are we going to do parens?
+			this.Binary = function( n ){
+				var left = this.expand(n.left, n)
+				var right = this.expand(n.right, n)
+				var left_t = n.left.type
+				var right_t = n.right.type
+
+				if(left_t == 'Assign' || left_t == 'List' || left_t == 'Condition' || 
+					(left_t == 'Binary' || left_t == 'Logic') && n.left.prio < n.prio) 
+					left = '(' + left + ')'
+
+				if(right_t == 'Assign' || right_t == 'List' || right_t == 'Condition' || 
+					(right_t == 'Binary' || right_t == 'Logic') &&  n.right.prio < n.prio) 
+					right = '(' + right + ')'
+
+				return left + this.space + n.op + this.space + right
 			}
 
-			this.Logic = function( n, parens ){
-				var ret
-				if( n.left.op && n.left.prio < n.prio ){
-					ret = '(' + this.expand( n.left, n ) + ')' + this.space + n.op + this.space + this.expand( n.right, n )
-				} 
-				else {
-					ret = this.expand( n.left, n, false, this.space + n.op )
-					if(ret[ ret.length - 1 ] == '\n') ret += this.indent + this.depth
-					ret += this.space + this.expand( n.right, n )
-				}
-				if( parens ) return '(' + ret + ')'
-				return ret
+			this.Logic = function( n ){
+				var left = this.expand(n.left, n)
+				var right = this.expand(n.right, n)
+				var left_t = n.left.type
+				var right_t = n.right.type
+
+				if(left_t == 'Assign' || left_t == 'List' || left_t == 'Condition' || 
+					(left_t == 'Binary' || left_t == 'Logic') && n.left.prio < n.prio) 
+					left = '(' + left + ')'
+
+				if(right_t == 'Assign' || right_t == 'List' || right_t == 'Condition' || 
+					(right_t == 'Binary' || right_t == 'Logic') &&  n.right.prio < n.prio)
+					right = '(' + right + ')' 
+
+				return left + this.space + n.op + this.space + right
 			}
 
-			this.Signal = function( n, parens ){
+			this.Signal = function( n ){
 				var ret
-				ret = this.expand( n.left, n, false, ':')
+				ret = this.expand(n.left, n) + ':'
 				if(!n.lazy) ret += '='
-				if(ret[ ret.length - 1 ] == '\n') ret += this.indent + this.depth
-				ret += this.space + this.expand( n.right, n )
-				if( parens ) return '(' + ret + ')'
+				if(ret[ret.length - 1] == '\n') ret += this.indent + this.depth
+				ret += this.space + this.expand(n.right, n)
 				return ret
 			}
 
-			this.Assign = function( n, parens ){
-				var ret
-				if( n.left.op && n.left.prio < n.prio ){
-					ret = '(' + this.expand( n.left, n ) + ')' + this.space + n.op + this.space + this.expand( n.right, n )
-				} 
-				else {
-					ret = this.expand( n.left, n, false, this.space + n.op )
-					if(ret[ ret.length - 1 ] == '\n') ret += this.indent + this.depth
-					ret += this.space + this.expand( n.right, n )
-				}
-				if( parens ) return '(' + ret + ')'
-				return ret
-
+			this.Assign = function( n ){
+				var left = this.expand(n.left, n)
+				var right = this.expand(n.right, n)
+				return left + this.space + n.op + this.space + right
 			}
 
-			this.Update = function( n, parens ){
-				var ret 
-				if( n.prefix ) ret = n.op + this.expand( n.arg, n )
-				else ret = this.expand ( n.arg, n ) + n.op
-				if( parens ) return '(' + ret + ')'
-				return ret
+			this.Update = function( n ){
+				if(n.prefix) return n.op + this.expand(n.arg, n)
+				return this.expand (n.arg, n) + n.op
 			}
 
-			this.Condition = function( n, parens ){
-				var ret = this.expand( n.test, n, true )+ this.space +'?'+ this.space +this.expand( n.then, n, true )+ this.space +':'+ this.space +this.expand( n.else, n, true )
-				if(parens) return '(' + ret + ')'
-				return ret			
+			this.Condition = function( n ){
+				// if we have a test of logic or binary 
+				var test = this.expand(n.test, n)
+				var test_t = n.test.type
+
+				if(test_t == 'Assign' || test_t == 'List' || 
+					test_t == 'Logic' || test_t == 'Binary') test = '(' + test + ')'
+
+				var else_v = this.expand(n.else, n)
+				var else_t = n.else.type
+				if(else_t == 'Assign' || else_t == 'List' || 
+					else_t == 'Logic' || else_t == 'Binary') else_v = '(' + else_v + ')'
+
+				return test + '?' + 
+					this.space + this.expand(n.then, n) + ':' + 
+					this.space + else_v
 			}
 
 			this.New = function( n ){
-				return 'new ' + this.expand( n.fn, n, true ) + '(' + this.list( n.args, n ) + ')'
+				var fn = this.expand(n.fn, n)
+				var fn_t = n.fn.type
+				if(fn_t == 'List' || fn_t == 'Logic' || fn_t == 'Condition') 
+					fn = '(' + fn + ')'
+				return 'new ' + fn + '(' + this.list(n.args, n) + ')'
 			}
 
 			this.Call = function( n ){
-				return this.expand( n.fn, n, true ) + '(' + this.list( n.args, n ) + ')'
+				var fn = this.expand(n.fn, n)
+				var fn_t = n.fn.type
+				if(fn_t == 'List' || fn_t == 'Logic' || fn_t == 'Condition') 
+					fn = '(' + fn + ')'
+				return fn + '(' + this.list(n.args, n) + ')'
 			}
 
 			this.Class = function( n ){
 				var ret = 'class ' + n.id.name
 				if(n.base) ret += ' extends ' + n.base.name 
-				ret += this.expand( n.body, n )
+				ret += this.expand(n.body, n)
 				return ret
 			}
 
-			this.Quote = function( n, parens ){
-				var ret = ':' + this.expand( n.quote, n )
-				if( parens ) return '(' +ret + ')'
+			this.Quote = function( n ){
+				var ret = ':' + this.expand(n.quote, n)
 				return ret
 			}
 
 			this.Rest = function( n ){
-				var ret = ''
-				for(var i = 0;i< n.dots;i++) ret += '.'
-				ret += this.expand( n.id, n )
-				return ret
-			}
-
-			this.Path = function( n ){
-				var ret = ''
-				for(var i = 0;i< n.dots;i++) ret += '.'
-				ret += n.op + this.expand( n.id, n )
-				return ret
+				return '...' + this.expand(n.id, n)
 			}
 
 			this.Do = function( n ){
 				var ret = ''
-				ret += this.expand( n.call, n ) 
-				if(ret[ ret.length -1 ] == '\n') ret += this.depth + 'do '
+				ret += this.expand(n.call, n) 
+				if(ret[ret.length - 1] == '\n') ret += this.depth + 'do '
 				else ret += ' do '
-				ret += this.expand( n.arg, n )
-				if( n.catch ){
-					if( ret[ ret.length -1 ] == '\n') ret += this.depth
-					ret += 'catch ' + this.expand( n.catch )
+				ret += this.expand(n.arg, n)
+				if(n.catch){
+					if(ret[ret.length - 1] == '\n') ret += this.depth
+					ret += 'catch ' + this.expand(n.catch)
 				}
-				if( n.then ){
-					if(ret[ ret.length - 1] == '}') ret += this.newline + this.depth
-					if(ret[ ret.length -1 ] == '\n') ret += this.depth
+				if(n.then){
+					if(ret[ret.length - 1] == '}') ret += this.newline + this.depth
+					if(ret[ret.length - 1] == '\n') ret += this.depth
 					ret += this.expand( n.then )
 				}
 				return ret
 			}
 
 			this.Create = function( n ){
-				return this.expand( n.object, n ) + this.expand( n.body, n )
+				return this.expand(n.object, n) + this.expand(n.body, n)
 			}
 
 			this.Debugger = function( n ){
@@ -1064,7 +1020,7 @@ ONE.ast_ = function(){
 			}
 
 			this.With = function( n ){
-				return 'with(' + this.expand( n.object, n ) + ')' + this.expand( n.body, n )
+				return 'with(' + this.expand(n.object, n) + ')' + this.expand(n.body, n)
 			}
 		})
 
@@ -1074,16 +1030,16 @@ ONE.ast_ = function(){
 			this.indent = '\t'
 
 			this.Unary = function( n ){
-				if( n.prefix ){
+				if(n.prefix){
 					if(n.op == '%' && this.templates){
 						if(n.arg.type != 'Id') throw new Error("Unknown template & variable type")
 						this.templates[n.arg.name] = 1
 					}
 					if(n.op.length != 1)
-						return n.op + ' ' + this.expand( n.arg, n )
-					return n.op + this.expand( n.arg, n )
+						return n.op + ' ' + this.expand(n.arg, n)
+					return n.op + this.expand(n.arg, n)
 				}
-				return this.expand ( n.arg, n ) + n.op
+				return this.expand(n.arg, n) + n.op
 			}
 
 			this.Value = function( n ){
@@ -1122,14 +1078,18 @@ ONE.ast_ = function(){
 		this.ToJS = this.ToCode.extend(this, function(outer){
 			
 			this.newline = '\n'
-			this.semi = ';'
+
 			this.scope = {}
+
 			this.typelib = Object.create(outer.typeMap)
 			this.defines = Object.create(null)
+
 			this.macros = Object.create(null)
 			this.macroarg = Object.create(null)
+
 			this.promise_catch = 1
 			this.expand_short_object = 1
+
 			this.destruc_prefix = '_\u0441'
 			this.desarg_prefix = '_\u0430'
 			this.tmp_prefix = '_\u0442'
@@ -1137,6 +1097,7 @@ ONE.ast_ = function(){
 			this.store_prefix = '_\u0455'
 			this.template_marker = '\_\u0445_'
 			this.template_regex = /\_\u0445\_/g
+
 			this.globals = {
 				Object:1,
 				Array:1, 
@@ -1147,6 +1108,7 @@ ONE.ast_ = function(){
 				Error:1,
 				Math:1,
 				RegExp:1,
+				undefined:1,
 				Float32Array:1,
 				Float64Array:1,
 				Int16Array:1,
@@ -1192,21 +1154,27 @@ ONE.ast_ = function(){
 			}
 
 			// destructuring helpers
-			this._destructureArrayOrObject = function(v, acc, nest, fn, vars){
+			this._destrucArrayOrObj = function(v, acc, nest, fn, vars){
 				// alright we must store our object fetch on a ref
 				if(nest >= fn.destruc_vars) fn.destruc_vars = nest + 1
+
 				var ret = ''
 				var od = this.depth
 				this.depth = this.depth + this.indent
-				ret += '('+this.destruc_prefix+nest+'='+this.destruc_prefix+(nest-1)+acc+')===undefined||('+this.newline+this.depth
-				if(v.type == 'Object') ret += this._destructureObject(v, nest + 1, fn, vars)
-				else ret += this._destructureArray(v, nest + 1, fn, vars)
+			
+				ret += '(' + this.destruc_prefix + nest + '=' + this.destruc_prefix + 
+					(nest-1) + acc + ')===undefined||(' + this.newline + this.depth
+
+				if(v.type == 'Object') ret += this._destrucObject(v, nest + 1, fn, vars)
+				else ret += this._destrucArray(v, nest + 1, fn, vars)
+			
 				this.depth = od
 				ret += this.newline+this.depth + ')'
+
 				return ret
 			}
 
-			this._destructureArray = function(arr, nest, fn, vars){
+			this._destrucArray = function(arr, nest, fn, vars){
 				var ret = ''
 				var elems = arr.elems
 				var midrest
@@ -1250,13 +1218,13 @@ ONE.ast_ = function(){
 					} 
 					else if(v.type == 'Object' || v.type == 'Array') {
 						if(i) ret += ',' + this.newline + this.depth
-						ret += this._destructureArrayOrObject(v, acc, nest, fn, vars)
+						ret += this._destrucArrayOrObj(v, acc, nest, fn, vars)
 					}  else throw new Error('Cannot destructure array item '+i)
 				}
 				return ret
 			}
 
-			this._destructureObject = function( obj, nest, fn, vars ){
+			this._destrucObject = function( obj, nest, fn, vars ){
 				var ret = ''
 				var keys = obj.keys
 				for(var i = 0;i<keys.length;i++){
@@ -1283,7 +1251,7 @@ ONE.ast_ = function(){
 					} 
 					else if(v.type == 'Object' || v.type == 'Array') {
 						if(i) ret += ',' + this.newline + this.depth
-						ret += this._destructureArrayOrObject(v, acc, nest, fn, vars)
+						ret += this._destrucArrayOrObj(v, acc, nest, fn, vars)
 					}
 					else throw new Error('Cannot destructure property '+acc)
 				}
@@ -1298,23 +1266,20 @@ ONE.ast_ = function(){
 				var olddepth = this.depth
 				this.depth = this.depth + this.indent					
 
-				var oldcmt = this.comments
-				//this.comments = 0
 				if( init )
-					ret = '('+this.destruc_prefix+'0='+(def?def+'||':'') + 
-						(typeof init == 'string'?init:this.expand( init, n, true)) + 
-						',('+this.newline+this.depth
+					ret = '(' + this.destruc_prefix + '0=' + (def? def + '||': '') + 
+						(typeof init == 'string'?init:this.expand( init, n )) + 
+						',(' + this.newline + this.depth
 				else{
 					if(!def) throw new Error('Destructuring assignment without init value')
-					ret = '('+this.destruc_prefix+'0='+(def?def:'') +',('+this.newline+this.depth
+					ret = '(' + this.destruc_prefix + '0=' + (def?def:'') + ',(' + this.newline + this.depth
 				}
-				//this.comments = 1
 
-				if( left.type == 'Object' ) ret += this._destructureObject(left, 1, fn, vars)
-				else ret += this._destructureArray(left, 1, fn, vars)
+				if( left.type == 'Object' ) ret += this._destrucObject(left, 1, fn, vars)
+				else ret += this._destrucArray(left, 1, fn, vars)
 
 				this.depth = olddepth
-				ret += this.newline+this.depth+'))' + this.comments_or_newline( left )
+				ret += this.newline + this.depth+'))' + this.newline
 				return ret
 			}
 
@@ -1323,7 +1288,7 @@ ONE.ast_ = function(){
 				if(n.store & 1){
 					var fn = this.find_function( n )
 					if(!fn.store_var) fn.store_var = 1
-					ret = '('+this.store_prefix+'='+ret + ')'
+					ret = '(' + this.store_prefix + '=' + ret + ')'
 				}
 				if(n.store & 2) throw new Error("Postfix ! not implemented")
 				if(n.store & 4){
@@ -1334,7 +1299,7 @@ ONE.ast_ = function(){
 
 			this.resolve = function( name, n ){
 				if( name in this.macroarg ){
-					return this.expand(this.macroarg[name] )
+					return this.expand(this.macroarg[name])
 				}
 				var type = this.typemethod, field
 				if(type && (field = type.fields[name])){
@@ -1358,9 +1323,9 @@ ONE.ast_ = function(){
 				var old_depth = this.depth
 				if(!noindent) this.depth += this.indent
 				var ret = ''
-				for( var i = 0; i < n.length; i++ ){
+				for(var i = 0; i < n.length; i++){
 					var step = n[ i ]
-					var blk = this.expand( step, parent )
+					var blk = this.expand(step, parent)
 
 					if(this.template_marked){
 						if(blk.indexOf(this.template_marker)!= -1){
@@ -1379,12 +1344,12 @@ ONE.ast_ = function(){
 						this.template_marked = false
 					}
 					else if(blk!==''){
-						if(blk[0] == '(' || blk[0] == '[') ret += this.depth + this.semi + blk
+						if(blk[0] == '(' || blk[0] == '[') ret += this.depth + ';' + blk
 						else ret += this.depth + blk
 					}
 
 					var ch = ret[ret.length - 1]
-					if((!this.comments || ch !== '\n') && (blk!=='') ){
+					if(ch !== '\n' && (blk!=='') ){
 						ret += this.newline, this.line++
 					}
 				}
@@ -1462,8 +1427,8 @@ ONE.ast_ = function(){
 									if(!field.size) throw new Error('cannot index 0 size field')
 
 									// so if we have dim, we want index calcs.
-									if(field.dim) idx += '('+this.expand( node.index, n ) + ')*' + (field.size / outer.viewSize[type.view]) + '+'
-									else idx += '('+this.expand( node.index, n ) + ')+'
+									if(field.dim) idx += '('+this.expand(node.index, n) + ')*' + (field.size / outer.viewSize[type.view]) + '+'
+									else idx += '('+this.expand(node.index, n) + ')+'
 								}
 								else {
 									field = field.fields[node.key && node.key.name || node.name]
@@ -1497,36 +1462,40 @@ ONE.ast_ = function(){
 			this.Index = function( n ){
 				var ret = this.decodeStructAccess(n)
 				if(ret) return ret
-				return this.expand(n.object, n, true) + '[' + this.expand(n.index, n) + ']'
+				var obj = n.object
+				var object = this.expand(obj, n)
+				var object_t = obj.type
+				if(object_t !== 'Index' && object_t !== 'Id' && object_t !== 'Key' && object_t !== 'Call'&& object_t !== 'This')
+					object = '(' + object + ')'
+
+				return object + '[' + this.expand(n.index, n) + ']'
 			}
 
-			this.Key = function( n, paren ){
+			this.Key = function( n ){
 				if(n.key.type !== 'Id') throw new Error('Unknown key type')
 				var key = n.key
 				var obj = n.object
-				var comments = key.comments
 				var cmt = ''
+
+				var object = this.expand(obj, n)
+				var object_t = obj.type
+
+				if(object_t !== 'Index' && object_t !== 'Id' && object_t !== 'Key' && object_t !== 'Call'&& object_t !== 'This')
+					object = '(' + object + ')'
 
 				// do static memory offset calculation for typed access
 				var ret = this.decodeStructAccess(n)
 				if(ret) return ret
 
-				if(comments) cmt = this.comments_flush(comments)
 				if(n.exist){
-					var fn = this.find_function(n)
-					if(!fn.tmp_vars) fn.tmp_vars = 0
-					var tmp = this.tmp_prefix + (fn.tmp_vars++)
-					var ret = '(' + tmp + '=' + this.expand(obj, n, true) + ') && ' + tmp + '.' + n.key.name + cmt
-					if(paren) return '(' + ret + ')'
-					return ret
+					var tmp = this.alloc_tmpvar(n)
+					return '(' + tmp + '=' + object + ') && ' + tmp + '.' + n.key.name
 				}
-				return this.expand(obj, n, true) + '.' + n.key.name + cmt
+				return object + '.' + n.key.name
 			}
 			
 			this.Array = function( n ){
 				//!TODO x = [\n[1]\n[2]] barfs up with comments
-				var old_cmt = this.comments
-				if(this.array_fix++>0) this.comments = 0
 
 				var elems = n.elems
 				var elemlen = n.elems.length
@@ -1583,13 +1552,9 @@ ONE.ast_ = function(){
 				}
 				else {
 					var ret = '['+ 
-						(n.comments&&this.comments?this.comments_flush( n.comments )+this.depth+(n.elems.length?this.indent:''):'') + 
 						this.list( n.elems, n ) + 
 					']' 
 				}
-				this.array_fix--
-				this.comments = old_cmt
-				this.cignore = 1
 				return ret
 			}
 					
@@ -1635,7 +1600,7 @@ ONE.ast_ = function(){
 				return ret
 			}
 
-			this.Comprehension = function( n, parens ){
+			this.Comprehension = function( n ){
 				var ret = '(function(){'
 				var odepth = this.depth
 				this.depth += this.indent
@@ -1648,16 +1613,16 @@ ONE.ast_ = function(){
 
 				var old_compr = this.compr_assign
 				this.compr_assign = tmp +'.push'
-				ret += this.depth + this.expand(n.for, n) +this.newline
+				ret += this.depth + this.expand(n.for, n) + this.newline
 				ret += this.depth +'return '+tmp
 				this.compr_assign = old_compr
 				this.depth = odepth
 
-				ret += this.newline+this.depth + '}).call(this)'
+				ret += this.newline + this.depth + '}).call(this)'
 				return ret
 			}
 
-			this.Template = function( n, parens ){
+			this.Template = function( n ){
 				var ret = '"'
 				var chain = n.chain
 				var len = chain.length 
@@ -1665,7 +1630,7 @@ ONE.ast_ = function(){
 					var item = chain[i]
 					if(item.type == 'Block'){
 						if(item.steps.length == 1 && outer.IsExpr[item.steps[0].type]){
-							ret += '"+' + this.expand(item.steps[0], n, true) + '+"'
+							ret += '"+(' + this.expand(item.steps[0], n) + ')+"'
 						} 
 						// we dont support non expression blocks
 						else {
@@ -1685,28 +1650,29 @@ ONE.ast_ = function(){
 
 			this.If = function( n ) {
 				var ret = 'if('
-				ret += this.expand( n.test, n )
-				if( ret[ret.length - 1] == '\n') ret += this.depth + this.indent
-				var then = this.expand( n.then, n, true ) 
+				ret += this.expand(n.test, n)
 				ret +=  ')' + this.space
+
+				var then = this.expand(n.then, n) 
 
 				if(n.compr && outer.IsExpr[n.then.type]){
 					ret += this.compr_assign + '(' + then +')'
-				} else ret += then
+				} 
+				else ret += then
 
 				if(n.else){
 					var ch = ret[ret.length - 1]
 					if( ch !== '\n' ) ret += this.newline
-					ret += this.depth + 'else ' + this.expand( n.else, n, true )
+					ret += this.depth + 'else ' + this.expand(n.else, n)
 				}
 				return ret
 			}
 
 			this.For = function( n ){
-				var ret ='for(' + this.expand( n.init, n )+';'+
-						this.expand( n.test, n ) + ';' +
-						this.expand( n.update, n ) + ')'	
-				var loop = this.expand( n.loop, n )
+				var ret ='for(' + this.expand(n.init, n)+';'+
+						this.expand(n.test, n) + ';' +
+						this.expand(n.update, n) + ')'	
+				var loop = this.expand(n.loop, n)
 				if(n.compr){
 					ret += this.compr_assign + '(' + loop + ')'
 				}
@@ -1716,10 +1682,6 @@ ONE.ast_ = function(){
 
 			// Complete for of polyfill with iterator and destructuring support
 			this.ForOf = function( n ){
-				// lets allocate some 
-				var fn = this.find_function( n )
-				if(!fn.tmp_vars) fn.tmp_vars = 0
-
 				// alright we are going to do a for Of polyfill
 				var left = n.left
 				var isvar
@@ -1747,13 +1709,14 @@ ONE.ast_ = function(){
 					destruc = left
 				}
 				// alright so now what we need to do is make a for loop.
-				var result = this.tmp_prefix + (fn.tmp_vars++)
-				var iter = this.tmp_prefix + (fn.tmp_vars++)
+				var result = this.alloc_tmpvar(n)
+				var iter = this.alloc_tmpvar(n)
 				
 				var ret = 'for('
 				ret += iter+'=ONE.iterator(' + this.expand(n.right, n) + '),'+result+'=null;' +
-						iter+'&&(!'+result+'||!'+result+'.done);){'+this.newline
-				var odepth = this.depth
+						iter+'&&(!'+result+'||!'+result+'.done);){' + this.newline
+
+				var od = this.depth
 				this.depth += this.indent 
 				ret += this.depth + result + '=' + iter + '.next()' + this.newline
 				// destructure result.value
@@ -1774,7 +1737,7 @@ ONE.ast_ = function(){
 				} else {
 					ret += this.depth + value + '=' + result + '.value' + this.newline
 				}			
-				this.depth = odepth
+				this.depth = od
 				var loop = this.expand(n.loop, n)
 				if( loop[loop.length-1]=='}' ) ret += loop.slice(1,-1) //!todo fix this
 				else{
@@ -1789,10 +1752,6 @@ ONE.ast_ = function(){
 
 			// a high perf for over an array, nothing more.
 			this.ForFrom = function( n ){
-				// lets allocate some 
-				var fn = this.find_function( n )
-				if(!fn.tmp_vars) fn.tmp_vars = 0
-
 				// we have 2 values to get
 				// the value, and the iterator
 				var left = n.left
@@ -1824,19 +1783,19 @@ ONE.ast_ = function(){
 					if(len > 0) value = this.resolve(items[p++].name)
 				}
 				if(!value) throw new Error('No iterator found in for from')
-				if(!iter) iter = this.tmp_prefix + (fn.tmp_vars++)
-				if(!alen) alen = this.tmp_prefix + (fn.tmp_vars++)
+				if(!iter) iter = this.alloc_tmpvar(n)
+				if(!alen) alen = this.alloc_tmpvar(n)
 
-				arr = this.tmp_prefix + (fn.tmp_vars++)
+				arr = this.alloc_tmpvar(n)
 				// and then we have to allocate two or three tmpvars.
 				// we fetch the 
 				var ret = 'for('
 				if( isvar ) ret += 'var '
-				ret += arr+'='+this.expand(n.right, n)+','+alen+'='+arr+'.length,'+
-					iter+'=0,'+value+'='+arr+'[0];'+iter+'<'+alen+';'+value+'='+arr+'[++'+iter+'])' 
+				ret += arr + '=' + this.expand(n.right, n) + ',' + alen + '=' + arr + '.length,' +
+					iter + '=0,' + value + '=' + arr + '[0];' + iter + '<' + alen + ';' + value + '=' + arr + '[++' + iter + '])' 
 				var loop = this.expand(n.loop, n)
 
-				if(n.compr) ret += this.comp_assign +'('+loop+')'
+				if(n.compr) ret += this.comp_assign + '(' + loop + ')'
 				else ret += loop
 				return ret
 			}
@@ -1861,11 +1820,11 @@ ONE.ast_ = function(){
 					if(left.items.length != 1) throw new Error("for to only supports one argument")
 					iter = this.resolve(left.items[0].name)
 				}
-				var ret = 'for(' + this.expand( n.left, n )+';'+
-						iter+'<'+ this.expand( n.right, n)+';'+iter+'++)'
-				var loop = this.expand( n.loop, n )
+				var ret = 'for(' + this.expand(n.left, n) + ';' +
+						iter + '<' + this.expand(n.right, n) + ';' + iter + '++)'
+				var loop = this.expand(n.loop, n)
 				if(n.compr && outer.IsExpr[n.loop.type]){
-					ret += this.compr_assign +'('+loop+')'
+					ret += this.compr_assign + '(' + loop + ')'
 				}
 				else ret += loop
 
@@ -1883,7 +1842,7 @@ ONE.ast_ = function(){
 						def.parent = n
 						if(i) ret += this.newline + this.depth
 						ret += 'this.signal("' + def.id.name + '"'
-						if(def.init) ret += ',' + this.expand( def.init, def )
+						if(def.init) ret += ',' + this.expand(def.init, def)
 						ret += ')'
 					}
 					return ret
@@ -1906,7 +1865,7 @@ ONE.ast_ = function(){
 						if(i) pre += ','+this.space
 						pre += this.expand(vars[i], n)
 					}
-					return pre+','+this.space+this.destruc_prefix+'0='+ret
+					return pre + ',' + this.space + this.destruc_prefix + '0=' + ret
 				}
 				else if(n.id.type !== 'Id') throw new Error('Unknown id type')
 
@@ -1959,9 +1918,7 @@ ONE.ast_ = function(){
 			}
 
 			this.Struct = function( n ){
-				// so now what..`
-				// lets parse it and create a typedecl structure
-				// alright what shall we pull out.
+
 				var name = n.id.name
 
 				if(this.typelib[name]) throw new Error('Cant redefine type ' + n.id.name)
@@ -1989,7 +1946,7 @@ ONE.ast_ = function(){
 				}
 
 				var steps = n.struct.steps
-				for(var i = 0, il = steps.length; i < il; i++){
+				for(var i = 0, steplen = steps.length; i < steplen; i++){
 					var step = steps[i]
 
 					// this one adds a field to a struct
@@ -2014,14 +1971,14 @@ ONE.ast_ = function(){
 						if(!field) throw new Error('Cant find type ' + step.kind.name )
 						// lets add all the defs as fields
 						var defs = step.defs
-						for(var j = 0, jl = defs.length; j < jl; j++){
+						for(var j = 0, deflen = defs.length; j < deflen; j++){
 							var def = defs[j]
 							// create field
 							var name = def.id.name
 							if(name in type.fields) throw new Error('Cant redefine field ' + name)
-							var fieldcpy = type.fields[name] = Object.create(field)
-							fieldcpy.off = type.size
-							fieldcpy.dim = arraydim
+							var cpy = type.fields[name] = Object.create(field)
+							cpy.off = type.size
+							cpy.dim = arraydim
 							type.size += field.size * (arraydim || 1)
 
 							if(type.view === undefined){
@@ -2035,7 +1992,7 @@ ONE.ast_ = function(){
 						}
 					}
 					// this one adds a method
-					else if (step.type == 'Function'){
+					else if(step.type == 'Function'){
 						// store the function on the struct
 						var name = step.name.name
 						var store = type.methods
@@ -2059,11 +2016,11 @@ ONE.ast_ = function(){
 				this.scope[ n.id.name ] = 1
 				return 'var ' + n.id.name + ' = this.' + n.id.name + 
 						' = ' + base + '.extend(this,'+ 
-						this.Function( n, false, null, ['outer'] ) + 
+						this.Function( n, null, ['outer'] ) + 
 						', "' + n.id.name + '")'
 			}
 
-			this.Function = function( n, parens, nametag, extparams, typemethod ){
+			this.Function = function( n, nametag, extparams, typemethod ){
 				if( n.id ) this.scope[ n.id.name ] = 1
 				// make a new scope
 				var scope = this.scope
@@ -2084,7 +2041,7 @@ ONE.ast_ = function(){
 				if( n.rest ){
 					if( n.rest.id.type !== 'Id' ) throw new Error('Unknown id type')
 					var name = n.rest.id.name
-					this.scope[ name ] = 1
+					this.scope[name] = 1
 					if(plen)
 						str_body += this.depth + 'var '+name+' = arguments.length>' + plen + '?' + 
 						'Array.prototype.slice.call(arguments,' + plen + '):[]' + this.newline
@@ -2126,10 +2083,10 @@ ONE.ast_ = function(){
 							str_param += (str_param?split:'') + name //name
 							if( str_param[str_param.length - 1] == '\n' ) str_param += this.depth
 							if(param.init){
-								str_body += this.depth + 'if('+name+'===undefined)' +name+'='+this.expand( param.init, param ) + this.newline 
+								str_body += this.depth + 'if(' + name + '===undefined)' + name + '=' + this.expand(param.init, param) + this.newline 
 							}
 							if(param.id.flag == 46){
-								str_body += this.depth +'this.'+name+'='+name+';'+this.newline 
+								str_body += this.depth + 'this.' + name + '=' + name + ';' + this.newline 
 							} 
 							else {
 								var kind = param.id.kind
@@ -2166,10 +2123,9 @@ ONE.ast_ = function(){
 					n.body.parent = n
 					// we can do a simple wait transform
 					str_body += this.block( n.body.steps, n.body, 1 )
-					//for( var i = 0; i < steps.length; i++ ){
-					//	str_body += this.depth + this.expand( steps[ i ] ) + this.semi + this.newline
-					//}
-				} else str_body += this.depth + 'return ' + this.expand( n.body, n ) //+ this.semi + this.newline
+
+				} 
+				else str_body += this.depth + 'return ' + this.expand(n.body, n) 
 
 				// Auto function to this bind detection
 				var bind = false
@@ -2204,7 +2160,7 @@ ONE.ast_ = function(){
 				if(n.gen || n.auto_gen) ret += '*'
 				if( nametag === null ) ret += ''
 				else if( nametag ) ret += ' '+nametag
-				else if(n.id) ret += ' '+this.expand( n.id, n )
+				else if(n.id) ret += ' '+this.expand(n.id, n)
 
 				if( !str_param ) str_param = ''
 				ret += '(' + str_param + '){' 
@@ -2263,8 +2219,7 @@ ONE.ast_ = function(){
 						ret += ',' + this.resolve( params[i].id )
 					}
 					ret += ')'
-				} else if( parens ) return '('+ret+')'
-				this.cignore = 1
+				} 
 				
 				return ret
 			}
@@ -2279,11 +2234,17 @@ ONE.ast_ = function(){
 				}
 			}
 
+			this.alloc_tmpvar = function( n ){
+				var fn = n.tmp_fn || (n.tmp_fn = this.find_function(n))
+				if(!fn.tmp_vars) fn.tmp_vars = 0
+				return this.tmp_prefix + (fn.tmp_vars++)
+			}
+
 			this.Yield = function( n ){
 				var fn = this.find_function( n )
 				if(!fn) throw new Error('Yield cannot find enclosing function')
 				fn.auto_gen = 1
-				return 'yield' + (n.arg ? ' ' + this.expand( n.arg, n ):'')
+				return 'yield' + (n.arg ? ' ' + this.expand(n.arg, n):'')
 			}
 
 			this.Await = function( n ){
@@ -2291,24 +2252,23 @@ ONE.ast_ = function(){
 				if(!fn) throw new Error('Await cannot find enclosing function')
 				fn.auto_gen = 1
 				fn.await = 1
-				return 'yield'+ (n.arg ? ' ' + this.expand( n.arg, n ):'')
+				return 'yield'+ (n.arg ? ' ' + this.expand(n.arg, n):'')
 			}
 
-			this.Update = function( n, parens ){
+			this.Update = function( n ){
 				var ret 
-				if( n.prefix ) ret = n.op + this.expand( n.arg, n )
+				if( n.prefix ) ret = n.op + this.expand(n.arg, n)
 				else {
 					if( n.op === '!') throw new Error("Postfix ! not implemented")					
 					if(n.op ==='~'){
-						ret = 'this.out('+this.expand ( n.arg, n ) + ')'
+						ret = 'this.out('+this.expand(n.arg, n) + ')'
 					}
-					else ret = this.expand ( n.arg, n ) + n.op
+					else ret = this.expand (n.arg, n) + n.op
 				}
-				if( parens ) return '(' + ret + ')'
 				return ret
 			}
 
-			this.Signal = function( n, parens ){
+			this.Signal = function( n ){
 
 				if(n.left.type != 'Id') throw new Error('Signal assign cant use left hand type')
 
@@ -2329,8 +2289,7 @@ ONE.ast_ = function(){
 				esc.scope = this.scope
 
 				esc.depth = this.depth
-				esc.comments = 0
-				var body = esc.expand( n.right, n )
+				var body = esc.expand(n.right, n)
 
 				// cache the AST for parse()
 				parserCache[body] = n.right
@@ -2357,17 +2316,17 @@ ONE.ast_ = function(){
 				return ret
 			}
 
-			this.Assign = function( n, parens ){
+			this.Assign = function( n ){
 				var ret = ''
 				if(n.op == '?='){
 					var left = this.expand(n.left, n)
-					ret = '('+left+'===undefined?('+left+'='+this.expand(n.right, n)+'):'+left+')'
+					ret = '(' + left + '===undefined?(' + left + '='+this.expand(n.right, n) + '):' + left + ')'
 				}
 				else if(n.left.type == 'Object' || n.left.type == 'Array'){
 					return this.destructure(n, n.left, n.right, this.find_function( n ))
 				}
 				else if(n.left.type == 'Id' || n.left.type == 'Key' || n.left.type == 'Index'){
-					var left = this.expand( n.left, n, false )
+					var left = this.expand(n.left, n, false)
 					// so what operator are we?
 					if(n.left.inferptr){ // we are an assign to a struct type
 						// we need to know what the rhs is. 
@@ -2408,117 +2367,124 @@ ONE.ast_ = function(){
 					else {
 						ret += left
 						if(ret[ ret.length - 1 ] == '\n') ret += this.indent + this.depth
-						ret += n.op + this.space + this.expand( n.right, n )
+						ret += this.space + n.op + this.space + this.expand(n.right, n)
 					}
 				} 
 				else {
-					ret = 'this['+this.expand( n.left, n )+']' + this.space + n.op + 
-						this.space + this.expand( n.right, n )
+					ret = 'this[' + this.expand(n.left, n) + ']' + this.space + n.op + 
+						this.space + this.expand(n.right, n)
 				}
-				if( parens ) return '('+ret+')'
 				return ret
 			}
 
-			this.Binary = function( n, parens ){
+			this.Binary = function( n ){
 				var ret
 				var leftstr
 
-				// alright. operators!.
+				// lets check types
+				if(n.left.infer || n.right.infer){
+					throw new Error('operator not defined for type')
+				}
 
+				var left = this.expand(n.left, n)
+				var right = this.expand(n.right, n)
+				var left_t = n.left.type
+				var right_t = n.right.type
 
 				// obvious string multiply
-				// alright so what do we do.
-				if(n.op == '*' && (((leftstr=n.left.type == 'Value' && n.left.kind == 'string'))||
-					(n.right.type == 'Value' && n.right.kind == 'string'))){
-					if(leftstr) return 'Array('+this.expand(n.right, n,false,').join('+this.expand(n.left, n,false,')'))
-					return 'Array('+this.expand(n.left, n,false,').join('+this.expand(n.right, n,false,')'))
+				if(n.op == '*' && (((leftstr=left_t == 'Value' && n.left.kind == 'string'))||
+					(right_t == 'Value' && n.right.kind == 'string'))){
+					if(leftstr) return 'Array(' + left + ').join(' + right + ')'
+					return 'Array(' + left + ').join(' + right + ')'
 				} // mathematical modulus
-				else if(n.op == '%%'){
-					ret = 'this.mod(' + this.expand(n.left, n) + ',' + this.expand(n.right, n, false, ')') 
-				} // floor division
-				else if(n.op == '%/'){
-					ret = 'Math.floor(' + this.expand(n.left, n) + '/' + this.expand(n.right, n, false, ')') 
-				}
-				else if(n.op == '**'){
-					ret = 'Math.pow(' + this.expand(n.left, n) + ',' + this.expand(n.right, n, false, ')') 
-				} // existential assign
-				else if( n.left.type == 'Condition' || n.right.type == 'Condition' || n.left.op && n.left.prio < n.prio ){
-					ret = this.expand(n.left, n, true) + this.space + n.op + 
-						this.space + this.expand(n.right, n, true)
-				} 
-				else {
-					var rparen =  n.right.op && n.right.prio < n.prio
-					ret = this.expand( n.left, n, false, this.space + n.op )
-					if(ret[ ret.length - 1 ] == '\n') ret += this.indent + this.depth
-					ret += this.space + this.expand(n.right, n, rparen)
-				}
-				if( parens ) return '(' + ret + ')'
-				return ret
+
+				if(n.op == '%%') return 'this.mod(' + left + ',' + right + ')' 
+				// floor division
+				if(n.op == '%/') return 'Math.floor(' + left + '/' + right + ')' 
+				// pow
+				if(n.op == '**') return 'Math.pow(' + left + ',' + right + ')' 
+
+				// normal binop
+				if(left_t == 'Assign' || left_t == 'List' || left_t == 'Condition' || 
+					(left_t == 'Binary' || left_t == 'Logic') && n.left.prio < n.prio) 
+					left = '(' + left + ')'
+
+				if(right_t == 'Assign' || right_t == 'List' || right_t == 'Condition' || 
+					(right_t == 'Binary' || right_t == 'Logic') &&  n.right.prio < n.prio) 
+					right = '(' + right + ')'
+
+				return left + this.space + n.op + this.space + right
 			}
 
-			this.Logic = function( n, parens ){
-				var ret
+			this.Logic = function( n ){
+				var left = this.expand(n.left, n)
+				var right = this.expand(n.right, n)
+				var left_t = n.left.type
+				var right_t = n.right.type
+
+				if(left_t == 'Assign' || left_t == 'List' || left_t == 'Condition' || 
+					(left_t == 'Binary' || left_t == 'Logic') && n.left.prio < n.prio) 
+					left = '(' + left + ')'
+
+				if(right_t == 'Assign' || right_t == 'List' || right_t == 'Condition' || 
+					(right_t == 'Binary' || right_t == 'Logic') &&  n.right.prio < n.prio) 
+					right = '(' + right + ')'
+
 				if(n.op == '?|'){
-					var left = this.expand( n.left, n )
-					if(n.left.type == 'Id')
-						ret = '('+left+'!==undefined?'+left+':'+this.expand(n.right)+')'
-					else{
-						var fn = this.find_function( n )
-						if(!fn.tmp_vars) fn.tmp_vars = 0
-						var tmp = this.tmp_prefix + (fn.tmp_vars++)
-						ret = '(('+tmp+'='+left+')!==undefined?'+tmp+':'+this.expand(n.right)+')'
-					}
+					if(n.left.type == 'Id') return '(' + left + '!==undefined?' + left + ':' + right + ')'
 
-				} else				
-				if( n.left.op && n.left.prio < n.prio ){
-					ret = '(' + this.expand( n.left, n ) + ')' + this.space + n.op + this.space + this.expand( n.right, n )
+					var tmp = this.alloc_tempvar(n)
+					return '((' + tmp + '=' + left + ')!==undefined?' + tmp + ':' + right + ')'
 				} 
-				else {
-					ret = this.expand( n.left, n, false, this.space + n.op )
-					if(ret[ ret.length - 1 ] == '\n') ret += this.indent + this.depth
-					ret += this.space + this.expand( n.right, n )
-				}
-				if( parens ) return '(' + ret + ')'
-				return ret
+				return left + this.space + n.op + this.space + right
 			}
 
-			this.Unary = function( n, parens ){
+			this.Unary = function( n ){
+				var arg = this.expand(n.arg, n)
+				var arg_t = n.arg.type
+
 				if( n.prefix ){
-					if(n.op == '?'){
-						if(parens) return '(' + this.expand(n.arg, n) +'!==undefined)'
-						return this.expand(n.arg, n) +'!==undefined'
-					}
-					if(n.op.length != 1)
-						return n.op + ' ' + this.expand( n.arg, n, true )
-					return n.op + this.expand( n.arg, n, true )
+					if(arg_t == 'Assign' || arg_t == 'Binary' || arg_t == 'Logic' || arg_t == 'Condition')
+						arg = '(' + arg + ')'
+
+					if(n.op == '?') return arg +'!==undefined'
+					if(n.op.length != 1) return n.op + ' ' + arg
+					return n.op + arg
 				}
-				return this.expand ( n.arg, n ) + n.op
+				return arg + n.op
 			}
 
 			// convert new
 			this.New = function( n, parens ){
-				var fn = this.expand( n.fn, n, true )
-				var arg = this.list( n.args, n )
+				var fn = this.expand(n.fn, n, true)
+				var fn_t = n.fn.type
+				if(fn_t == 'Assign' || fn_t == 'Logic' || fn_t == 'Condition') 
+					fn = '(' + fn + ')'				
+
+				var arg = this.list(n.args, n)
 				if(this.globals[fn]){
 					return 'new ' + fn + '(' + arg + ')'
 				}
 				// forward to Call
 				// WARNING we might have double calls if you fetch
 				// the class via functioncall.
-				return this.Call( n, parens, undefined, true )
+				return this.Call( n, undefined, true )
 				return  fn + '.new(this'+(arg?', '+arg:arg)+')'
 			}
 
-			this.Call = function( n, parens, extra, isnew ){
+			this.Call = function( n, extra, isnew ){
 				var fn  = n.fn
 				fn.parent = n
 				// assert macro
 				if(fn.type == 'Id' && fn.name == 'assert'){
+
 					var argl = n.args
 					if(!argl || argl.length == 0 || argl.length > 2) throw new Error("Invalid assert args")
+
 					var arg = this.expand(argl[0], n)
-					var msg = argl.length>1?this.expand(argl[1], n):'""'
+					var msg = argl.length > 1? this.expand(argl[1], n): '""'
 					var value = 'undefined'
+
 					if(argl[0].type == 'Logic' && argl[0].left.type !== 'Call'){
 						value = this.expand( argl[0].left, n )
 					}
@@ -2528,7 +2494,6 @@ ONE.ast_ = function(){
 						msg+','+value+')}).call(this)'
 
 					if(outer.IsExpr[n.parent.type] && argl[0].type == 'Logic'){
-						if(parens) return '(' + arg + ' || ' + body + ')'
 						return arg + ' || ' + body
 					}
 					return '(('+arg+') || '+body+')'
@@ -2714,7 +2679,7 @@ ONE.ast_ = function(){
 								this.depth = ''
 								var t = this.typemethod
 								this.typemethod = type
-								this.typemethods[gen] = this.Function(method, false, gen, undefined, type ) + this.newline
+								this.typemethods[gen] = this.Function(method, gen, undefined, type ) + this.newline
 								this.typemethod = t
 								this.depth = d
 							}
@@ -2831,7 +2796,7 @@ ONE.ast_ = function(){
 				var call = ''
 				if(fn.type == 'Id'){
 					cthis = 'this'
-					call = this.expand(fn, n, true)
+					call = this.expand(fn, n)
 				}
 				else {
 					// check if we are a property chain
@@ -2856,7 +2821,10 @@ ONE.ast_ = function(){
 					}
 					else{
 						cthis = 'this'
-						call = this.expand(fn, n)
+						call = this.expand(n.fn, n)
+						var ftype = n.fn.type
+						if(ftype == 'Assign' || ftype == 'Logic' || ftype == 'Condition') 
+							call = '(' + call + ')'
 					}
 				}
 				if(isnew){
@@ -2882,11 +2850,11 @@ ONE.ast_ = function(){
 					}
 					// a signal block
 					if( fn.name == 'signal'){
-						return 'this.Signal.try(' + this.Function( n, false, null, ['end','fail'] ) +'.bind(this))'
+						return 'this.Signal.try(' + this.Function( n, null, ['end','fail'] ) +'.bind(this))'
 					}
 				} 
 				// alright, in general calling Bla{ } instances it.
-				return this.expand( n.fn, n ) + '.create(this, ' + this.Function( n ) + ')'
+				return this.expand(n.fn, n) + '.create(this, ' + this.Function( n ) + ')'
 			}
 
 			this.Quote = function( n ){
@@ -2895,8 +2863,7 @@ ONE.ast_ = function(){
 				var tpl = esc.templates = {}
 				// now we need to set the template object
 				esc.depth = this.depth
-				esc.comments = 0
-				var body = esc.expand( n.quote, n )
+				var body = esc.expand(n.quote, n)
 				// cache the AST for parse()
 				parserCache[body] = n.quote
 
@@ -2924,7 +2891,7 @@ ONE.ast_ = function(){
 				if( call.type == 'Id' && call.name == 'then'){
 					throw new Error('implement then chaining in codegen')
 				}
-				return this.Call( call, false, extra ) + then
+				return this.Call( call, extra ) + then
 			}
 
 		})
@@ -2946,11 +2913,11 @@ ONE.ast_ = function(){
 
 			this.Key = function( n ){
 				// reading properties
-				var obj =  outer.ToCode.expand( n.object )
-				var key = outer.ToCode.expand( n.key )
+				var obj =  outer.ToCode.expand(n.object)
+				var key = outer.ToCode.expand(n.key)
 				// base + key pairs
-				this.deps.push( obj, key )
-				return 'this.' +obj+'.'+key+'.valueOf()'
+				this.deps.push(obj, key)
+				return 'this.' + obj + '.' + key + '.valueOf()'
 			}
 
 			this.Index = function(n){

@@ -1,4 +1,3 @@
-#js
 var {Root, Rect} = load('dom')
 
 struct vec3{
@@ -237,7 +236,8 @@ Language(){
 	var d = 5, c = 0
 	do{
 		c++
-	}while(d-- > 0)
+	}
+	while(d-- > 0)
 	assert(c == 6)
 
 	// for in

@@ -65,8 +65,8 @@ ONE.browser_boot_ = function(){
 			if( error ) throw new Error("Could not load "+url+" "+error)
 
 			function run(){
-				//obj.profile("eval "+module,1,function eval(){
-					obj.$[module] = obj.eval(ast, 1, url)
+				//obj.profile("eval "+module,1,function evaller(){
+					obj.$[module] = obj.eval(ast, url)
 				//})
 				if(typeof callback == 'function') callback()
 				else //obj.profile("run "+module,1,function run(){
