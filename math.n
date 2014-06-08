@@ -1,4 +1,4 @@
-#js
+
 define sqrt(x)      Math.sqrt(x)
 define sqrt(vec2 x) vec2.sqrt(x)
 define sqrt(vec3 x) vec3.sqrt(x)
@@ -102,8 +102,7 @@ struct vec{
 }
 
 struct vec2 extends vec{
-	float x
-	float y
+	float x, y
 
 	random( float scale = 1 ){
 		var r = 2PI * random()
@@ -127,16 +126,12 @@ struct vec2 extends vec{
 	}
 }
 
-define macro1(x)	x
-
-vec2[2] x(1, PI)
-
-var y = vec2.normalize(x)
-
 struct vec3 extends vec{
+	float x, y, z
 }
 
 struct vec4 extends vec{
+	float x, y, z, w
 }
 
 struct mat{

@@ -1,12 +1,7 @@
-var {Root, Rect} = load('dom')
-
-struct vec3{
-	float x
-	float y
-	float z
-}
-
-define random() Math.random()
+//var {Root, Rect} = load('dom')
+#js
+import math
+import dom
 
 Dom1(){
 	class MyDiv extends Rect{
@@ -134,39 +129,39 @@ Roles(){
 
 Language(){
 	// structs and types
-	struct vec2{
+	struct vec_t{
 		float x
 		float y
 		
 		negate(){
-			return vec2(-x, -y)
+			return vec_t(-x, -y)
 		}
 
-		negate(vec2 v){
+		negate(vec_t v){
 			x = -v.x
 			y = -v.y
 		}
 	}
 
-	vec2 v1(1,2)
-	vec2 v2 = v1.negate()	
+	vec_t v1(1,2)
+	vec_t v2 = v1.negate()	
 
 	assert(v2.x == -1)
 	assert(v2.y == -2)
 
-	vec2 v3 = vec2.negate(v2)
+	vec_t v3 = vec_t.negate(v2)
 
 	assert(v3.x == 1)
 	assert(v3.y == 2)
 
 	// nested structs and array types
-	struct rect{
-		vec2[2] p
+	struct rect_t{
+		vec_t[2] p
 	}
-	rect[] rt = rect[2](0,1,2,3,4,5,6,7)
+	rect_t[] rt = rect_t[2](0,1,2,3,4,5,6,7)
 	assert(rt[1].p[1].y == 7)
 
-	rt[1].p[1] += vec2(3,4)
+	rt[1].p[1] += vec_t(3,4)
 	assert(rt[1].p[1].y == 11)
 
 	// array splats
@@ -182,8 +177,9 @@ Language(){
 	assert(func(...s1,4,...s2, 8).join('') == '12345678')
 
 	// member functions
-	member(a){ return a + 10 }
+	member(a = 5){ return a + 10 }
 	assert( member(10) == 20 )
+	assert( member() == 15 )
 
 	// arrow syntax
 	arrow = a => a + 5
@@ -244,7 +240,7 @@ Language(){
 	var obj = {x:1}
 	var str = ''
 	for(var k in obj) str += k
-	assert( str == 'x' )
+	assert(str == 'x')
 
 	// for of
 	var array = [1,2,3,4]

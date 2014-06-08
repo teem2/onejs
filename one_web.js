@@ -66,7 +66,7 @@ ONE.browser_boot_ = function(){
 
 			function run(){
 				//obj.profile("eval "+module,1,function evaller(){
-					obj.$[module] = obj.eval(ast, url)
+					obj.$[module] = obj.eval(ast, module)
 				//})
 				if(typeof callback == 'function') callback()
 				else //obj.profile("run "+module,1,function run(){

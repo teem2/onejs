@@ -26,7 +26,7 @@ ONE.base_ = function(){
 		
 		if( role ){
 			if( typeof role == 'function') role.call(obj, outer)
-			else obj.merge(role)
+			else obj.import(role)
 		}
 		return obj
 	}
@@ -105,7 +105,7 @@ ONE.base_ = function(){
 	}
 
 	// merge a role onto this
-	this.merge = function( irole ){
+	this.import = function( irole ){
 		var role = irole
 		if( typeof irole == 'string' ){// try to read it from scope
 			role = this.$[irole]

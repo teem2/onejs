@@ -7,6 +7,8 @@ ONE.ast_ = function(){
 
 	var parserCache = {}
 
+	var modules = {}
+
 	this.parse = function( source, bind, template, filename, noclone ){
 		parser.sourceFile = filename || ''
 
@@ -65,16 +67,25 @@ ONE.ast_ = function(){
 	this.eval = function( ast, filename ){
 		if( typeof ast == 'string' ) 
 			ast = this.parse( ast, undefined, undefined, filename, true )
-
 		// alright we have to compile us some code!
 		var js = this.AST.ToJS
 		// make a fresh scope and signals store
-		js.scope = {}
-		js.typemethods = {}
 		js.signals = []
 		js.line = 0
+		js.scope = Object.create(null)
+		js.typemethods = Object.create(null)
+		js.macroarg = Object.create(null)
+		js.imports = []
+		js.module = modules[filename] = { 
+			types: Object.create(this.AST.typeMap),
+			defines: Object.create(null),
+			macros: Object.create(null),
+			exports: Object.create(null)
+		}
+
 		// if passing a function we return that
 		if(ast.type == 'Function'){
+			ast.root = true
 			var steps = ast.body.steps
 			if(steps && steps[0] && steps[0].flag == 35){
 				var dump = steps[0].name
@@ -103,7 +114,8 @@ ONE.ast_ = function(){
 					var fn = Function.call(null, 'require', code)()
 				}
 
-			} catch(e){
+			} 
+			catch(e){
 				console.log("ERROR",e,code)
 			}
 			return fn
@@ -356,8 +368,6 @@ ONE.ast_ = function(){
 				ret += '\n_walk.'+type+'=function(n, p){\n' + walk + '}\n' 
 				ret += '\n_clone.'+type+'=function(n){\n' + clone + '\treturn c\n}\n' 
 				ret += '\n_copy.'+type+'=function(n, c){\n'+ copy +'\treturn\n}\n'
-
-					copy+'\treturn\n}\n'
 			}
 			(new Function('_clone', '_copy', '_walk', ret))( this.Clone, this.Copy, this.Walk )
 
@@ -378,11 +388,6 @@ ONE.ast_ = function(){
 				c.arg = this[n.arg.type]( n.arg )
 				return c
 			}
-			this.Walk.start = function(n){
-				this.deps = []
-				this[ n.type ]( n )
-				return this.deps
-			}
 		}
 		ToolGenerator.call(this)
 
@@ -391,13 +396,27 @@ ONE.ast_ = function(){
 		}
 
 		this.DepFinder = this.Walk.extend(this, function(outer){
+			this.start = function(n){
+				this.deps = []
+				this[ n.type ]( n )
+				return this.deps
+			}
+
 			this.Call = function( n, p ){
 				outer.Walk.Call.call(this, n, p)
-				if(n.fn.name == 'apply' || n.fn.name == 'load'){
+				if(n.fn.name == 'load'){
 					var arg = n.args[0]
 					if(arg && arg.type == 'Value' && arg.kind == 'string'){
 						this.deps.push(arg.value)
 					}
+				}
+			}
+			this.TypeVar = function( n, p ){
+				if(n.kind.name !== 'import') return
+				var defs = n.defs
+				for(var i = 0, l = defs.length; i < l; i++){
+					var def = defs[i]
+					this.deps.push(def.id.name)
 				}
 			}
 		},"DepFinder")
@@ -1079,14 +1098,6 @@ ONE.ast_ = function(){
 			
 			this.newline = '\n'
 
-			this.scope = {}
-
-			this.typelib = Object.create(outer.typeMap)
-			this.defines = Object.create(null)
-
-			this.macros = Object.create(null)
-			this.macroarg = Object.create(null)
-
 			this.promise_catch = 1
 			this.expand_short_object = 1
 
@@ -1151,6 +1162,26 @@ ONE.ast_ = function(){
 				document:1,
 				require:1,
 				__dirname:1
+			}
+
+			this.find_type = function( name ){
+				var type = this.module.types[name]
+				if(type) return type
+				var im = this.imports
+				for(var i = 0, l = im.length; i < l;i++){
+					var types = im[i].types
+					if(types && (type = types[name])) return type
+				}
+			}
+
+			this.find_define = function( name ){
+				var def = this.module.defines[name]
+				if(def) return
+				var im = this.imports
+				for(var i = 0, l = im.length; i < l; i++){
+					var defines = im[i].defines
+					if(defines && (def = defines[name])) return def
+				}
 			}
 
 			// destructuring helpers
@@ -1307,15 +1338,17 @@ ONE.ast_ = function(){
 				}
 				if( name in this.scope ){
 					var type = this.scope[name]
-					if(n && type !== 1){
+					if(n && typeof type == 'object'){
 						n.infer = type
 					}
 					return name
 				}
 				if( name in this.globals ) return name
-				if( name in this.defines ){
-					return this.expand(this.defines[name])
+				var def = this.find_define(name)
+				if(def){
+					return this.expand(def)
 				}
+				if(n) n.onthis = 1
 				return 'this.'+name
 			}
 
@@ -1409,7 +1442,7 @@ ONE.ast_ = function(){
 						var type = this.scope[base]
 
 						var isthis 
-						if(type && type !== 1 || (isthis = type = this.typemethod)){
+						if(typeof type == 'object' || (isthis = type = this.typemethod)){
 							// alright so now we need to walk back down
 							// the parent chain and decode our offset
 							if(!isthis) node = node.parent
@@ -1565,8 +1598,15 @@ ONE.ast_ = function(){
 				// right hand side is auto-enumerated when not provided
 
 				var name = n.id.name 
+				
+				this.scope[name] = 3
 
 				var ret = 'var '+name+' = this.'+name+' = '
+
+				var fn = this.find_function(n)
+				if(fn && fn.root){
+					this.module.exports[name] = n
+				}
 
 				var olddepth = this.depth
 				this.depth += this.indent
@@ -1847,6 +1887,31 @@ ONE.ast_ = function(){
 					}
 					return ret
 				}
+				if(name == 'import'){
+					var ret = ''
+					var defs = n.defs
+					var len = defs.length
+					ret += 'var '
+					for(var i = 0; i < len; i++){
+						var def = defs[i]
+						// lets fetch the module
+						var name = def.id.name
+						ret += name
+						ret += ' = this.import("' + name + '")'
+						this.scope[name] = 1
+						// now lets iterate all the vars
+						var module = modules[name]
+						if(!modules[name]) throw new Error("Module " + name + " not found")
+						this.imports.push(module)
+						var exports = module.exports
+						for(var e in exports){
+							ret += ', '+ e + ' = ' + name + '.' + e
+							this.scope[e] = exports[e]
+						}
+					}
+					ret += this.newline
+					return ret
+				}
 				
 				return 'var ' + this.flat( n.defs, n )
 
@@ -1878,17 +1943,19 @@ ONE.ast_ = function(){
 					var name
 					if(kind.type == 'Index'){
 						name = kind.object.name
-						type = Object.create(this.typelib[name])
+						type = this.find_type(name)
+						if(!type) throw new Error('Cannot find type ' + name)
+						type = Object.create(type)
 						type.dim = 1
 					}
 					else{
 						name = kind.name
-						type = this.typelib[name]
+						type = this.find_type(name)
+						if(!type) throw new Error('Cannot find type ' + name)
 					}
-					if(!type) throw new Error('Cannot find type ' + name)
 				}
 				else if(n.id.kind ){
-					type = this.typelib[n.id.kind.name]
+					type = this.find_type(n.id.kind.name)
 					if(!type) throw new Error('Cannot find type ' + n.id.kind.name)
 				}
 				else type = 1
@@ -1905,14 +1972,15 @@ ONE.ast_ = function(){
 				// if we are a call, we are a macro.
 				if(n.id.type == 'Call'){
 					var name = n.id.fn.name
-					while(name in this.macros){
+					var macros = this.module.macros
+					while(name in macros){
 						name = name + '_'
 					}
-					this.macros[name] = n
+					macros[name] = n
 				}
 				else {
 					var name = n.id.name
-					this.defines[name] = n.value
+					this.module.defines[name] = n.value
 				}
 				return ''
 			}
@@ -1921,14 +1989,14 @@ ONE.ast_ = function(){
 
 				var name = n.id.name
 
-				if(this.typelib[name]) throw new Error('Cant redefine type ' + n.id.name)
+				//if(this.typelib[name]) throw new Error('Cant redefine type ' + n.id.name)
 
 				// in a baseclass we copy the fields and methods
-				var type = this.typelib[name] = {}
+				var type = this.module.types[name] = {}
 
 				type.name = name
 				if(n.base){
-					var base = type.base = this.typelib[n.base.name]
+					var base = type.base = this.find_type(n.base.name)
 					if(!base) throw new Error('Struct base '+n.base.name+' undefined ')
 					// lets copy the fields
 					type.fields = Object.create(base.fields || null)
@@ -1966,7 +2034,7 @@ ONE.ast_ = function(){
 						}
 						else throw new Error('Unknown type-kind in struct')
 
-						var field = this.typelib[typename]
+						var field = this.find_type(typename)
 
 						if(!field) throw new Error('Cant find type ' + step.kind.name )
 						// lets add all the defs as fields
@@ -2013,11 +2081,20 @@ ONE.ast_ = function(){
 			this.Class = function( n ){
 				
 				var base = n.base?this.expand(n.base, n):'this.Base'
-				this.scope[ n.id.name ] = 1
-				return 'var ' + n.id.name + ' = this.' + n.id.name + 
+				var name = n.id.name
+
+				var fn = this.find_function(n)
+				if(fn.root){
+					// export the class
+					this.module.exports[name] = n
+				}
+
+				this.scope[name] = 2
+				var ret = 'var ' + name + ' = this.' + name + 
 						' = ' + base + '.extend(this,'+ 
 						this.Function( n, null, ['outer'] ) + 
-						', "' + n.id.name + '")'
+						', "' + name + '")'	
+				return ret
 			}
 
 			this.Function = function( n, nametag, extparams, typemethod ){
@@ -2025,6 +2102,8 @@ ONE.ast_ = function(){
 				// make a new scope
 				var scope = this.scope
 				this.scope = Object.create( scope )
+				scope.__sub__ = this.scope
+
 				var signals = this.signals
 				this.signals = []
 
@@ -2095,12 +2174,12 @@ ONE.ast_ = function(){
 									if(kind.type == 'Index') kname = kind.object.name
 									else kname = kind.name
 								
-									var type = this.typelib[kname]
+									var type = this.find_type(kname)
 
 									if(!type) throw new Error("Undefined type "+kname+" used on argument "+name)
-									this.scope[ name ] = type
+									this.scope[name] = type
 								}
-								else this.scope[ name ] =  1
+								else this.scope[name] =  1
 							}
 	
 						}
@@ -2148,6 +2227,11 @@ ONE.ast_ = function(){
 							isgetset = true
 						}
 						else if(!typemethod){
+							var fn = this.find_function(n.parent)
+							if(fn && fn.root){
+								// export the method
+								this.module.exports[name] = n
+							}
 							ret += this.expand(n.name, n) + this.space + '=' + this.space
 						}
 					}
@@ -2327,6 +2411,12 @@ ONE.ast_ = function(){
 				}
 				else if(n.left.type == 'Id' || n.left.type == 'Key' || n.left.type == 'Index'){
 					var left = this.expand(n.left, n, false)
+					if(n.left.onthis){
+						var fn = this.find_function(n)
+						if(fn.root){
+							this.modules.exports[n.left.name] = n
+						}
+					}
 					// so what operator are we?
 					if(n.left.inferptr){ // we are an assign to a struct type
 						// we need to know what the rhs is. 
@@ -2521,7 +2611,7 @@ ONE.ast_ = function(){
 
 					// we support auto-super also for roles.
 					// lets check if we are a type constructor
-					var type = this.typelib[name]
+					var type = this.find_type(name)
 					if(type){
 
 						// allocate tempvars
@@ -2555,7 +2645,7 @@ ONE.ast_ = function(){
 						function walker(elem, n, issingle, type){
 							// we have a call
 							var ntype
-							if(elem.type == 'Call' && elem.fn.type == 'Id' && (ntype = this.typelib[elem.fn.name])){
+							if(elem.type == 'Call' && elem.fn.type == 'Id' && (ntype = this.find_type(elem.fn.name))){
 								if(ntype.view != type.view) throw new Error('Constructor args with different viewtypes are not supported')
 								// we have to walk the arguments until we hit individual values
 								var args = elem.args
@@ -2604,21 +2694,36 @@ ONE.ast_ = function(){
 						return ret
 					}
 
-					// do macros
-					var macro = this.macros[name]
+					// Scan for the right macro
+					var nm = name
+					var macro = this.module.macros[nm]
+					while(macro){
+						//!TODO add a real argument matcher here
+						params = macro.id.args
+						if(arglen == params.length) break
+						nm = nm + '_'
+						macro = this.macros[nm]
+					}
+					if(!macro){
+						var im = this.imports
+						for(var i = 0, l = im.length; i < l; i++){
+							var macros = im[i].macros
+							if(macros && (macro = macros[name])){
+								var nm = name
+								while(macro){
+									params = macro.id.args
+									if(arglen == params.length) break
+									nm = nm + '_'
+									macro = this.macros[nm]
+								}
+							}
+							if(macro) break
+						}
+					}
 					if(macro){
 						var a = this.macroarg
 						var marg = this.macroarg = Object.create(this.macroarg)
-						var params
-						// alright lets go and define the macro args
-						while(macro){
-							//!TODO add type checking here
-							params = macro.id.args
-							if(arglen == params.length) break
-							name = name + 'params'
-							macro = this.macros[name]
-						}
-						if(!macro) throw new Error('No matching macro found')
+						var params = macro.id.args
 						// build up macro args
 						for(var i = 0; i < arglen; i++){
 							var param = params[i]
@@ -2628,7 +2733,7 @@ ONE.ast_ = function(){
 							}
 							this.macroarg[param.name] = args[i]
 						}
-						var ret = this.expand( macro.value )
+						var ret = this.expand(macro.value)
 						this.macroarg = a
 						return ret
 					}
@@ -2650,8 +2755,8 @@ ONE.ast_ = function(){
 					var root = fn.isKeyChain()
 					if(root && root.name){
 						var isstatic
-						var type = this.scope[root.name] || (isstatic = this.typelib[root.name])
-						if(type && type !== 1){ 
+						var type = this.scope[root.name] || (isstatic = this.find_type(root.name))
+						if(typeof type == 'object'){ 
 							// alright we are a method call.
 							if(fn.object.type !='Id') throw new Error('only 1 deep method calls for now')
 							// so first we are going to compile the function
@@ -2674,6 +2779,7 @@ ONE.ast_ = function(){
 
 							var gen = type.name + '_' + mname
 
+							// make a typemethod
 							if(!this.typemethods[gen]){
 								var d = this.depth
 								this.depth = ''
@@ -2683,7 +2789,6 @@ ONE.ast_ = function(){
 								this.typemethod = t
 								this.depth = d
 							}
-							// we need to plug this at the head of our generated function.
 
 							var ret = ''
 							ret += gen+'.call(this'
