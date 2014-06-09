@@ -1,5 +1,4 @@
 //var {Root, Rect} = load('dom')
-#js
 import math
 import dom
 
@@ -14,8 +13,8 @@ Dom1(){
 		profile(3000) do(){
 			MyDiv{
 				fill = vec3(random(), random(), random())
-				x = random() * 300
-				y = random() * 300
+				x = random() * 800
+				y = random() * 600
 			}
 		}
 	}

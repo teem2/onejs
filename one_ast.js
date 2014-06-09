@@ -15,7 +15,6 @@ ONE.ast_ = function(){
 		var node = parserCache[source]
 		if(! node ){
 			node = parser.parse_strict( source )
-			// scan up to pull ret the essential ast node			
 			if(node.steps.length == 1){
 				node = node.steps[0]
 			}
@@ -42,7 +41,7 @@ ONE.ast_ = function(){
 			// we now need to overwrite the nodes in our tree with 
 			// the template nodes
 			for( var i = 0; i < nodes.length; i++ ){
-				var tgt = nodes[ i ]
+				var tgt = nodes[i]
 				var src = template[ tgt.arg.name ]
 				// clean ret the node
 				tgt.prefix = undefined
@@ -50,7 +49,7 @@ ONE.ast_ = function(){
 				tgt.arg = undefined
 				if(!src) throw new Error("Template variable not found: " + tgt.arg.name)
 				if(typeof src == 'object'){
-					copy[src.type]( src, tgt )
+					copy[src.type](src, tgt)
 					tgt.pthis = this
 				} else {
 					tgt.type = 'Value'
@@ -65,8 +64,15 @@ ONE.ast_ = function(){
 	}
 
 	this.eval = function( ast, filename ){
-		if( typeof ast == 'string' ) 
+		if( typeof ast == 'string' ){ 
+			// lets first do a local storage scan.
+			
+			if(code){
+				var fn = Function.call(null, code)()
+				return fn
+			}
 			ast = this.parse( ast, undefined, undefined, filename, true )
+		}
 		// alright we have to compile us some code!
 		var js = this.AST.ToJS
 		// make a fresh scope and signals store
@@ -100,6 +106,8 @@ ONE.ast_ = function(){
 			var nametag
 			if(filename) nametag = 'file__'+filename.replace(/[\.\/]/g,'_')
 			var code = 'return ' + js.Function( ast, nametag )
+
+
 			// prepend type methods
 			for(var k in js.typemethods){
 				code = js.typemethods[k] + code
@@ -111,7 +119,8 @@ ONE.ast_ = function(){
 					var fn = Function.call(null, 'require', '__dirname', code)(require, __dirname)
 				}
 				else{
-					var fn = Function.call(null, 'require', code)()
+					localStorage.setItem('cache'+filename, code)
+					var fn = Function.call(null, code)()
 				}
 
 			} 
@@ -2696,13 +2705,14 @@ ONE.ast_ = function(){
 
 					// Scan for the right macro
 					var nm = name
-					var macro = this.module.macros[nm]
+					var macros = this.module.macros
+					var macro = macros[nm]
 					while(macro){
 						//!TODO add a real argument matcher here
 						params = macro.id.args
 						if(arglen == params.length) break
 						nm = nm + '_'
-						macro = this.macros[nm]
+						macro = macros[nm]
 					}
 					if(!macro){
 						var im = this.imports
@@ -2714,7 +2724,7 @@ ONE.ast_ = function(){
 									params = macro.id.args
 									if(arglen == params.length) break
 									nm = nm + '_'
-									macro = this.macros[nm]
+									macro = macros[nm]
 								}
 							}
 							if(macro) break

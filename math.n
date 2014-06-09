@@ -1,9 +1,21 @@
+// OneJS math types
 
-define sqrt(x)      Math.sqrt(x)
-define sqrt(vec2 x) vec2.sqrt(x)
-define sqrt(vec3 x) vec3.sqrt(x)
-define sqrt(vec4 x) vec4.sqrt(x)
-define sin(x)       Math.sin(x)
+define abs(x)    Math.abs(x)
+define acos(x)   Math.acos(x)
+define asin(x)   Math.asin(x)
+define atan(x)   Math.atan(x)
+define sin(x)    Math.sin(x)
+define cos(x)    Math.cos(x)
+define tan(x)    Math.tan(x)
+define sqrt(x)   Math.sqrt(x)
+define ceil(x)   Math.ceil(x)
+define floor(x)  Math.floor(x)
+define atan2(x)  Math.atan2(x)
+define exp(x)    Math.exp(x)
+define log(x)    Math.log(x)
+define max(x)    Math.max(x)
+define min(x)    Math.min(x)
+define random(x) Math.random(x)
 
 define PI        3.141592653589793
 define E         2.718281828459045
@@ -111,27 +123,93 @@ struct vec2 extends vec{
 	}
 
 	vec2_mul_mat2( mat3 m, vec2 v ){
-		x = m[0] * v.x + m[2] * v.y
-		y = m[1] * v.x + m[3] * v.y
+		var vx = v.x, vy = v.y
+		x = m[0] * vx + m[2] * vy
+		y = m[1] * vx + m[3] * vy
 	}
 
 	vec2_mul_mat3( mat3 m, vec2 v ){
-		x = m[0] * v.x + m[2] * v.y + m[4]
-		y = m[1] * v.x + m[3] * v.y + m[5]
+		var vx = v.x, vy = v.y
+		x = m[0] * vx + m[2] * vy + m[4]
+		y = m[1] * vx + m[3] * vy + m[5]
 	}
 
 	vec2_mul_mat4( mat4 m, vec2 v ){
-		x = m[0] * v.x + m[4] * v.y + m[12]
-		y = m[1] * v.x + m[5] * v.y + m[13]
+		var vx = v.x, vy = v.y
+		x = m[0] * vx + m[4] * vy + m[12]
+		y = m[1] * vx + m[5] * vy + m[13]
 	}
 }
 
 struct vec3 extends vec{
 	float x, y, z
+
+	random( float scale = 1 ){
+		var r = 2PI * random()
+		var zr = (random() * 2.0) - 1.0
+		var zs = sqrt(1.0 - zr*zr) * scale
+		x = cos(r) * zs
+		y = sin(r) * zs
+		z = z * scale
+	}
+
+	vec3_mul_mat3( mat3 m, vec3 v ){
+		var vx = v.x, vy = v.y, vz = v.z
+		x = vx * m[0] + vy * m[3] + vz * m[6]
+		y = vx * m[1] + vy * m[4] + vz * m[7]
+		z = vx * m[2] + vy * m[5] + vz * m[8]
+	}
+
+	vec3_mul_mat4( mat4 m, vec3 v ){
+		var vx = v.x, vy = v.y, vz = v.z, vw = 
+			m[3] * vx + m[7] * vy + m[11] * vz + m[15]
+		vw = vw || 1.0
+		x = (m[0] * vx + m[4] * vy + m[8] * vz + m[12]) / vw
+		y = (m[1] * vx + m[5] * vy + m[9] * vz + m[13]) / vw
+		z = (m[2] * vx + m[6] * vy + m[10] * vz + m[14]) / vw
+	}
+
+	cross( vec3 a, vec3 b ){
+		var ax = a.x, ay = a.y, az = a.z, 
+			bx = b.x, by = b.y, bz = b.z
+		x = ay * bz - az * by
+		y = az * bx - ax * bz
+		z = ax * by - ay * bx
+	}
 }
 
 struct vec4 extends vec{
 	float x, y, z, w
+
+	random( float scale = 1 ){
+		x = random()
+		y = random()
+		z = random()
+		w = random()
+		_.normalize(_)
+	}
+
+	vec4_mul_mat4( mat4 m, vec4 v ){
+		var vx = v.x, vy = v.y, vz = v.z, vw = v.w
+		x = m[0] * vx + m[4] * vy + m[8] * vz + m[12] * vw
+		y = m[1] * vx + m[5] * vy + m[9] * vz + m[13] * vw
+		z = m[2] * vx + m[6] * vy + m[10] * vz + m[14] * vw
+		w = m[3] * vx + m[7] * vy + m[11] * vz + m[15] * vw
+	}
+
+	vec4_mul_quat( quat q, vec4 v ){
+		var vx = v.x, vy = v.y, vz = v.z,
+			qx = q.a, qy = q.b, qz = q.c, qw = q.d,
+			// calculate quat * vec
+			ix = qw * vx + qy * vz - qz * vy,
+			iy = qw * vy + qz * vx - qx * vz,
+			iz = qw * vz + qx * vy - qy * vx,
+			iw = -qx * vx - qy * vy - qz * vz
+		// calculate result * inverse quat
+		x = ix * qw + iw * -qx + iy * -qz - iz * -qy
+		y = iy * qw + iw * -qy + iz * -qx - ix * -qz
+		z = iz * qw + iw * -qz + ix * -qy - iy * -qx
+	}
 }
 
 struct mat{
@@ -140,14 +218,738 @@ struct mat{
 	}
 }
 
+struct quat extends vec{
+	float x,y,z,w
+
+	identity(){
+		x = y = z = 0, w = 1
+	}
+
+	// Shortest rotation path from quat A to quat B
+	rotationTo( vec3 a, vec3 b ) {
+		var dot = vec3.dot( A, B )
+		if (dot < -0.999999) {
+			vec3 t = vec3.cross( vec3(1,0,0), a )
+			if (t.length() < 0.000001) t.cross(vec3(0,1,0), a)
+			t.normalize(t)
+			quat.setAxisAngle(t, PI)
+		} 
+		else if (dot > 0.999999) {
+			x = 0, y = 0, z = 0, w = 1
+		} 
+		else {
+			vec3 t = vec3.cross(a, b)
+			x = t.x, y = t.y, z = t.z, w = 1 + dot
+			_.normalize(_)
+		}
+	}
+
+	setAxes( vec3 dir, vec3 right, vec3 up ) {
+		_.fromMat3(mat3(
+			right.x, up.x, -dir.x,
+			right.y, up.y, -dir.y,
+			right.z, up.z, -dir.z
+		))
+		_.normalize(_)
+	}
+
+	// quaternion around aXis, with rotation Angle
+	setAxisAngle( vec3 v, float angle ) {
+		angle *= 0.5
+		var s = sin(angle)
+		x = s * X[0], y = s * X[1], z = s * X[2], w = cos(angle)
+	}
+
+	quat_mul_quat( quat a, quat b ){
+		var ax = a.x, ay = a.y, az = a.z, aw = a.w,
+			bx = b.x, by = b.y, bz = b.z, bw = b.w
+
+		x = ax * bw + aw * bx + ay * bz - az * by
+		y = ay * bw + aw * by + az * bx - ax * bz
+		z = az * bw + aw * bz + ax * by - ay * bx
+		w = aw * bw - ax * bx - ay * by - az * bz
+	}
+
+	// rotate quaternion Q with angle A around x axis
+	rotateX( quat q, float angle ){
+		angle *= 0.5
+		var ax = q.x, ay = q.y, az = q.z, aw = q.w,
+		    bx = sin(angle), bw = cos(angle)
+
+		x = ax * bw + aw * bx
+		y = ay * bw + az * bx
+		z = az * bw - ay * bx
+		w = aw * bw - ax * bx
+	}
+
+	// rotate quaternion Q with angle A around y axis
+	rotateY( quat q, float angle ){
+		angle *= 0.5
+		var ax = q.x, ay = q.y, az = q.z, aw = q.w,
+			by = sin(angle), bw = cos(angle)
+
+		m00 = ax * bw - az * by
+		m01 = ay * bw + aw * by
+		m02 = az * bw + ax * by
+		m03 = aw * bw - ay * by
+	}
+
+	// rotate quaternion Q with angle A around z axis
+	rotateZ( quat q, float angle ){
+		angle *= 0.5
+		var ax = q.x, ay = q.y, az = q.z, aw = q.w,
+			bz = sin(angle), bw = cos(angle)
+
+		m00 = ax * bw + ay * bz
+		m01 = ay * bw - ax * bz
+		m02 = az * bw + aw * bz
+		m03 = aw * bw - az * bz
+	}
+
+	// Calculate w from xyz
+	calculateW( quat q ){
+		x = q.x
+		y = q.y
+		z = q.z
+		w = -sqrt(abs(1.0 - x * x - y * y - z * z))
+	}
+
+	// spherelical linear interpolation between quat A and B with f (0-1)
+	slerp( quat a, quat b, float f ){
+		var ax = a.x, ay = a.y, az = a.z, aw = a.w,
+			bx = b.x, by = b.y, bz = b.z, bw = b.w
+
+		var omega, cosom, sinom, scale0, scale1;
+
+		// calc cosine
+		cosom = ax * bx + ay * by + az * bz + aw * bw
+		// adjust signs (if necessary)
+		if ( cosom < 0.0 ) {
+			cosom = -cosom
+			bx = - bx, by = - by, bz = - bz, bw = - bw
+		}
+		// calculate coefficients
+		if ( (1.0 - cosom) > 0.000001 ) {
+			// standard case (slerp)
+			omega  = acos(cosom)
+			sinom  = sin(omega)
+			scale0 = sin((1.0 - f) * omega) / sinom
+			scale1 = sin(f * omega) / sinom
+		} 
+		else { // linear interpolate if very close
+			scale0 = 1.0 - f
+			scale1 = f
+		}
+		// calculate final values
+		m00 = scale0 * ax + scale1 * bx
+		m01 = scale0 * ay + scale1 * by
+		m02 = scale0 * az + scale1 * bz
+		m03 = scale0 * aw + scale1 * bw
+	}
+
+	// invert Q
+	invert( quat q ){
+		var a0 = q.x, a1 = q.y, a2 = q.z, a3 = q.w,
+			d = a0*a0 + a1*a1 + a2*a2 + a3*a3,
+			i = d ? 1.0/d : 0
+		x = -a0*i, y = -a1*i, z = -a2*i, w = a3*i
+	}
+
+	// Calculates the conjugate of quat Q
+	// If the quaternion is normalized, this function is faster than quat.inverse and produces the same result.
+	conjugate( quat q ){
+		x = -q.x, y = -q.y, z = -q.z, w = q.w
+	}
+
+	fromMat3( mat3 m ){
+		// Algorithm in Ken Shoemake's article in 1987 SIGGRAPH course notes
+		// article "Quaternion Calculus and Fast Animation".
+		var t = m[0] + m[4] + m[8], r
+		if ( t > 0.0 ) {
+			// |w| > 1/2, may as well choose w > 1/2
+			r = sqrt(T + 1.0)  // 2w
+			w = 0.5 * r
+			r = 0.5/r  // 1/(4w)
+			x = (m[5]-m[7])*r, y = (m[6]-m[2])*r, z = (m[1]-m[3])*r
+		} 
+		else {
+			// |w| <= 1/2
+			var i = 0
+			if ( m[4] > m[0] ) i = 1
+			if ( m[8] > m[i*3+i] ) i = 2
+			var j = (i+1)%3
+			var k = (i+2)%3
+			
+			r = sqrt(m[i*3+i]-m[j*3+j]-m[k*3+k] + 1.0)
+			_[i] = 0.5 * r
+			r = 0.5 / r
+			w = (m[j*3+k] - m[k*3+j]) * r
+			_[j] = (m[j*3+i] + m[i*3+j]) * r
+			_[k] = (m[k*3+i] + m[i*3+k]) * r
+		}
+	}
+}
+
 struct mat2 extends mat{
-	float a,b
-	float c,d
+	float m00,m01
+	float m10,m11
+
+	mat2_mul_mat2( mat2 a, mat2 b ){
+		var a0 = a[0], a1 = a[1], a2 = a[2], a3 = a[3]
+		var b0 = b[0], b1 = b[1], b2 = b[2], b3 = b[3]
+		m00 = a0 * b0 + a2 * b1
+		m01 = a1 * b0 + a3 * b1
+		m10 = a0 * b2 + a2 * b3
+		m11 = a1 * b2 + a3 * b3
+	}
+
+	rotate( mat2 a, float angle ){
+		var a00 = a[0], a01 = a[1], 
+		    a10 = a[2], a11 = a[3],
+		    s = sin(angle), c = cos(angle)
+		m00 = a00 * c + a10 * s
+		m01 = a01 * c + a11 * s
+		m10 = a00 * -s + a10 * c 
+		m11 = a01 * -s + a11 * c
+	}
+
+	scale( mat2 a, vec2 scale ){
+		var s0 = s[0], s1 = s[1]
+		m00 = a[0] * s0
+		m01 = a[1] * s0
+		m10 = a[2] * s1
+		m11 = a[3] * s1
+	}
 }
 
 struct mat3 extends mat{
-	float a,b,c
-	float d,e,f
-	float g,h,i
+	float m00, m01, m02
+	float m10, m11, m12
+	float m21, m22, m23
+
+	identity(){
+		m00 = 1, m01 = 0, m02 = 0
+		m10 = 0, m11 = 1, m12 = 0
+		m20 = 0, m21 = 0, m22 = 1
+	}
+
+	transpose( mat3 a ){
+		if (_ === a) {
+			var a01 = a[1], a02 = a[2], a12 = a[5]
+			m01 = a[3], m02 = a[6], m10 = a01
+			m12 = a[7], m20 = a02, m21 = a12
+		} else {
+			m00 = a[0], m01 = a[3], m02 = a[6]
+			m10 = a[1], m11 = a[4], m12 = a[7]
+			m20 = a[2], m21 = a[5], m22 = a[8]
+		}
+	}
+
+	invert( mat3 a ){
+		var a00 = a[0], a01 = a[1], a02 = a[2],
+			a10 = a[3], a11 = a[4], a12 = a[5],
+			a20 = a[6], a21 = a[7], a22 = a[8],
+			b01 = a22 * a11 - a12 * a21,
+			b11 = -a22 * a10 + a12 * a20,
+			b21 = a21 * a10 - a11 * a20,
+			d = a00 * b01 + a01 * b11 + a02 * b21
+
+		if (!d) return null
+
+		d = 1.0 / d
+
+		m00 = b01 * d
+		m01 = (-a22 * a01 + a02 * a21) * d
+		m02 = (a12 * a01 - a02 * a11) * d
+		m10 = b11 * d
+		m11 = (a22 * a00 - a02 * a20) * d
+		m12 = (-a12 * a00 + a02 * a10) * d
+		m20 = b21 * d
+		m21 = (-a21 * a00 + a01 * a20) * d
+		m22 = (a11 * a00 - a01 * a10) * d
+	}
+
+	adjoint( mat3 a ){
+		var a00 = a[0], a01 = a[1], a02 = a[2],
+			a10 = a[3], a11 = a[4], a12 = a[5],
+			a20 = a[6], a21 = a[7], a22 = a[8]
+
+		m00 = (a11 * a22 - a12 * a21)
+		m01 = (a02 * a21 - a01 * a22)
+		m02 = (a01 * a12 - a02 * a11)
+		m10 = (a12 * a20 - a10 * a22)
+		m11 = (a00 * a22 - a02 * a20)
+		m12 = (a02 * a10 - a00 * a12)
+		m20 = (a10 * a21 - a11 * a20)
+		m21 = (a01 * a20 - a00 * a21)
+		m22 = (a00 * a11 - a01 * a10)
+	}
+
+	determinant(){
+		return m00 * (m22 * m11 - m12 * m21) + 
+			   m01 * (-m22 * m10 + m12 * m20) + 
+			   m02 * (m21 * m10 - m11 * m20)
+	}
+
+	mat3_mul_mat3( a, b ){
+		var a00 = a[0], a01 = a[1], a02 = a[2],
+			a10 = a[3], a11 = a[4], a12 = a[5],
+			a20 = a[6], a21 = a[7], a22 = a[8],
+
+			b00 = b[0], b01 = b[1], b02 = b[2],
+			b10 = b[3], b11 = b[4], b12 = b[5],
+			b20 = b[6], b21 = b[7], b22 = b[8]
+
+		m00 = b00 * a00 + b01 * a10 + b02 * a20
+		m01 = b00 * a01 + b01 * a11 + b02 * a21
+		m02 = b00 * a02 + b01 * a12 + b02 * a22
+
+		m10 = b10 * a00 + b11 * a10 + b12 * a20
+		m11 = b10 * a01 + b11 * a11 + b12 * a21
+		m12 = b10 * a02 + b11 * a12 + b12 * a22
+
+		m20 = b20 * a00 + b21 * a10 + b22 * a20
+		m21 = b20 * a01 + b21 * a11 + b22 * a21
+		m22 = b20 * a02 + b21 * a12 + b22 * a22
+	}
+
+	translate( mat3 a, vec2 v ){
+		var a00 = a[0], a01 = a[1], a02 = a[2],
+			a10 = a[3], a11 = a[4], a12 = a[5],
+			a20 = a[6], a21 = a[7], a22 = a[8],
+			x = v[0], y = v[1]
+
+		m00 = a00,	m01 = a01, m02 = a02
+		m10 = a10, m11 = a11, m12 = a12
+		m20 = x * a00 + y * a10 + a20
+		m21 = x * a01 + y * a11 + a21
+		m22 = x * a02 + y * a12 + a22
+	}
+
+	rotate( mat3 a, float angle ){
+		var a00 = a[0], a01 = a[1], a02 = a[2],
+			a10 = a[3], a11 = a[4], a12 = a[5],
+			a20 = a[6], a21 = a[7], a22 = a[8],
+			s = sin(angle), c = cos(angle)
+
+		m00 = c * a00 + s * a10, m01 = c * a01 + s * a11, m02 = c * a02 + s * a12
+		m10 = c * a10 - s * a00, m11 = c * a11 - s * a01, m12 = c * a12 - s * a02
+		m20 = a20,               m21 = a21,               m22 = a22
+	}
+
+	scale( mat3 a, vec2 v ){
+		var x = v[0], y = v[1]
+		m00 = x * a[0], m01 = x * a[1], m02 = x * a[2]
+		m10 = y * a[3], m11 = y * a[4], m12 = y * a[5]
+		m20 = a[6],     m21 = a[7],     m22 = a[8]
+	}
+
+	fromQuat( quat q ){
+		var x = q[0], y = q[1], z = q[2], w = q[3],
+			x2 = x + x,  y2 = y + y,  z2 = z + z,
+			xx = x * x2, yx = y * x2, yy = y * y2,
+			zx = z * x2, zy = z * y2, zz = z * z2,
+			wx = w * x2, wy = w * y2, wz = w * z2
+
+		m00 = 1 - yy - zz, m01 = yx + wz,     m02 = zx - wy,     
+		m10 = yx - wz,     m11 = 1 - xx - zz, m12 = zy + wx,     
+		m20 = zx + wy,     m21 = zy - wx,     m22 = 1 - xx - yy
+	}
+
+	normalFromMat4( mat4 a ){
+		var a00 = a[0], a01 = a[1], a02 = a[2], a03 = a[3],
+			a10 = a[4], a11 = a[5], a12 = a[6], a13 = a[7],
+			a20 = a[8], a21 = a[9], a22 = a[10],a23 = a[11],
+			a30 = a[12],a31 = a[13],a32 = a[14],a33 = a[15],
+			b00 = a00 * a11 - a01 * a10, b01 = a00 * a12 - a02 * a10,
+			b02 = a00 * a13 - a03 * a10, b03 = a01 * a12 - a02 * a11,
+			b04 = a01 * a13 - a03 * a11, b05 = a02 * a13 - a03 * a12,
+			b06 = a20 * a31 - a21 * a30, b07 = a20 * a32 - a22 * a30,
+			b08 = a20 * a33 - a23 * a30, b09 = a21 * a32 - a22 * a31,
+			b10 = a21 * a33 - a23 * a31, b11 = a22 * a33 - a23 * a32,
+			d = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06
+
+		if (!det) return null 
+		det = 1.0 / det
+
+		m00 = (a11 * b11 - a12 * b10 + a13 * b09) * det
+		m01 = (a12 * b08 - a10 * b11 - a13 * b07) * det
+		m02 = (a10 * b10 - a11 * b08 + a13 * b06) * det
+
+		m10 = (a02 * b10 - a01 * b11 - a03 * b09) * det
+		m11 = (a00 * b11 - a02 * b08 + a03 * b07) * det
+		m12 = (a01 * b08 - a00 * b10 - a03 * b06) * det
+
+		m20 = (a31 * b05 - a32 * b04 + a33 * b03) * det
+		m21 = (a32 * b02 - a30 * b05 - a33 * b01) * det
+		m22 = (a30 * b04 - a31 * b02 + a33 * b00) * det
+	}
 }
 
+struct mat4 extends mat{
+	float m00,m01,m02,m03
+	float m10,m11,m12,m13
+	float m20,m21,m22,m23
+	float m30,m31,m32,m33
+
+	identity(){
+		m00 = 1, m01 = 0, m02 = 0, m03 = 0,
+		m10 = 0, m11 = 1, m12 = 0, m13 = 0,
+		m20 = 0, m21 = 0, m22 = 1, m23 = 0,
+		m30 = 0, m31 = 0, m32 = 0, m33 = 1
+	}
+
+	transpose( mat4 a ){
+		if (a === _) {
+			var a01 = a[1], a02 = a[2], a03 = a[3], a12 = a[6], a13 = a[7], a23 = a[11]
+			m01 = a[4], m02 = a[8], m03 = a[12],m10 = a01
+			m12 = a[9], m13 = a[13],m20 = a02,  m21 = a12
+			m23= a[14], m30= a03,   m31 = a13,  m32= a23
+		} 
+		else {
+			m00 = a[0], m01 = a[4], m02 = a[8], m03 = a[12]
+			m10 = a[1], m11 = a[5], m12 = a[9], m13 = a[13]
+			m20 = a[2], m21 = a[6], m22 = a[10],m23 = a[14]
+			m30 = a[3], m31 = a[7], m32 = a[11],m33 = a[15]
+		}
+	}
+
+	// Invert matrix a
+	invert( mat4 a ){
+		var a00 = a[0], a01 = a[1], a02 = a[2], a03 = a[3],
+			a10 = a[4], a11 = a[5], a12 = a[6], a13 = a[7],
+			a20 = a[8], a21 = a[9], a22 = a[10],a23 = a[11],
+			a30 = a[12],a31 = a[13],a32 = a[14],a33 = a[15],
+
+			b00 = a00 * a11 - a01 * a10, b01 = a00 * a12 - a02 * a10,
+			b02 = a00 * a13 - a03 * a10, b03 = a01 * a12 - a02 * a11,
+			b04 = a01 * a13 - a03 * a11, b05 = a02 * a13 - a03 * a12,
+			b06 = a20 * a31 - a21 * a30, b07 = a20 * a32 - a22 * a30,
+			b08 = a20 * a33 - a23 * a30, b09 = a21 * a32 - a22 * a31,
+			b10 = a21 * a33 - a23 * a31, b11 = a22 * a33 - a23 * a32,
+
+			d = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06
+
+		if (!d) return identity() 
+		d = 1.0 / d
+
+		m00  = (a11 * b11 - a12 * b10 + a13 * b09) * d
+		m01  = (a02 * b10 - a01 * b11 - a03 * b09) * d
+		m02  = (a31 * b05 - a32 * b04 + a33 * b03) * d
+		m03  = (a22 * b04 - a21 * b05 - a23 * b03) * d
+		m10  = (a12 * b08 - a10 * b11 - a13 * b07) * d
+		m11  = (a00 * b11 - a02 * b08 + a03 * b07) * d
+		m12  = (a32 * b02 - a30 * b05 - a33 * b01) * d
+		m13  = (a20 * b05 - a22 * b02 + a23 * b01) * d
+		m20  = (a10 * b10 - a11 * b08 + a13 * b06) * d
+		m21  = (a01 * b08 - a00 * b10 - a03 * b06) * d
+		m22 = (a30 * b04 - a31 * b02 + a33 * b00) * d
+		m23 = (a21 * b02 - a20 * b04 - a23 * b00) * d
+		m30 = (a11 * b07 - a10 * b09 - a12 * b06) * d
+		m31 = (a00 * b09 - a01 * b07 + a02 * b06) * d
+		m32 = (a31 * b01 - a30 * b03 - a32 * b00) * d
+		m33 = (a20 * b03 - a21 * b01 + a22 * b00) * d
+	}
+
+	adjoint( mat4 a ) {
+		var a00 = a[0], a01 = a[1], a02 = a[2], a03 = a[3],
+			a10 = a[4], a11 = a[5], a12 = a[6], a13 = a[7],
+			a20 = a[8], a21 = a[9], a22 = a[10],a23 = a[11],
+			a30 = a[12],a31 = a[13],a32 = a[14],a33 = a[15]
+
+		m00  =  (a11 * (a22 * a33 - a23 * a32) - a21 * (a12 * a33 - a13 * a32) + a31 * (a12 * a23 - a13 * a22))
+		m01  = -(a01 * (a22 * a33 - a23 * a32) - a21 * (a02 * a33 - a03 * a32) + a31 * (a02 * a23 - a03 * a22))
+		m02  =  (a01 * (a12 * a33 - a13 * a32) - a11 * (a02 * a33 - a03 * a32) + a31 * (a02 * a13 - a03 * a12))
+		m03  = -(a01 * (a12 * a23 - a13 * a22) - a11 * (a02 * a23 - a03 * a22) + a21 * (a02 * a13 - a03 * a12))
+		m10  = -(a10 * (a22 * a33 - a23 * a32) - a20 * (a12 * a33 - a13 * a32) + a30 * (a12 * a23 - a13 * a22))
+		m11  =  (a00 * (a22 * a33 - a23 * a32) - a20 * (a02 * a33 - a03 * a32) + a30 * (a02 * a23 - a03 * a22))
+		m12  = -(a00 * (a12 * a33 - a13 * a32) - a10 * (a02 * a33 - a03 * a32) + a30 * (a02 * a13 - a03 * a12))
+		m13  =  (a00 * (a12 * a23 - a13 * a22) - a10 * (a02 * a23 - a03 * a22) + a20 * (a02 * a13 - a03 * a12))
+		m20  =  (a10 * (a21 * a33 - a23 * a31) - a20 * (a11 * a33 - a13 * a31) + a30 * (a11 * a23 - a13 * a21))
+		m21  = -(a00 * (a21 * a33 - a23 * a31) - a20 * (a01 * a33 - a03 * a31) + a30 * (a01 * a23 - a03 * a21))
+		m22 =  (a00 * (a11 * a33 - a13 * a31) - a10 * (a01 * a33 - a03 * a31) + a30 * (a01 * a13 - a03 * a11))
+		m23 = -(a00 * (a11 * a23 - a13 * a21) - a10 * (a01 * a23 - a03 * a21) + a20 * (a01 * a13 - a03 * a11))
+		m30 = -(a10 * (a21 * a32 - a22 * a31) - a20 * (a11 * a32 - a12 * a31) + a30 * (a11 * a22 - a12 * a21))
+		m31 =  (a00 * (a21 * a32 - a22 * a31) - a20 * (a01 * a32 - a02 * a31) + a30 * (a01 * a22 - a02 * a21))
+		m32 = -(a00 * (a11 * a32 - a12 * a31) - a10 * (a01 * a32 - a02 * a31) + a30 * (a01 * a12 - a02 * a11))
+		m33 =  (a00 * (a11 * a22 - a12 * a21) - a10 * (a01 * a22 - a02 * a21) + a20 * (a01 * a12 - a02 * a11))
+	}
+
+	// multiply matrix a with vector or matrix V
+	mat4_mul_mat4( mat4 a, mat4 b ){
+		if(!O) O = new Array(16)
+		var a00 = a[0], a01 = a[1], a02 = a[2], a03 = a[3],
+			a10 = a[4], a11 = a[5], a12 = a[6], a13 = a[7],
+			a20 = a[8], a21 = a[9], a22 = a[10],a23 = a[11],
+			a30 = a[12],a31 = a[13],a32 = a[14],a33 = a[15]
+
+		var b0  = b[0], b1 = b[1], b2 = b[2], b3 = b[3]
+		m00 = b0*a00 + b1*a10 + b2*a20 + b3*a30
+		m01 = b0*a01 + b1*a11 + b2*a21 + b3*a31
+		m02 = b0*a02 + b1*a12 + b2*a22 + b3*a32
+		m03 = b0*a03 + b1*a13 + b2*a23 + b3*a33
+
+		b0 = b[4], b1 = b[5], b2 = b[6], b3 = b[7]
+		m10 = b0*a00 + b1*a10 + b2*a20 + b3*a30
+		m11 = b0*a01 + b1*a11 + b2*a21 + b3*a31
+		m12 = b0*a02 + b1*a12 + b2*a22 + b3*a32
+		m13 = b0*a03 + b1*a13 + b2*a23 + b3*a33
+
+		b0 = b[8], b1 = b[9], b2 = b[10], b3 = b[11]
+		m20 = b0*a00 + b1*a10 + b2*a20 + b3*a30
+		m21 = b0*a01 + b1*a11 + b2*a21 + b3*a31
+		m22 = b0*a02 + b1*a12 + b2*a22 + b3*a32
+		m23 = b0*a03 + b1*a13 + b2*a23 + b3*a33
+
+		b0 = b[12], b1 = b[13], b2 = b[14], b3 = b[15]
+		m30 = b0*a00 + b1*a10 + b2*a20 + b3*a30
+		m31 = b0*a01 + b1*a11 + b2*a21 + b3*a31
+		m32 = b0*a02 + b1*a12 + b2*a22 + b3*a32
+		m33 = b0*a03 + b1*a13 + b2*a23 + b3*a33
+	}
+
+	// compute determinant of matrix a
+	determinant(){
+		var b00 = m00 * m11 - m01 * m10, b01 = m00 * m12 - m02 * m10,
+			b02 = m00 * m13 - m03 * m10, b03 = m01 * m12 - m02 * m11,
+			b04 = m01 * m13 - m03 * m11, b05 = m02 * m13 - m03 * m12,
+			b06 = m20 * m31 - m21 * m30, b07 = m20 * m32 - m22 * m30,
+			b08 = m20 * m33 - m23 * m30, b09 = m21 * m32 - m22 * m31,
+			b10 = m21 * m33 - m23 * m31, b11 = m22 * m33 - m23 * m32
+
+		// Calculate the determinant
+		return b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
+	}
+
+	// translate matrix a with vector V
+	translate( mat4 a, vec3 v ){
+		var x = v.x, y = v.y, z = v.z,
+			a00, a01, a02, a03,
+			a10, a11, a12, a13,
+			a20, a21, a22, a23
+
+		if (a === _) {
+			m30 = a[0] * x + a[4] * y + a[8] * z + a[12]
+			m31 = a[1] * x + a[5] * y + a[9] * z + a[13]
+			m32 = a[2] * x + a[6] * y + a[10] * z + a[14]
+			m33 = a[3] * x + a[7] * y + a[11] * z + a[15]
+		} 
+		else {
+			a00 = a[0], a01 = a[1], a02 = a[2], a03 = a[3]
+			a10 = a[4], a11 = a[5], a12 = a[6], a13 = a[7]
+			a20 = a[8], a21 = a[9], a22 = a[10],a23 = a[11]
+
+			m00 = a00, m01 = a01, m02 = a02, m03 = a03
+			m10 = a10, m11 = a11, m12 = a12, m13 = a13
+			m20 = a20, m21 = a21, m22 = a22,m23 = a23
+
+			m30 = a00 * x + a10 * y + a20 * z + a[12]
+			m31 = a01 * x + a11 * y + a21 * z + a[13]
+			m32 = a02 * x + a12 * y + a22 * z + a[14]
+			m33 = a03 * x + a13 * y + a23 * z + a[15]
+		}
+	}
+
+	// scale matrix a with vector V
+	scale( mat4 a, vec3 v ){
+		var x = v.x, y = v.y, z = v.z
+
+		m00 = a[0] * x, m01 = a[1] * x, m02 = a[2] * x, m03 = a[3] * x
+		m10 = a[4] * y, m11 = a[5] * y, m12 = a[6] * y, m13 = a[7] * y
+		m20 = a[8] * z, m21 = a[9] * z, m22= a[10]* z, m23= a[11] * z
+		m30= a[12],    m31= a[13],    m32= a[14],    m33= a[15]
+	}
+
+	// rotate matrix a by angle A in radians around axis v
+	rotate( mat4 a, float angle, vec3 v ){
+		var x = v.x, y = v.y, z = v.z,
+			len = sqrt(x * x + y * y + z * z),
+			s = sin(angle), 
+			c = cos(angle), 
+			t = 1 - c,
+
+		len = 1 / len
+		x *= len, y *= len, z *= len
+
+		if (abs(len) < 0.000001) return null
+
+		var a00 = a[0], a01 = a[1], a02 = a[2],  a03 = a[3],
+			a10 = a[4], a11 = a[5], a12 = a[6],  a13 = a[7],
+			a20 = a[8], a21 = a[9], a22 = a[10], a23 = a[11]
+
+		// Construct the elements of the rotation matrix
+		var b00 = x * x * t + c,     b01 = y * x * t + z * s, b02 = z * x * t - y * s,
+			b10 = x * y * t - z * s, b11 = y * y * t + c,     b12 = z * y * t + x * s,
+			b20 = x * z * t + y * s, b21 = y * z * t - x * s, b22 = z * z * t + c
+
+		// Perform rotation-specific matrix multiplication
+		m00 = a00 * b00 + a10 * b01 + a20 * b02
+		m01 = a01 * b00 + a11 * b01 + a21 * b02
+		m02 = a02 * b00 + a12 * b01 + a22 * b02
+		m03 = a03 * b00 + a13 * b01 + a23 * b02
+		m10 = a00 * b10 + a10 * b11 + a20 * b12
+		m11 = a01 * b10 + a11 * b11 + a21 * b12
+		m12 = a02 * b10 + a12 * b11 + a22 * b12
+		m13 = a03 * b10 + a13 * b11 + a23 * b12
+		m20 = a00 * b20 + a10 * b21 + a20 * b22
+		m21 = a01 * b20 + a11 * b21 + a21 * b22
+		m22= a02 * b20 + a12 * b21 + a22 * b22
+		m23= a03 * b20 + a13 * b21 + a23 * b22
+
+		if (a !== _) { // If the source and destination differ, copy the unchanged last row
+			m30 = a[12]
+			m31 = a[13]
+			m32 = a[14]
+			m33 = a[15]
+		}
+	}
+
+	// Rotate matrix a by angle A around x-axis
+	rotateX( mat4 a, float angle ){
+		var s = sin(angle), c = cos(angle),
+			a10 = a[4], a11 = a[5], a12 = a[6], a13 = a[7],
+			a20 = a[8], a21 = a[9], a22 = a[10], a23 = a[11]
+
+		if (a !== _){ // If the source and destination differ, copy the unchanged rows
+			m00 = a[0], m01 = a[1], m02 = a[2], m03 = a[3]
+			m30 = a[12],m31 = a[13],m32 = a[14],m33 = a[15]
+		}
+
+		// Perform axis-specific matrix multiplication
+		m10 = a10 * c + a20 * s, m11 = a11 * c + a21 * s
+		m12 = a12 * c + a22 * s, m13 = a13 * c + a23 * s
+		m20 = a20 * c - a10 * s, m21 = a21 * c - a11 * s
+		m22 = a22 * c - a12 * s, m23 = a23 * c - a13 * s
+	}
+
+	// rotate matrix a with angle R around y-axis
+	rotateY( mat4 a, float angle ){
+		var s = sin(angle), c = cos(angle),
+			a00 = a[0], a01 = a[1], a02 = a[2], a03 = a[3],
+			a20 = a[8], a21 = a[9], a22 = a[10], a23 = a[11]
+
+		if (a !== _) { // If the source and destination differ, copy the unchanged rows
+			m10 = a[4], m11 = a[5], m12 = a[6], m13 = a[7]
+			m30= a[12], m31= a[13], m32= a[14], m33= a[15]
+		}
+
+		// Perform axis-specific matrix multiplication
+		m00 = a00 * c - a20 * s, m01 = a01 * c - a21 * s
+		m02 = a02 * c - a22 * s, m03 = a03 * c - a23 * s
+		m20 = a00 * s + a20 * c, m21 = a01 * s + a21 * c
+		m22 = a02 * s + a22 * c, m23 = a03 * s + a23 * c
+	}
+
+	// rotate matrix a with angle R around z-axis
+	rotateZ( mat4 a, float angle ){
+		var s = sin(angle), c = cos(angle),
+			a00 = a[0], a01 = a[1], a02 = a[2], a03 = a[3],
+			a10 = a[4], a11 = a[5], a12 = a[6], a13 = a[7]
+
+		if (a !== _) { // If the source and destination differ, copy the unchanged last row
+			m20 = a[8],  m21 = a[9],  m22 = a[10], m23 = a[11]
+			m30 = a[12], m31 = a[13], m32 = a[14], m33 = a[15]
+		}
+		// Perform axis-specific matrix multiplication
+		m00 = a00 * c + a10 * s, m01 = a01 * c + a11 * s
+		m02 = a02 * c + a12 * s, m03 = a03 * c + a13 * s
+		m10 = a10 * c - a00 * s, m11 = a11 * c - a01 * s
+		m12 = a12 * c - a02 * s, m13 = a13 * c - a03 * s
+	}
+
+	// Create matrix from quaternion Q and translation V
+	fromRT( quat q, vec3 v ){
+		// Quaternion math
+		var x = q[0], y = q[1], z = q[2], w = q[3],
+			x2 = x + x,  y2 = y + y,  z2 = z + z,
+			xx = x * x2, xy = x * y2, xz = x * z2,
+			yy = y * y2, yz = y * z2, zz = z * z2,
+			wx = w * x2, wy = w * y2, wz = w * z2
+
+		m00 = 1 - (yy + zz), m01 = xy + wz,       m02 = xz - wy,      m03 = 0
+		m10 = xy - wz,       m11 = 1 - (xx + zz), m12 = yz + wx,      m13 = 0
+		m20 = xz + wy,       m21 = yz - wx,       m22= 1 - (xx + yy), m23 = 0
+		m30 = v.x,           m31 = v.y,           m32= v.z,           m33 = 1
+
+		return O
+	}
+
+	// Create matrix from quaternion Q
+	fromQuatfunction( quat q ){
+		var x = q[0], y = q[1], z = q[2], w = q[3],
+			x2 = x + x,  y2 = y + y,  z2 = z + z,
+			xx = x * x2, yx = y * x2, yy = y * y2,
+			zx = z * x2, zy = z * y2, zz = z * z2,
+			wx = w * x2, wy = w * y2, wz = w * z2
+
+		m00 = 1 - yy - zz, m01 = yx + wz,     m02 = zx - wy,      m03 = 0
+		m10 = yx - wz,     m11 = 1 - xx - zz, m12 = zy + wx,      m13 = 0
+		m20 = zx + wy,     m21 = zy - wx,     m22 = 1 - xx - yy,  m23 = 0
+		m30 = 0,           m31 = 0,           m32 = 0,            m33 = 1
+	}
+	
+	// Create matrix from left/right/bottom/top/near/far
+	frustrum( float L, float R, float B, float T, float N, float F, float O ){
+		var rl = 1 / (R - L), tb = 1 / (T - B), nf = 1 / (N - F)
+		m00 = (N * 2) * rl, m01 = 0,            m02 = 0,                m03 = 0
+		m10 = 0,            m11 = (N * 2) * tb, m12 = 0,                m13 = 0
+		m20 = (R + L) * rl, m21 = (T + B) * tb, m22 = (F + N) * nf,     m23 = -1
+		m30 = 0,            m31 = 0,            m32 = (F * N * 2) * nf, m33 = 0
+	}
+
+	// Create perspective matrix FovY, Aspect, Near, Far
+	perspective( float FY, float A, float N, float F, float O ){
+		var f = 1.0 / tan(FY / 2), nf = 1 / (N - F)
+		m00 = f / A, m01 = 0,  m02 = 0,                 m03 = 0
+		m10 = 0,     m11 = f,  m12 = 0,                 m13 = 0
+		m20 = 0,     m21 = 0,  m22 = (F + N) * nf,      m23 = -1
+		m30 = 0,     m31 = 0,  m32 = (2 * F * N) * nf,  m33 = 0
+	}
+
+	// Create orthogonal proj matrix with Left/Right/Bottom/Top/Near/Far
+	ortho( float L, float R, float B, float T, float N, float F, float O ){
+		var lr = 1 / (L - R), bt = 1 / (B - T), nf = 1 / (N - F)
+		m00 = -2 * lr,      m01 = 0,            m02 = 0,            m03 = 0 
+		m10 = 0,            m11 = -2 * bt,      m12 = 0,            m13 = 0 
+		m20 = 0,            m21 = 0,            m22 = 2 * nf,       m23 = 0
+		m30 = (L + R) * lr, m31 = (T + B) * bt, m32 = (F + N) * nf, m33 = 1
+	}
+
+	// Create look at matrix with Eye, LookAt, and Up vectors 
+	lookAt( vec3 E, vec3 L, vec3 U ){
+		var x0, x1, x2, y0, y1, y2, z0, z1, z2, len,
+			ex = E[0], ey = E[1], ez = E[2],
+			ux = U[0], uy = U[1], uz = U[2],
+			lx = L[0], ly = L[1], lz = L[2]
+
+		if (abs(ex - lx) < 0.000001 &&
+			abs(ey - ly) < 0.000001 &&
+			abs(ez - lz) < 0.000001) {
+			return _.identity()
+		}
+
+		z0 = ex - lx, z1 = ey - ly, z2 = ez - lz
+		len = 1 / sqrt(z0 * z0 + z1 * z1 + z2 * z2)
+		z0 *= len, z1 *= len, z2 *= len
+
+		x0 = uy * z2 - uz * z1, x1 = uz * z0 - ux * z2, x2 = ux * z1 - uy * z0
+		len = sqrt(x0 * x0 + x1 * x1 + x2 * x2)
+
+		if (!len)  x0 = 0, x1 = 0, x2 = 0
+		else  len = 1 / len, x0 *= len, x1 *= len, x2 *= len
+
+		y0 = z1 * x2 - z2 * x1, y1 = z2 * x0 - z0 * x2, y2 = z0 * x1 - z1 * x0
+		len = sqrt(y0 * y0 + y1 * y1 + y2 * y2)
+
+		if (!len)  y0 = 0, y1 = 0, y2 = 0
+		else len = 1 / len, y0 *= len, y1 *= len, y2 *= len
+
+		m00 = x0, m01 = y0, m02 = z0,  m03 = 0
+		m10 = x1, m11 = y1, m12 = z1,  m13 = 0
+		m20 = x2, m21 = y2, m22 = z2,  m23 = 0
+		m30 = -(x0 * ex + x1 * ey + x2 * ez)
+		m31 = -(y0 * ex + y1 * ey + y2 * ez)
+		m32 = -(z0 * ex + z1 * ey + z2 * ez)
+		m33 = 1
+	}
+}
