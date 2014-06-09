@@ -1724,7 +1724,19 @@ ONE.parser_strict_ = function(){
 				this.isIdentifierStart(this.input.charCodeAt(this.tokPos))){
 				this.next()
 				if(this.lastSkippedNewlines) this.unexpected()
-				node.id = this.parseExpression()
+				// we should be able to parse an id,
+				// and then ( ) arguments, and then a define
+				var base = this.parseIdent()
+
+				if(this.lastSkippedNewlines) this.unexpected()
+				if(this.eat(this._parenL)){
+					var macro = this.startNodeFrom(base)
+					macro.fn = base
+					macro.args = this.parseExprList(this._parenR, false)
+					this.finishNode(macro, "Call")
+					node.id = macro
+				}
+				else node.id = base
 				if(this.lastSkippedNewlines) this.unexpected()
 				node.value = this.parseExpression()
 				return this.finishNode(node, "Define")

@@ -15,8 +15,8 @@ define exp(x)    Math.exp(x)
 define log(x)    Math.log(x)
 define max(x)    Math.max(x)
 define min(x)    Math.min(x)
-define random(x) Math.random(x)
-
+define random()  Math.random()
+define mod(x, y) (x%y+y)%y
 define PI        3.141592653589793
 define E         2.718281828459045
 define LN2       0.6931471805599453
@@ -916,11 +916,11 @@ struct mat4 extends mat{
 	}
 
 	// Create look at matrix with Eye, LookAt, and Up vectors 
-	lookAt( vec3 E, vec3 L, vec3 U ){
+	lookAt( vec3 eye, vec3 look, vec3 up ){
 		var x0, x1, x2, y0, y1, y2, z0, z1, z2, len,
-			ex = E[0], ey = E[1], ez = E[2],
-			ux = U[0], uy = U[1], uz = U[2],
-			lx = L[0], ly = L[1], lz = L[2]
+			ex = eye.x, ux = up.x, lx = look.x, 
+			ey = eye.y, uy = up.y, ly = look.y,
+			ez = eye.z, uz = up.z, ly = look.z		
 
 		if (abs(ex - lx) < 0.000001 &&
 			abs(ey - ly) < 0.000001 &&

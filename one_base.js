@@ -899,3 +899,7 @@ Function.prototype.new = function(){
 Function.prototype.prototypeOf = function( other ){
 	return other instanceof this
 }
+
+Math._mod = function( x, y ){
+	return (x%y+y)%y
+}

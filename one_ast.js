@@ -2497,7 +2497,7 @@ ONE.ast_ = function(){
 					return 'Array(' + left + ').join(' + right + ')'
 				} // mathematical modulus
 
-				if(n.op == '%%') return 'this.mod(' + left + ',' + right + ')' 
+				if(n.op == '%%') return 'Math._mod(' + left + ',' + right + ')' 
 				// floor division
 				if(n.op == '%/') return 'Math.floor(' + left + '/' + right + ')' 
 				// pow
@@ -2731,6 +2731,7 @@ ONE.ast_ = function(){
 						}
 					}
 					if(macro){
+
 						var a = this.macroarg
 						var marg = this.macroarg = Object.create(this.macroarg)
 						var params = macro.id.args

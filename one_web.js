@@ -18,7 +18,6 @@ ONE.browser_boot_ = function(){
 		ONE.Base.Base = ONE.Base
 		// add ast support to the Base class
 		ONE.ast_.apply( ONE.Base )
-		ONE.math_.apply( ONE.Base )
 		
 		// make ONE the new root scope
 		ONE.Base.$ = ONE.$ = Object.create( ONE )
