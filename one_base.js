@@ -420,12 +420,13 @@ ONE.base_ = function(){
 		var tm = this.now()
 		if(arguments.length == 1) call = msg, times = 1, msg = ''
 		if(arguments.length == 2) call = times, times = msg, msg = ''
+		var ret
 		for( var i = 0; i < times; i++ ){
-			call.call( this, i )
+			ret = call.call( this, i )
 		}
 		tm = this.now() - tm
 		console.log("profile " + msg + " " + Math.ceil(tm)+'ms')
-		return tm
+		return ret
 	}
 
 	// Create a new scope

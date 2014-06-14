@@ -2999,6 +2999,7 @@ ONE.ast_ = function(){
 				// so if we are a single Id, we call using .call(this')
 				var cthis = ''
 				var call = ''
+				var fastpath
 				if(fn.type == 'Id'){
 					cthis = 'this'
 					call = this.expand(fn, n)
@@ -3007,10 +3008,15 @@ ONE.ast_ = function(){
 					// check if we are a property chain
 					if(fn.type == 'Key' || fn.type == 'Index'){
 						if(fn.isKeyChain()){
+							// check if we are doing some native access
 							// no tempvar
 							cthis = this.expand(fn.object, fn)
+							if(cthis == 'Math' || cthis == 'gl') fastpath = 1
 							if(fn.type == 'Index') call = cthis + '[' + this.expand(fn.index, fn) + ']'
-							else call = cthis + '.' + fn.key.name
+							else{
+								if(fn.key.name in String.prototype) fastpath = 1
+								call = cthis + '.' + fn.key.name
+							}
 						}
 						else { // we might be a chain on a call.
 							// use a tempvar for the object part of the key
@@ -3039,7 +3045,7 @@ ONE.ast_ = function(){
 
 				if(isapply) return call +'.apply(' + cthis + (sarg?','+this.space+sarg:'') + ')'
 				//fastpath Math
-				if(cthis == 'Math' || cthis == 'gl'){
+				if(fastpath){
 					return call+'('+sarg+')'
 				}
 				return call +'.call(' + cthis + (sarg?','+this.space+sarg:'') + ')'
