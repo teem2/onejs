@@ -16,7 +16,6 @@ class HTMLParser{
 	// parse the function
 	parse(source){
 		if(typeof source != 'string') source = source.toString()
-		this.source = source
 		var len = source.length
 		var pos = 0
 		var start = pos
@@ -202,7 +201,6 @@ class HTMLScraper extends HTMLParser{
 	// returns js accessible tree
 	parse(source){
 		node = new HTMLNode()
-		stack = [node]
 		HTMLParser.parse.call(this, source)
 		return node
 	}
@@ -257,6 +255,7 @@ class HTMLScraper extends HTMLParser{
 		node = newnode
 	}
 	
+	// stores a node on the object tree
 	storenode(name, value){
 		var old = node[name]
 		if(old !== undefined){
@@ -265,18 +264,17 @@ class HTMLScraper extends HTMLParser{
 				old.push(value)
 			}
 			else{
-				node[name+'_0'] = old
-				node[name+'_1'] = value
+				node[name + '_0'] = old
+				node[name + '_1'] = value
 				node[name] = [old, value]
 			}
 		}
 		else node[name] = value
 	}
-
+	
 	text(value){
 		// discard empty textnodes
-		if(!value.match(/^[\r\n\s]+$/))
-			storenode('text', value)
+		if(!value.match(/^[\r\n\s]+$/)) storenode('text', value)
 	}
 	
 	comment(val){
@@ -315,5 +313,4 @@ class HTMLScraper extends HTMLParser{
 		}
 		if(node.parent)	node = node.parent
 	}
-
 }
