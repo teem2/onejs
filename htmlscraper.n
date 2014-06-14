@@ -2,15 +2,15 @@
 class HTMLParser{
 
 	// parser callbacks, overload in your class 	
-	//text(value){} // text node
-	//comment(value){} // comment node <!-- -->
-	//cdata(value){} // cdata section <![CDATA[ ]]>
-	//process(value){} // process <? ?>
-	//begin(name){} // begin tag
-	//end(){} // end tag, not called when self closing
-	//close(name){} // close tag
-	//attr(name){} // attribute name
-	//value(val){} // attribute value
+	text(value){} // text node
+	comment(value){} // comment node <!-- -->
+	cdata(value){} // cdata section <![CDATA[ ]]>
+	process(value){} // process <? ?>
+	begin(name){} // begin tag
+	end(){} // end tag, not called when self closing
+	close(name){} // close tag
+	attr(name){} // attribute name
+	value(val){} // attribute value
 
 	// parse the function
 	parse(source){
@@ -34,7 +34,7 @@ class HTMLParser{
 							if(ch == 45 && source.charCodeAt(pos) == 45 &&
 							    source.charCodeAt(pos + 1) == 62){
 								pos += 3
-								if(comment) comment(source.slice(start, pos - 3))
+								comment(source.slice(start, pos - 3))
 								break
 							}
 						}
@@ -49,7 +49,7 @@ class HTMLParser{
 							if(ch == 93 && source.charCodeAt(pos) == 93 &&
 							    source.charCodeAt(pos + 1) == 62){
 								pos += 2
-								if(cdata) cdata(source.slice(start, pos - 3))
+								cdata(source.slice(start, pos - 3))
 								break
 							}
 						}
@@ -66,7 +66,7 @@ class HTMLParser{
 						ch = source.charCodeAt(pos++)
 						if(ch == 63 && source.charCodeAt(pos) == 62){
 							pos++
-							if(process) process(source.slice(start, pos - 2))
+							process(source.slice(start, pos - 2))
 							break
 						}
 					}
@@ -78,7 +78,7 @@ class HTMLParser{
 					while(pos < len){
 						ch = source.charCodeAt(pos++)
 						if(ch == 62){
-							if(close) close(source.slice(start, pos - 1))
+							close(source.slice(start, pos - 1))
 							break
 						}
 					}
@@ -94,21 +94,21 @@ class HTMLParser{
 					if(ch == 62 || ch == 47 || ch == 10 || ch == 12 || ch ==32 || ch == 61){
 						if(start != pos - 1){
 							if(tag){ // lets emit the tagname
-								if(begin) begin(source.slice(start, pos - 1))
+								begin(source.slice(start, pos - 1))
 								tag = false
 							}
 							else { // lets emit an attribute name
-								if(attr) attr(source.slice(start, pos - 1))
+								attr(source.slice(start, pos - 1))
 							}
 						}
 						start = pos
 						if(ch == 62){ // >
-							if(end) end()
+							end()
 							break
 						}
 						else if(ch == 47 && source.charCodeAt(pos) == 62){ // />
 							pos++
-							if(close) close()
+							close()
 							break
 						}
 					}
@@ -118,7 +118,7 @@ class HTMLParser{
 						while(pos < len){
 							ch = source.charCodeAt(pos++)
 							if(ch == end){
-								if(value) value(source.slice(start, pos - 1))
+								value(source.slice(start, pos - 1))
 								break
 							}
 						}
@@ -271,9 +271,10 @@ class HTMLScraper extends HTMLParser{
 		else node[name] = value
 	}
 	
+	var rx = /^[\r\n\s]+$/
 	text(value){
 		// discard empty textnodes
-		if(!value.match(/^[\r\n\s]+$/)) storenode('text', value)
+		if(!value.match(rx)) storenode('text', value)
 	}
 	
 	comment(val){

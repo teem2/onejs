@@ -3011,10 +3011,14 @@ ONE.ast_ = function(){
 							// check if we are doing some native access
 							// no tempvar
 							cthis = this.expand(fn.object, fn)
-							if(cthis == 'Math' || cthis == 'gl') fastpath = 1
+							if(this.globals[cthis] || cthis == 'gl') fastpath = 1
 							if(fn.type == 'Index') call = cthis + '[' + this.expand(fn.index, fn) + ']'
 							else{
+								var name = fn.key.name
 								if(fn.key.name in String.prototype) fastpath = 1
+								if(fn.key.name in Array.prototype) fastpath = 1
+								if(fn.key.name in Object.prototype) fastpath = 1
+
 								call = cthis + '.' + fn.key.name
 							}
 						}
@@ -3045,9 +3049,7 @@ ONE.ast_ = function(){
 
 				if(isapply) return call +'.apply(' + cthis + (sarg?','+this.space+sarg:'') + ')'
 				//fastpath Math
-				if(fastpath){
-					return call+'('+sarg+')'
-				}
+				if(fastpath) return call+'('+sarg+')'
 				return call +'.call(' + cthis + (sarg?','+this.space+sarg:'') + ')'
 			}
 
