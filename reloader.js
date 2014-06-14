@@ -86,6 +86,11 @@ function nodejs(){
 		var name = url.parse(req.url).pathname
 		var fullpath = path.join(root, name)
 		if(name == "/_reloader_"){
+			// set a timer for 15 seconds
+			setTimeout(function(){
+				res.writeHead(204,{"Content-Type":"text/plain"})
+				res.end("")
+			},15000)
 			watchRes.push(res)
 			return
 		}        

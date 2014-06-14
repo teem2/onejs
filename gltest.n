@@ -1,0 +1,28 @@
+import math
+import webgl
+import dom
+
+if(k in this) return
+
+
+class MyGL extends GLNode{
+	mesh = vec3[6](
+		0,0,0, 1,0,0, 0,1,0
+		1,0,0, 1,1,0, 0,1,0
+	)
+	vertex: mesh
+	pixel: #red
+	draw: (){
+		clearAll(#red)
+		out('here')
+		draw(this)
+	}
+}
+
+// build the simplest of scenegraphcs
+GLView{
+	init(document.body)
+	MyGL{
+
+	}
+}

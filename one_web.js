@@ -73,7 +73,7 @@ ONE.browser_boot_ = function(){
 				//})
 			}
 			// lets analyze our data and load all our deps.
-			var ast = obj.parse('->{'+code+'\n}', undefined, undefined, url)
+			var ast = obj.parse('->{'+code+'\n}', undefined, undefined, undefined, url, true)
 			var deps = 0
 			// load our dependencies
 			ast.getDependencies().forEach(function(file){

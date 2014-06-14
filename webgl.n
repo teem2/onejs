@@ -1,0 +1,108 @@
+import math
+
+class GLView{
+	init( parent ){
+		if(!parent) return
+
+		pixelRatio = window.devicePixelRatio
+		canvas = document.createElement("canvas")
+		parent.appendChild(canvas)
+
+		gl = canvas.getContext('webgl', {
+			antialias:false, 
+			premultipliedAlpha: false,
+			alpha: false, 
+			preserveDrawingBuffer: true 
+		})
+		
+		window.onresize = =>{
+			canvas.style.width = parent.offsetWidth
+			canvas.style.height = parent.offsetHeight
+			canvas.width = canvas.style.width * pixelRatio
+			canvas.height = canvas.style.height * pixelRatio
+		}
+		window.onresize()
+	}
+}
+
+class GLNode{
+
+	clearAll:( vec3 col ){
+		gl.clearColor(col[0], col[1], col[2], 1.0)
+		gl.colorMask(true, true, true, true)
+		gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT)
+	}
+
+	class ToGLSL extends AST.ToCode{
+		// alright so first thing to do: when we reference something
+		Id( n ){
+			// lets check 
+			return ''
+		}
+
+		Key( n ){
+			// okay! we have to check if object
+
+		}
+	}
+
+	class ToDraw extends AST.ToJS{
+		// we have to resolve functions on this
+		// and on the local module scope
+		draw_resolve( ctx, name ){
+
+			if(v == 'this')
+			var obj = this.context[v]
+			return obj
+		}
+
+		_compile_draw( n ){
+
+			var root = n.args[0]
+
+			// draw has a set of arguments
+			draw_resolve( root.name )
+
+			var vertex = n.args[0]
+			var frag = n.args[1]
+			// we treat our arg as a direct shader expression
+			// lets serialize it
+			// alright so, we have a mesh.
+			ToGLSL.module = module
+			ToGLSL.context = context
+			ToGLSL.attribs = Object.create(null)
+
+
+			var vertex_shader = outer.ToGLSL.expand(vertex)
+			// and then we have varyings between 
+			// if the frag shader references things, its determined
+			// wether or not it is computed in the pixel or vertexshader.
+			// by using the pixel type marker
+			var frag_shader = outer.ToGLSL.expand(frag)
+			return ''
+		}
+	}
+
+	init(){
+		// we have to compile the draw signal
+		// alright lets stringify draw
+		// so lets stringify it.
+		var js = ToDraw
+		var ast = draw.bind
+		// make a fresh scope and signals store
+		js.new_state()
+		// plug the module of the ast node
+		js.module = ast.module
+		js.context = this
+
+		if(ast.type != 'Function') throw new Error('GL Draw not a function')
+
+		var flags = js.pull_flags(ast)
+		var code = js.Function( ast, undefined, ['gl'] )
+		if(flags.indexOf('js') != -1) out(code)
+
+		// lets eval it in our current space
+		_draw = Function('module','return ' + code)(js.module)
+		_draw(owner.gl)
+	}
+}

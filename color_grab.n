@@ -1,0 +1,18 @@
+import node
+import htmlscraper
+
+var content1 = await HttpClient.get('http://en.wikipedia.org/wiki/List_of_colors:_A%E2%80%93F') 
+var content2 = await HttpClient.get('http://en.wikipedia.org/wiki/List_of_colors:_G%E2%80%93M') 
+var content3 = await HttpClient.get('http://en.wikipedia.org/wiki/List_of_colors:_N%E2%80%93Z') 
+
+var tree = HTMLScraper.parse( content1.toString()+content2.toString()+content3.toString() )
+
+tree.html_0.body.div_2.div_1.div.div_3.table_0.tr.concat(
+tree.html_1.body.div_2.div_1.div.div_3.table_0.tr.concat(
+tree.html_2.body.div_2.div_1.div.div_3.table_0.tr)).forEach() do v=>{
+	var name = v.th.a?.text
+	var col = v.td_1?.text
+	if(name){
+		out(name+' = '+col)
+	}
+}

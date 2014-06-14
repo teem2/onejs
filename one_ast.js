@@ -9,7 +9,7 @@ ONE.ast_ = function(){
 
 	var modules = {}
 
-	this.parse = function( source, bind, template, filename, noclone ){
+	this.parse = function( source, module, locals, template, filename, noclone ){
 		parser.sourceFile = filename || ''
 
 		var node = parserCache[source]
@@ -30,9 +30,10 @@ ONE.ast_ = function(){
 				node = node.clone()
 			}
 		}
-		node.bind = bind
+		node.locals = locals
 		node.source = source
 		node.pthis = this
+		node.module = module
 
 		// we now need to process our template-replaces
 		if( template ){
@@ -43,15 +44,17 @@ ONE.ast_ = function(){
 			for( var i = 0; i < nodes.length; i++ ){
 				var tgt = nodes[i]
 				var src = template[ tgt.arg.name ]
+				if(!src) throw new Error("Template variable not found: " + tgt.arg.name)
+
 				// clean ret the node
 				tgt.prefix = undefined
 				tgt.op = undefined
 				tgt.arg = undefined
-				if(!src) throw new Error("Template variable not found: " + tgt.arg.name)
 				if(typeof src == 'object'){
 					copy[src.type](src, tgt)
 					tgt.pthis = this
-				} else {
+				} 
+				else{
 					tgt.type = 'Value'
 					if(typeof src == 'string')
 						tgt.raw = '"'+src+'"'
@@ -71,33 +74,23 @@ ONE.ast_ = function(){
 				var fn = Function.call(null, code)()
 				return fn
 			}
-			ast = this.parse( ast, undefined, undefined, filename, true )
+			ast = this.parse( ast, undefined, undefined, undefined, filename, true )
 		}
 		// alright we have to compile us some code!
 		var js = this.AST.ToJS
-		// make a fresh scope and signals store
-		js.signals = []
-		js.line = 0
-		js.scope = Object.create(null)
-		js.typemethods = Object.create(null)
-		js.macroarg = Object.create(null)
-		js.imports = []
-		js.module = modules[filename] = { 
-			types: Object.create(this.AST.typeMap),
-			defines: Object.create(null),
-			macros: Object.create(null),
-			exports: Object.create(null)
-		}
+
+		// set up new compile state
+		js.new_state()
+		modules[filename] = js.module
 
 		// if passing a function we return that
 		if(ast.type == 'Function'){
 			ast.root = true
-			var steps = ast.body.steps
-			if(steps && steps[0] && steps[0].flag == 35){
-				var dump = steps[0].name
-				steps.splice(0,1)
-				if(dump.indexOf('ast')!= -1) ONE.out( ast.toDump() )
-				if(dump.indexOf('code')!=-1){
+			var flags = js.pull_flags(ast)
+
+			if(flags){
+				if(flags.indexOf('ast')!= -1) ONE.out( ast.toDump() )
+				if(flags.indexOf('code')!=-1){
 					var code = this.AST.ToCode
 					ONE.out( code.Function(ast) )
 				}
@@ -107,20 +100,22 @@ ONE.ast_ = function(){
 			if(filename) nametag = 'file__'+filename.replace(/[\.\/]/g,'_')
 			var code = 'return ' + js.Function( ast, nametag )
 
-
 			// prepend type methods
 			for(var k in js.typemethods){
 				code = js.typemethods[k] + code
 			}
-			if(dump && dump.indexOf('js')!=-1) ONE.out( code )
+			if(flags && flags.indexOf('js')!=-1) ONE.out( code )
 
 			try{
 				if( typeof process !== 'undefined'){
-					var fn = Function.call(null, 'require', '__dirname', code)(require, __dirname)
+					var fn = Function.call(null, 'module', 'require', '__dirname', code)(js.module, require, __dirname)
 				}
 				else{
-					localStorage.setItem('cache'+filename, code)
-					var fn = Function.call(null, code)()
+					var prof = flags && flags.indexOf('profile') != -1 && Date.now()
+
+					var fn = Function.call(null, 'module', code)(js.module)
+
+					if(prof) console.log('Profile ' +filename + ' '+ (Date.now()-prof)+'ms')
 				}
 
 			} 
@@ -1118,6 +1113,31 @@ ONE.ast_ = function(){
 			this.template_marker = '\_\u0445_'
 			this.template_regex = /\_\u0445\_/g
 
+			this.new_state = function(){
+				this.signals = []
+				this.line = 0
+				this.scope = Object.create(null)
+				this.typemethods = Object.create(null)
+				this.macroarg = Object.create(null)
+				this.module = {
+					imports: [],
+					types: Object.create(outer.typeMap),
+					defines: Object.create(null),
+					macros: Object.create(null),
+					exports: Object.create(null)
+				}
+			}
+
+			this.pull_flags = function(n){
+				var steps
+				if(n.body && (steps = n.body.steps) && steps[0] && steps[0].flag == 35){
+					var ret = steps[0].name
+					steps.splice(0,1)
+					return ret
+				}
+				return ''
+			}
+
 			this.globals = {
 				Object:1,
 				Array:1, 
@@ -1128,6 +1148,7 @@ ONE.ast_ = function(){
 				Error:1,
 				Math:1,
 				RegExp:1,
+				Function:1,
 				undefined:1,
 				Float32Array:1,
 				Float64Array:1,
@@ -1167,6 +1188,7 @@ ONE.ast_ = function(){
 				setTimeout:1,
 				clearTimeout:1,
 				console:1,
+				module:1,
 				window:1,
 				document:1,
 				require:1,
@@ -1176,7 +1198,7 @@ ONE.ast_ = function(){
 			this.find_type = function( name ){
 				var type = this.module.types[name]
 				if(type) return type
-				var im = this.imports
+				var im = this.module.imports
 				for(var i = 0, l = im.length; i < l;i++){
 					var types = im[i].types
 					if(types && (type = types[name])) return type
@@ -1186,7 +1208,7 @@ ONE.ast_ = function(){
 			this.find_define = function( name ){
 				var def = this.module.defines[name]
 				if(def) return
-				var im = this.imports
+				var im = this.module.imports
 				for(var i = 0, l = im.length; i < l; i++){
 					var defines = im[i].defines
 					if(defines && (def = defines[name])) return def
@@ -1339,7 +1361,7 @@ ONE.ast_ = function(){
 
 			this.resolve = function( name, n ){
 				if( name in this.macroarg ){
-					return this.expand(this.macroarg[name])
+					return this.expand(this.macroarg[name], n)
 				}
 				var type = this.typemethod, field
 				if(type && (field = type.fields[name])){
@@ -1355,7 +1377,7 @@ ONE.ast_ = function(){
 				if( name in this.globals ) return name
 				var def = this.find_define(name)
 				if(def){
-					return this.expand(def)
+					return this.expand(def, n)
 				}
 				if(n) n.onthis = 1
 				return 'this.'+name
@@ -1447,7 +1469,9 @@ ONE.ast_ = function(){
 				while(node){
 					if(node.type == 'Id'){
 						// check 
-						var base = node.name
+						var base = this.resolve(node.name)
+						//var marg = this.macroarg[base]
+						//if(marg) base = marg.name
 						var type = this.scope[base]
 
 						var isthis 
@@ -1531,7 +1555,7 @@ ONE.ast_ = function(){
 
 				if(n.exist){
 					var tmp = this.alloc_tmpvar(n)
-					return '(' + tmp + '=' + object + ') && ' + tmp + '.' + n.key.name
+					return '((' + tmp + '=' + object + ') && ' + tmp + '.' + n.key.name + ')'
 				}
 				return object + '.' + n.key.name
 			}
@@ -1911,7 +1935,7 @@ ONE.ast_ = function(){
 						// now lets iterate all the vars
 						var module = modules[name]
 						if(!modules[name]) throw new Error("Module " + name + " not found")
-						this.imports.push(module)
+						this.module.imports.push(module)
 						var exports = module.exports
 						for(var e in exports){
 							ret += ', '+ e + ' = ' + name + '.' + e
@@ -1976,9 +2000,16 @@ ONE.ast_ = function(){
 			}
 			
 			this.Define = function( n ){
-				// alright we got a define
-				// lets splice out a macro from a define value.
-				// if we are a call, we are a macro.
+				// its a macro function
+				if(n.id.type == 'Function'){
+					var name = n.id.name.name
+					var macros = this.module.macros
+					while(name in macros){
+						name = name + '_'
+					}
+					macros[name] = n
+				}
+				// its a macro expression
 				if(n.id.type == 'Call'){
 					var name = n.id.fn.name
 					var macros = this.module.macros
@@ -1987,6 +2018,7 @@ ONE.ast_ = function(){
 					}
 					macros[name] = n
 				}
+				// its a macro value
 				else {
 					var name = n.id.name
 					this.module.defines[name] = n.value
@@ -2217,8 +2249,7 @@ ONE.ast_ = function(){
 
 				// Auto function to this bind detection
 				var bind = false
-				if(n.arrow === '=>') bind = true
-
+				if(n.arrow === '=>' || n.indo && !n.arrow) bind = true
 				var ret = ''
 				var isvarbind
 				var isgetset
@@ -2248,7 +2279,7 @@ ONE.ast_ = function(){
 
 				ret += 'function'
 
-				if(n.await) ret = 'ONE.await(' + ret
+				if(n.await) ret = 'ONE._await(' + ret
 
 				if(n.gen || n.auto_gen) ret += '*'
 				if( nametag === null ) ret += ''
@@ -2376,7 +2407,7 @@ ONE.ast_ = function(){
 				// we need to check for % vars and pass them into parse.
 				var esc = outer.ToEscaped
 				var tpl = esc.templates = {}
-				var binds = esc.binds = {}
+				var locals = esc.locals = {}
 
 				// if we have a variable in scope, we need to bind the expression to it
 				esc.scope = this.scope
@@ -2392,16 +2423,16 @@ ONE.ast_ = function(){
 					if(obj) obj += ','
 					obj += name+':'+(name in this.scope?name:'this.'+name)
 				}
-				var bind = ''
-				for( var name in binds ){
-					if(bind) obj += ','
-					bind += name+':'+name
+				var localstr = ''
+				for( var local in locals ){
+					if(local) obj += ','
+					localstr += name+':'+name
 				}
 
-				ret +=  'this.parse("' + body + '"'
-				if( bind ) ret += ',{' + bind + '}'
+				ret +=  'this.parse("' + body + '",module'
+				if( localstr ) ret += ',{' + localstr + '}'
 				if( obj ){
-					if(!bind) ret += ',null'
+					if(!localstr) ret += ',null'
 					ret += ',{' + obj + '}'
 				}
 				ret += '))'
@@ -2423,7 +2454,7 @@ ONE.ast_ = function(){
 					if(n.left.onthis){
 						var fn = this.find_function(n)
 						if(fn.root){
-							this.modules.exports[n.left.name] = n
+							this.module.exports[n.left.name] = n
 						}
 					}
 					// so what operator are we?
@@ -2554,7 +2585,7 @@ ONE.ast_ = function(){
 			}
 
 			// convert new
-			this.New = function( n, parens ){
+			this.New = function( n ){
 				var fn = this.expand(n.fn, n, true)
 				var fn_t = n.fn.type
 				if(fn_t == 'Assign' || fn_t == 'Logic' || fn_t == 'Condition') 
@@ -2571,31 +2602,260 @@ ONE.ast_ = function(){
 				return  fn + '.new(this'+(arg?', '+arg:arg)+')'
 			}
 
+			// struct method call
+			this.struct_method = function(n, fn, args, root, type, isstatic){
+				// alright we are a method call.
+				if(fn.object.type !='Id') throw new Error('only 1 deep method calls for now')
+				// so first we are going to compile the function
+				var mname = fn.key.name
+				
+				var method = type.methods[mname]
+				while(method){
+					//!TODO add type checking here
+					if(method.params.length == args.length) break
+					mname = mname + '_'
+					method = type.methods[mname]
+				}
+				if(!method) throw new Error('No overload found for '+mname)
+
+				// lets make a name from our argument types
+				for(var i = 0, l = method.params.length; i < l; i++){
+					var kind = method.params[i].id.kind
+					mname += '_'+(kind && kind.name || 'var')
+				}
+
+				var gen = type.name + '_' + mname
+
+				// make a typemethod
+				if(!this.typemethods[gen]){
+					var d = this.depth
+					this.depth = ''
+					var t = this.typemethod
+					this.typemethod = type
+					this.typemethods[gen] = this.Function(method, gen, undefined, type ) + this.newline
+					this.typemethod = t
+					this.depth = d
+				}
+
+				var ret = ''
+				ret += gen+'.call(this'
+				if(isstatic){
+					ret += ',{o:0,'+type.arr+':new ' + type.view + 'Array(' + type.slots + ')}'
+				} 
+				else ret += ', ' + root.name
+
+				// set up the call and argument list
+				for(var i = 0, l = args.length; i < l; i++){
+					var arg = args[i]
+					ret += ', ' + this.expand(arg, n)
+					if(arg.type == 'Rest') throw new Error('... is not supported in typed calls')
+				}
+				ret += ')'
+				return ret
+			}
+
+			this.struct_constructor = function( n, dims, args, type ){
+				// allocate tempvars
+				var func = this.find_function(n)
+				if(!func.type_nesting) func.type_nesting = 1
+				else func.type_nesting ++
+
+				if(!func.destruc_vars || func.type_nesting > func.destruc_vars)
+					func.destruc_vars = func.type_nesting
+
+				var output = this.destruc_prefix + (func.destruc_vars - 1)
+
+				var nslots = type.slots
+				var ret
+				var op = '='
+				var off
+				// consume a targetptr
+				if(n.assign_left){
+					ret = '('+output+' = '+n.assign_left
+					off = 1
+					n.assign_left = undefined
+					op = n.assign_op
+				}
+				else{
+					ret = '('+output+'= {o:0,'+type.arr+':new '+type.view+'Array(' 
+					if(dims) ret += '(' + this.expand(dims, n) + ')*' + nslots + ')}'
+					else ret += nslots + ')}'
+				}
+				var slot = 0
+
+				function walker(elem, n, issingle, type){
+					// we have a call
+					var ntype
+					if(elem.type == 'Call' && elem.fn.type == 'Id' && (ntype = this.find_type(elem.fn.name))){
+						if(ntype.view != type.view) throw new Error('Constructor args with different viewtypes are not supported')
+						// we have to walk the arguments until we hit individual values
+						var args = elem.args
+						for(var i = 0, l = args.length; i<l; i++){
+							walker.call(this, args[i], elem, l  == 1, ntype)
+						}
+					}
+					// write directly
+					else if(elem.type == 'Value'){
+						var val = this.expand(elem, n)
+						ret += ','
+						for(var i = 0, l = issingle?type.slots:1; i < l; i++){
+							ret += output+'.'+type.arr+'['
+							if(off) ret += output+'.o+'
+							ret += (slot++) +']'+op
+						}
+						ret += val
+					}
+					// expand to a var, and decide wether it is compound or primtive.
+					else {
+						var val = this.expand(elem, n)
+						if(!val.infer || !val.infer.methods){ // well assume its a single val
+							ret += ','
+							for(var i = 0, l = issingle?type.slots:1; i < l; i++){
+								ret += output+'.'+type.arr+'['
+								if(off) ret += output+'.o+'
+								ret += (slot++) +']'+op
+							}
+							ret += val
+						} 
+						else {
+							throw new Error('compound error thing')
+						}
+					}
+				}
+				for(var i = 0,l = args.length; i < l; i++ ){
+					walker.call(this, args[i], n, l == 1, type)
+				}
+				if(slot%nslots) throw new Error('Incorrect number of fields used in '+name+'() constructor, got '+slot+' expected (multiple of) '+nslots)
+				func.type_nesting--
+				
+				ret += ','+output+')'
+				
+				n.infer = type
+
+				return ret				
+			}
+
+			this.macro_call = function( n, name, args ){
+
+				var macro
+				if(this.context){
+					var obj = this.context[name]
+					if(obj && obj.bind && obj.bind.__class__ == 'AST') macro = obj.bind
+				}
+				if(!macro){
+					var nm = name
+					var macros = this.module.macros
+					macro = macros[nm]
+
+					while(macro){
+						//!TODO add a real argument matcher here
+						params = macro.id.args
+						if(args.length == params.length) break
+						nm = nm + '_'
+						macro = macros[nm]
+					}
+					if(!macro){
+						var im = this.module.imports
+						for(var i = 0, l = im.length; i < l; i++){
+							var macros = im[i].macros
+							if(macros && (macro = macros[name])){
+								var nm = name
+								while(macro){
+									params = macro.id.args
+									if(args.length == params.length) break
+									nm = nm + '_'
+									macro = macros[nm]
+								}
+							}
+							if(macro) break
+						}
+					}
+					if(!macro) return
+				}
+				if(macro.id && macro.id.type == 'Function') macro = macro.id
+
+				// macro function TODO make this actually safe
+				if(macro.type == 'Function'){
+
+					var a = this.macroarg
+					var marg = this.macroarg = Object.create(this.macroarg)
+					var params = macro.params
+
+					var ret = '{' + this.newline + this.depth + this.indent + 'var '
+					var len = args.length
+					for(var i = 0; i < len; i++){
+						var param = params[i]
+						// check if we have a default arg
+						if(param.init){
+							throw new Error('implement macro default arg')
+						}
+						var tmp = this.alloc_tmpvar(n)
+						if(i) ret += ', '
+						ret += tmp + ' = ' + this.expand(args[i], n)
+						this.macroarg[param.id.name] = {type:'Id',name:tmp}
+						var kind = param.id.kind
+						if(kind){
+							var type = this.find_type(kind.name)
+							if(!type) throw new Error('Cannot find type of macro arg: ' + kind.name)
+							this.scope[tmp] = type
+						}
+						else this.scope[tmp] = 1
+					}
+					var chk = this.expand(macro.body, n)
+					ret += chk.slice(1)
+					this.macroarg = a
+					return ret
+				}
+				// macro expressions
+				else {
+					var len = args.length
+					if(!len) return this.expand(macro.value, n)
+					var a = this.macroarg
+					var marg = this.macroarg = Object.create(this.macroarg)
+					var params = macro.id.args
+					// build up macro args
+					for(var i = 0; i < len; i++){
+						var param = params[i]
+						if(param.type == 'Assign'){
+							throw new Error('implement macro default arg')
+						}
+						this.macroarg[param.name] = args[i]
+					}
+					var ret = this.expand(macro.value, n)
+					this.macroarg = a
+					return ret
+				}
+			}
+
+			this._compile_assert = function( n ){
+				var argl = n.args
+				if(!argl || argl.length == 0 || argl.length > 2) throw new Error("Invalid assert args")
+
+				var arg = this.expand(argl[0], n)
+				var msg = argl.length > 1? this.expand(argl[1], n): '""'
+				var value = 'undefined'
+
+				if(argl[0].type == 'Logic' && argl[0].left.type !== 'Call'){
+					value = this.expand( argl[0].left, n )
+				}
+
+				var body = '(function(){throw new Assert("'+
+					arg.replace(/"/g,'\\"').replace(/\n/g,'\\n')+'",'+
+					msg+','+value+')}).call(this)'
+
+				if(outer.IsExpr[n.parent.type] && argl[0].type == 'Logic'){
+					return arg + ' || ' + body
+				}
+				return '(('+arg+') || '+body+')'				
+			}
+
 			this.Call = function( n, extra, isnew ){
 				var fn  = n.fn
 				fn.parent = n
 				// assert macro
-				if(fn.type == 'Id' && fn.name == 'assert'){
-
-					var argl = n.args
-					if(!argl || argl.length == 0 || argl.length > 2) throw new Error("Invalid assert args")
-
-					var arg = this.expand(argl[0], n)
-					var msg = argl.length > 1? this.expand(argl[1], n): '""'
-					var value = 'undefined'
-
-					if(argl[0].type == 'Logic' && argl[0].left.type !== 'Call'){
-						value = this.expand( argl[0].left, n )
-					}
-
-					var body = '(function(){throw new Assert("'+
-						arg.replace(/"/g,'\\"').replace(/\n/g,'\\n')+'",'+
-						msg+','+value+')}).call(this)'
-
-					if(outer.IsExpr[n.parent.type] && argl[0].type == 'Logic'){
-						return arg + ' || ' + body
-					}
-					return '(('+arg+') || '+body+')'
+				var mname
+				if(fn.type == 'Id' && (mname = '_compile_'+fn.name) in this){
+					return this[mname](n)
 				}
 
 				var args = n.args
@@ -2616,138 +2876,14 @@ ONE.ast_ = function(){
 						dims = fn.index
 					}
 					else name = fn.name
-
-
 					// we support auto-super also for roles.
 					// lets check if we are a type constructor
 					var type = this.find_type(name)
-					if(type){
+					if(type) return this.struct_constructor(n, dims, args, type)
 
-						// allocate tempvars
-						var func = this.find_function(n)
-						if(!func.type_nesting) func.type_nesting = 1
-						else func.type_nesting ++
-
-						if(!func.destruc_vars || func.type_nesting > func.destruc_vars)
-							func.destruc_vars = func.type_nesting
-
-						var output = this.destruc_prefix + (func.destruc_vars - 1)
-
-						var nslots = type.slots
-						var ret
-						var op = '='
-						var off
-						// consume a targetptr
-						if(n.assign_left){
-							ret = '('+output+' = '+n.assign_left
-							off = 1
-							n.assign_left = undefined
-							op = n.assign_op
-						}
-						else{
-							ret = '('+output+'= {o:0,'+type.arr+':new '+type.view+'Array(' 
-							if(dims) ret += '(' + this.expand(dims, n) + ')*' + nslots + ')}'
-							else ret += nslots + ')}'
-						}
-						var slot = 0
-
-						function walker(elem, n, issingle, type){
-							// we have a call
-							var ntype
-							if(elem.type == 'Call' && elem.fn.type == 'Id' && (ntype = this.find_type(elem.fn.name))){
-								if(ntype.view != type.view) throw new Error('Constructor args with different viewtypes are not supported')
-								// we have to walk the arguments until we hit individual values
-								var args = elem.args
-								for(var i = 0, l = args.length; i<l; i++){
-									walker.call(this, args[i], elem, l  == 1, ntype)
-								}
-							}
-							// write directly
-							else if(elem.type == 'Value'){
-								var val = this.expand(elem, n)
-								ret += ','
-								for(var i = 0, l = issingle?type.slots:1; i < l; i++){
-									ret += output+'.'+type.arr+'['
-									if(off) ret += output+'.o+'
-									ret += (slot++) +']'+op
-								}
-								ret += val
-							}
-							// expand to a var, and decide wether it is compound or primtive.
-							else {
-								var val = this.expand(elem, n)
-								if(!val.infer || !val.infer.methods){ // well assume its a single val
-									ret += ','
-									for(var i = 0, l = issingle?type.slots:1; i < l; i++){
-										ret += output+'.'+type.arr+'['
-										if(off) ret += output+'.o+'
-										ret += (slot++) +']'+op
-									}
-									ret += val
-								} 
-								else {
-									throw new Error('compound error thing')
-								}
-							}
-						}
-						for(var i = 0,l = args.length; i < l; i++ ){
-							walker.call(this, args[i], n, l == 1, type)
-						}
-						if(slot%nslots) throw new Error('Incorrect number of fields used in '+name+'() constructor, got '+slot+' expected (multiple of) '+nslots)
-						func.type_nesting--
-						
-						ret += ','+output+')'
-						
-						n.infer = type
-
-						return ret
-					}
-
-					// Scan for the right macro
-					var nm = name
-					var macros = this.module.macros
-					var macro = macros[nm]
-					while(macro){
-						//!TODO add a real argument matcher here
-						params = macro.id.args
-						if(arglen == params.length) break
-						nm = nm + '_'
-						macro = macros[nm]
-					}
-					if(!macro){
-						var im = this.imports
-						for(var i = 0, l = im.length; i < l; i++){
-							var macros = im[i].macros
-							if(macros && (macro = macros[name])){
-								var nm = name
-								while(macro){
-									params = macro.id.args
-									if(arglen == params.length) break
-									nm = nm + '_'
-									macro = macros[nm]
-								}
-							}
-							if(macro) break
-						}
-					}
-					if(macro){
-
-						var a = this.macroarg
-						var marg = this.macroarg = Object.create(this.macroarg)
-						var params = macro.id.args
-						// build up macro args
-						for(var i = 0; i < arglen; i++){
-							var param = params[i]
-							// check if we have a default arg
-							if(param.type == 'Assign'){
-								throw new Error('implement macro default arg')
-							}
-							this.macroarg[param.name] = args[i]
-						}
-						var ret = this.expand(macro.value)
-						this.macroarg = a
-						return ret
-					}
+					// check if its a macro
+					var macro_call = this.macro_call(n, name, args)
+					if(macro_call !== undefined) return macro_call
 
 					if(name == 'super'){
 						if(args){
@@ -2767,55 +2903,8 @@ ONE.ast_ = function(){
 					if(root && root.name){
 						var isstatic
 						var type = this.scope[root.name] || (isstatic = this.find_type(root.name))
-						if(typeof type == 'object'){ 
-							// alright we are a method call.
-							if(fn.object.type !='Id') throw new Error('only 1 deep method calls for now')
-							// so first we are going to compile the function
-							var mname = fn.key.name
-							
-							var method = type.methods[mname]
-							while(method){
-								//!TODO add type checking here
-								if(method.params.length == args.length) break
-								mname = mname + '_'
-								method = type.methods[mname]
-							}
-							if(!method) throw new Error('No overload found for '+mname)
-
-							// lets make a name from our argument types
-							for(var i = 0, l = method.params.length; i < l; i++){
-								var kind = method.params[i].id.kind
-								mname += '_'+(kind && kind.name || 'var')
-							}
-
-							var gen = type.name + '_' + mname
-
-							// make a typemethod
-							if(!this.typemethods[gen]){
-								var d = this.depth
-								this.depth = ''
-								var t = this.typemethod
-								this.typemethod = type
-								this.typemethods[gen] = this.Function(method, gen, undefined, type ) + this.newline
-								this.typemethod = t
-								this.depth = d
-							}
-
-							var ret = ''
-							ret += gen+'.call(this'
-							if(isstatic){
-								ret += ',{o:0,'+type.arr+':new ' + type.view + 'Array(' + type.slots + ')}'
-							} 
-							else ret += ', ' + root.name
-
-							// set up the call and argument list
-							for(var i = 0; i < arglen; i++){
-								var arg = args[i]
-								ret += ', ' + this.expand(arg, n)
-								if(arg.type == 'Rest') throw new Error('... is not supported in typed calls')
-							}
-							ret += ')'
-							return ret
+						if(typeof type == 'object' && type.__class__ !== 'AST'){ 
+							return this.struct_method(n, fn, args, root, type, isstatic)
 						}
 					}
 
@@ -2829,7 +2918,7 @@ ONE.ast_ = function(){
 							else args = ['this']
 						}
 						// else dont mess with it 
-						else if(name == 'call' || name == 'apply'){
+						else if(name == 'call' || name == 'apply' || name == 'bind'){
 							return this.expand( n.fn, n, true ) + '(' + this.list( n.args, n ) + ')'
 						} 
 					}
@@ -2854,7 +2943,7 @@ ONE.ast_ = function(){
 										if(id === undefined  || id.name == 'arguments'){
 											sarg = 'arguments'
 										}
-										else sarg = this.expand(arg, n)
+										else sarg = this.expand(id, n)
 									}
 									else{
 										var id = arg.id
@@ -2950,7 +3039,7 @@ ONE.ast_ = function(){
 
 				if(isapply) return call +'.apply(' + cthis + (sarg?','+this.space+sarg:'') + ')'
 				//fastpath Math
-				if(cthis == 'Math'){
+				if(cthis == 'Math' || cthis == 'gl'){
 					return call+'('+sarg+')'
 				}
 				return call +'.call(' + cthis + (sarg?','+this.space+sarg:'') + ')'
@@ -2988,7 +3077,7 @@ ONE.ast_ = function(){
 					if(obj) obj += ','
 					obj += name+':'+(name in this.scope?name:'this.'+name)
 				}
-				return 'this.parse("' + body + '",null'+(obj?',{' + obj + '})':')')
+				return 'this.parse("' + body + '",module,null'+(obj?',{' + obj + '})':')')
 			}
 
 			this.Rest = function( n ){
@@ -2997,16 +3086,23 @@ ONE.ast_ = function(){
 
 			this.Do = function( n ){
 				var call = n.call
-
 				var extra = [n.arg]
+				n.arg.indo = 1
 				if(n.catch){
 					extra.push( n.catch )
+					n.catch.indo = 1
 				}
 
 				var then = (n.then ? this.expand(n.then, n) : '')
-				if( call.type == 'Id' && call.name == 'then'){
-					throw new Error('implement then chaining in codegen')
-				}
+				if( call.type !== 'Call'){
+					// make a fake call node
+					call = {
+						parent:call.parent,
+						fn:call,
+						args:[]
+					}
+				} else call.parent = n
+
 				return this.Call( call, extra ) + then
 			}
 
@@ -3114,24 +3210,21 @@ ONE.ast_ = function(){
 
 		// color to array decoder
 		return function( col ) {
-			if( typeof col == 'string' ) {
-				var c = colors[ col ] // color LUT
-				if( c ) return c
-				var c = parseInt(col, 16)
-				var a = new Float32Array(3)
-				if(col.length == 4){ 
-					a[0] = ((c&0xf00)>>8|(c&0xf00)>>4) /255
-					a[1] = ((c&0xf0)|(c&0xf0)>>4) /255
-					a[2] = ((c&0xf)|(c&0xf)<<4) /255 
-				}
-				else {
-					a[0] = ((c >> 16)&0xff) /255
-					a[1] = ((c >> 8)&0xff) /255
-					a[2] = (c&0xff) /255
-				}
-				return {f4:a, o:0}
+			var c = colors[ col ] // color LUT
+			if( c ) return c
+			var c = parseInt(col, 16)
+			var a = new Float32Array(3)
+			if(col.length == 4){ 
+				a[0] = ((c&0xf00)>>8|(c&0xf00)>>4) /255
+				a[1] = ((c&0xf0)|(c&0xf0)>>4) /255
+				a[2] = ((c&0xf)|(c&0xf)<<4) /255 
 			}
-			//if( typeof col == 'object' && Array.isArray( col ) && (col.length == 3 || col.length == 4) && typeof col[0] == 'number' ) return col
+			else {
+				a[0] = ((c >> 16)&0xff) /255
+				a[1] = ((c >> 8)&0xff) /255
+				a[2] = (c&0xff) /255
+			}
+			return {f4:a, o:0}
 		}
 	})()
 

@@ -27,8 +27,6 @@ ONE.nodejs_boot_ = function(){
 	// hide all the props
 	ONE.Base.enumfalse.apply(ONE.Base, Object.keys( ONE.Base ) )
 
-	if(global.Promise === undefined) global.Promise = Promise
-	
 	// load our first argument, parse dependencies and fire up
 	var args = process.argv.slice()
 	var watcher 
@@ -64,21 +62,23 @@ ONE.nodejs_boot_ = function(){
 	function loadFile( obj, module ){
 		var file = module +'.n'
 		try{
-			code = fs.readFileSync(file)	
+			var code = fs.readFileSync(file)
 			if(watcher) watchFile( file )
-		} catch (e){
-			console.log('Cant open '+file)
+		} 
+		catch (e){
+			console.log('Cant open '+file, e)
 			process.exit(-1)
 		}
-		try{
-			var ast = obj.parse('~>{'+code+'\n}', undefined, file)
-			obj.each(ast.getDependencies(),function(file){
-				loadFile( obj,file )
-			})
-			obj.$[module] = obj.eval(ast, 1, file)
-		}catch(e){
-			console.log(e)
-		}
+		var ast = obj.parse('->{'+code+'\n}', undefined, undefined, undefined, file, true)
+		ast.getDependencies().forEach(function(file){
+			loadFile( obj, file )
+		})
+	//try{
+		obj.$[module] = obj.eval(ast, module)
+
+		//}catch(e){
+			//console.log(e)
+		//}
 	}
 	function reload(){
 		var obj = ONE.Base.new()

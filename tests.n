@@ -6,7 +6,9 @@ Dom1(){
 	class MyDiv extends Rect{
 		w = 10
 		h = 10
-		mouseover(){}
+		mouseover(){
+
+		}
 	}
 	Root{
 		init(document.body)
@@ -175,10 +177,19 @@ Language(){
 	}
 	assert(func(...s1,4,...s2, 8).join('') == '12345678')
 
+	assert(func(...s1).join('') == '123')
+
 	// member functions
 	member(a = 5){ return a + 10 }
 	assert( member(10) == 20 )
 	assert( member() == 15 )
+
+	// class methods
+	class ctest{
+		method() -> 1
+	}
+	cnew = new ctest()
+	assert( cnew.method() == 1 )
 
 	// arrow syntax
 	arrow = a => a + 5
@@ -200,8 +211,19 @@ Language(){
 	assert(defarg(5) == 5)
 
 	// rest arguments
-	restarg(x, ...a){ return a[1] }
-	assert(restarg(0,0,10) == 10)
+	restarg1(x, ...a){ return a[1] }
+	assert(restarg1(0,0,10) == 10)
+
+	// rest arguments
+	restarg2(...a){ return a[1] }
+	assert(restarg2(0,10) == 10)
+
+	// do
+	dotest(arg){
+		return arg()
+	}
+
+	assert( dotest do ->10 == 10 )
 
 	// switch
 	var sw = 1
@@ -210,6 +232,7 @@ Language(){
 		case 3: sw = 3; break;
 	}
 	assert(sw == 3)
+
 
 	// try catch
 	var ex = 0
@@ -226,6 +249,9 @@ Language(){
 	if(false) ie = 2
 	else ie = 4
 	assert(ie == 4)
+	
+	var xo = {1:1, 2:2}
+	assert('1' in xo)
 
 	// do while
 	var d = 5, c = 0
@@ -369,6 +395,7 @@ Language(){
 	// integer divide	
 	var p = 25%/10
 	assert(p == 2)
+
 }
 
 // The test runner

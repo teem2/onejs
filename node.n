@@ -1,15 +1,12 @@
 //  NodeJS API Classes
 //  Copyright (C) 2014 ONEJS 
-
-extends Base
-
 var _fs = require('fs')
 var _http = require('http')
 var _url = require('url')
 
 Path = require('path')
 
-function promisify( api ){
+function signalify( api ){
 	for(var k in api) bind(k){
 		if(k.indexOf('Sync')!=-1){
 			this[k] = api[k]
@@ -17,12 +14,11 @@ function promisify( api ){
 		}
 		if(k in this) return
 
-		this[k] = ( ...args ) ~> promise{
-			args.push then( err, data ){
-				if(err) return reject( err )
-				resolve( data )
+		this[k] = ( ...args ) ->Signal.wrap do(sig){
+			api[k](...args) do(err, data){
+				if(err) return sig.throw(err)
+				sig.end(data)
 			}
-			api[k](...args)
 		}
 	}
 }
@@ -48,22 +44,22 @@ mime = Base{
 	}
 }
 
-fs = Base{
-	promisify(_fs)
+class fs{
+	signalify(_fs)
 }
 
 class HttpServer{
 
 	routes = []
 
-	constructor( port, addr ){
+	init( port, addr ){
 
 		server = _http.createServer() do( req, res ){
 			var url = _url.parse(req.url)
 			var path = url.pathname
 			for(var [match, body] of routes){
-				if typeof match == 'string' and match == path then break 
-				else if path.match(match) then break
+				if(typeof match == 'string' and match == path) break 
+				else if(path.match(match)) break
 			}
 			if(!body){
 				res.writeHead(404)
@@ -73,14 +69,14 @@ class HttpServer{
 			req.url = url
 			body(req, res)
 		}
-		server.listen( port, addr ) 
+		server.listen(port, addr) 
 	}
 
-	route( match, body ) ~> routes.push( [match, body] )
+	route( match, body ) -> routes.push( [match, body] )
 }
 
-class HttpServer{
-	get( @url ) ~> promise{
+class HttpClient{
+	get( @url ) -> Signal.wrap do(sig){
 		url = _url.parse( url )
 		var data = []
 
@@ -90,11 +86,11 @@ class HttpServer{
 			method: 'GET', 
 			path: url.path} ) 
 
-		then( res, err ){
-			if(res.statusCode != 200) reject(res)
+		do( res, err ){
+			if(res.statusCode != 200) sig.throw(res)
 			res.setEncoding('utf8')
-			res.on('data') then chunk => data.push(chunk)
-			res.on('end') then => resolve(data.join(''))
+			res.on('data') do chunk => data.push(chunk)
+			res.on('end') do => sig.end(data.join(''))
 		}
 
 		req.end()

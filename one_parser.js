@@ -1423,7 +1423,7 @@ ONE.parser_strict_ = function(){
 
 	// parse function args or variable defines with inits
 	// and destructuring and and and it makes coffee too.
-	this.parseDefs = function( noIn, defs ){
+	this.parseDefs = function( noIn, defs, cantype ){
 		defs = defs || []
 
 		for (;;) {
@@ -1453,6 +1453,11 @@ ONE.parser_strict_ = function(){
 				if (this.strict && this.isStrictBadIdWord(def.id.name))
 					this.raise(def.id.start, "Binding " + def.id.name + " in this.strict mode")
 				// dont allow newline before a function-init
+				if( cantype && this.tokType == this._name && !this.lastSkippedNewlines){
+					var id = this.parseIdent()
+					id.kind = def.id
+					def.id = id
+				}
 
 				if( !this.lastSkippedNewlines && this.tokType == this._parenL){
 					def.init = this.parseCall(def.id)
@@ -1694,7 +1699,10 @@ ONE.parser_strict_ = function(){
 				// we should parse Ident and then 
 				var base = this.parseIdent()
 				node.base = this.parseSubscripts(base, true)
+				if(node.base.type !== 'Id' && node.base.type !== 'Index' &&
+				   node.base.type !== 'Key') this.unexpected()
 			}
+			if(this.tokType !== this._braceL) this.unexpected()
 			node.body = this.parseStatementBlock()
 			return this.finishNode(node, "Class")
 
@@ -1735,9 +1743,19 @@ ONE.parser_strict_ = function(){
 					macro.args = this.parseExprList(this._parenR, false)
 					this.finishNode(macro, "Call")
 					node.id = macro
+					// if we have  { } we are parsing a macro function.
+					if(this.tokType == this._braceL){
+						if(this.lastSkippedNewlines) this.unexpected()
+						// we have to turn the macro into a function
+						var fn = this.startNodeFrom(node.id)
+						node.id =  this.parseArrowFunction(fn, node.id)
+						//node.value = this.parseStatementBlock()
+						return this.finishNode(node, "Define")
+					}
 				}
 				else node.id = base
 				if(this.lastSkippedNewlines) this.unexpected()
+
 				node.value = this.parseExpression()
 				return this.finishNode(node, "Define")
 			}
@@ -2313,14 +2331,13 @@ ONE.parser_strict_ = function(){
 			this.tokType = this._name
 			return this.parseIdent()
 		case this._name:
-			if(!this.skippedNewlines && this.isIdentifierStart( this.input.charCodeAt(this.tokPos) )){
-				// this is a typed identifier
-				var kind = this.parseIdent()
+			var kind = this.parseIdent()
+			if(!this.lastSkippedNewlines && this.tokType == this._name){
 				var node = this.parseIdent()
 				node.kind = kind
 				return node
 			}
-			return this.parseIdent()
+			return kind
 		case this._num: 
 			var node = this.startNode()
 			node.kind = "num"
@@ -2561,9 +2578,11 @@ ONE.parser_strict_ = function(){
 	}
 
 	this.parseArrowFunction = function(node, args) {
-		if(args && args.type !== 'Empty'){
+		if(args){
 			// convert args to a List of Defs
-	
+			if( args.type === 'Empty' ){
+				node.params = []
+			}else 
 			if( args.type === 'List' || args.type === 'Call'){
 				var items
 				if(args.type == 'Call'){
@@ -2583,7 +2602,6 @@ ONE.parser_strict_ = function(){
 			} else {
 				if( args.type == 'Rest'){
 					node.rest = args
-					if(node.rest.dots !== 3) this.raise(items[i].start, "Have to use 3 dots to define rest parameter")
 				}
 				else node.params = [this.argToDef( args )]
 			} 
@@ -2606,7 +2624,7 @@ ONE.parser_strict_ = function(){
 		else node.id = null
 
 		this.expect(this._parenL)
-		node.params = this.parseDefs( )
+		node.params = this.parseDefs( false, undefined, true )
 
 		if(this.tokType == this._dot) node.rest = this.parseDots(true)
 

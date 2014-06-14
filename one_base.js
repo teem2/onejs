@@ -12,7 +12,7 @@ ONE.base_ = function(){
 
 		// variable API
 		if(typeof outer == 'string') selfname = outer, outer = this
-		else if(typeof outer == 'function') role = outer, outer = this
+		else if(typeof outer == 'function')  selfname = role, role = outer, outer = this
 		else if(typeof role == 'string') selfname = role, role = outer, outer = this
 
 		var obj = Object.create(this)
@@ -608,6 +608,13 @@ ONE.base_ = function(){
 
 		}
 
+		// signal wrapper
+		this.wrap = function( wrap ){
+			var obj = Object.create(this)
+			wrap(obj)
+			return obj
+		}
+
 		// bind to a property
 		this.prop = function( owner, key, setter ){
 			var obj = Object.create( this )
@@ -652,19 +659,27 @@ ONE.base_ = function(){
 		// listen to the end  / error
 		this.then = function( onEnd, onError ){
 			if(this.ended){
+				if(this.error) window.setTimeout(function(){
+						onError.call(this, this.exception)	
+					}.bind(this), 0)
+				else {
+					window.setTimeout(function(){
+						onEnd.call(this, this.value)	
+					}.bind(this), 0)
+				}
 				return
 			}
 
 			if(onEnd){
 				if(!this.hasOwnProperty('onEnd')) this.onEnd = onEnd
-				else if(!Array.isArray(this.onEnd)) this.onEnd = [this.onEnd, cb]
-				else this.onEnd.push( cb )
+				else if(!Array.isArray(this.onEnd)) this.onEnd = [this.onEnd, onEnd]
+				else this.onEnd.push( onEnd )
 			}
 
 			if(onError){
-				if(!this.hasOwnProperty('onError')) this.onError = cb
-				else if(!Array.isArray(this.onError)) this.onError = [this.onError, cb]
-				else this.onError.push( cb )
+				if(!this.hasOwnProperty('onError')) this.onError = onError
+				else if(!Array.isArray(this.onError)) this.onError = [this.onError, onError]
+				else this.onError.push( onError )
 			}
 		}
 		
@@ -710,6 +725,7 @@ ONE.base_ = function(){
 
 			if( value && value.bind_signal ){
 				// lets check if we are bound to an instance
+				this.bind = value
 				if(!this.owner || this.owner.owner){
 					this.bound = value.bind_signal( owner, this, old_bind )
 				}
@@ -738,18 +754,18 @@ ONE.base_ = function(){
 		}
 
 		// end the signal
-		this.end = function( value ){
-			this.ended = true
+		this.end = function(value){
 			this.set( value )
+			this.ended = true
 			// call end
 			var proto = this 
 			var owner = this.owner
 			var s
 			while(proto && (s = proto.onEnd)){
  				if(proto.hasOwnProperty('onEnd')){
-					if(!Array.isArray(s)) s.call( owner, value, this )
+					if(!Array.isArray(s)) s.call(owner, value, this)
 					else for(var i = 0, l = s.length; i < l; i++){
-						s[i].call( owner, value, this )
+						s[i].call(owner, value, this)
 					}
 				}
 				proto = Object.getPrototypeOf(proto)
@@ -757,12 +773,26 @@ ONE.base_ = function(){
 		}
 
 		// throw and exception in the signal
-		this.throw = function( exception ){
+		this.throw = function(error){
 			if(this.ended) throw new Error('Cant throw on an ended signal')
 			this.ended = true
-			this.exception = exception
-		}	
+			this.error = error
+			// call error
+			var proto = this 
+			var owner = this.owner
+			var s
+			while(proto && (s = proto.onError)){
+ 				if(proto.hasOwnProperty('onError')){
+					if(!Array.isArray(s)) s.call(owner, error, this)
+					else for(var i = 0, l = s.length; i < l; i++){
+						s[i].call(owner, error, thi )
+					}
+				}
+				proto = Object.getPrototypeOf(proto)
+			}			
+		}
 	}
+
 	signal_.call( this.Signal = {} )
 
 	this.signal = function( key, value, setter ){
@@ -831,18 +861,18 @@ ONE.base_ = function(){
 ONE._await = function( generator, bound, _catch ){
 	var ret = function(){
 		var iter = generator.apply(this, arguments)
-		return new Promise(function(resolve, reject){
+		return ONE.Signal.wrap(function(sig){
 			function error(e){
-				reject(e)
-				iter.throw( e )
+				sig.throw(e)
+				iter.throw(e)
 			}
 			function next( value ){
-				promise = iter.next( value )
-				if(promise.done === false){
-					promise.value.then( next, error )
+				var iterval = iter.next( value )
+				if(iterval.done === false){
+					iterval.value.then( next, error )
 				}
 				else{
-					resolve( promise.value )
+					sig.end( iterval.value )
 				}
 			}
 			next()
