@@ -136,61 +136,58 @@ class HTMLScraper extends HTMLParser{
 
 	class HTMLNode{
 
-		values(){
+		// poor mans selector query for tagname == tagname, prop == value
+		whereOne(tagname, prop, value, out){
+			var keys = Object.keys(this)
+			for(var k from keys){
+				if(k !== 'owner' && k !== 'parent' && k !== 'tagname'){
+					var val = this[k]
+					if(this.tagname == tagname && k == prop && val == value){
+						if(out) out.push(this)
+						else return this
+					}
+					if(val && typeof val.dump == 'function'){
+						var ret = val.where(tagname, prop, value, out)
+						if(!out && ret !== undefined) return ret
+					}
+				}
+			}
+		}
+
+		// selector query to return all
+		whereAll(tagname, prop, value){
+			var ret = []
+			whereOne(tagname, prop, value, ret)
+			return ret
+		}
+
+		// log all values on this node
+		logValues(){
 			var keys = Object.keys(this)
 			for(var k from keys){
 				val = this[k]
 				if(typeof val == 'string'){
-					out(k+' = '+val)
+					log(k+' = '+val)
 				}
 			}
 		}
 
-		where(tag, prop, value){
-			var keys = Object.keys(this)
-			for(var k from keys){
-				if(k !== 'owner' && k !== 'parent' && k !== 'tagname'){
-					var val = this[k]
-					if(this.tagname == tag && k == prop && val == value)
-						return this
-					if(val && typeof val.dump == 'function'){
-						var ret = val.where(tag, prop, value)
-						if(ret !== undefined) return ret
-					}
-				}
-			}
-		}
-
-		whereAll(tag, prop, value, out = []){
-			var keys = Object.keys(this)
-			for(var k from keys){
-				if(k !== 'owner' && k !== 'parent' && k !== 'tagname'){
-					var val = this[k]
-					if(this.tagname == tag && k == prop && val == value)
-						out.push(this)
-					if(val && typeof val.dump == 'function'){
-						val.whereAll(tag, prop, value, out)
-					}
-				}
-			}
-			return out
-		}
-
-		dump(s = ''){
+		// log entire tree
+		logTree(s = ''){
 			var keys = Object.keys(this)
 			for(var k from keys){
 				if(k !== 'owner' && k !== 'parent' && k !== 'tagname'){
 					var val = this[k]
 					if(Array.isArray(val)){ // ignore arrays
 					} 
-					else if(val && typeof val.dump == 'function'){
-						val.dump(s+k+'.')
+					else if(val && typeof val.logTree == 'function'){
+						val.logTree(s+k+'.')
 					}
 					else if(typeof val == 'string'){
 						if(val.length > 40)
-							out(s+k+' = ' + val.slice(0,40).replace(/\n/g,'\\n')+'...')
+							log(s+k+' = ' + val.slice(0,40).replace(/\n/g,'\\n')+'...')
 						else
-							out(s+k+' = ' + val.replace(/\n/g,'\\n'))
+							log(s+k+' = ' + val.replace(/\n/g,'\\n'))
 					}
 				}
 			}
@@ -209,7 +206,7 @@ class HTMLScraper extends HTMLParser{
 		area, base, br, col, embed, hr, img, input, keygen, link, menuitem, meta, param, source, track, wbr
 	}
 
-	// if you want entity decoding.
+	// todo, add decoding of these entity things
 	var entities = {
 		"amp":"&","gt":">","lt":"<","quot":"\"","apos":"'","AElig":198,"Aacute":193,"Acirc":194,
 		"Agrave":192,"Aring":197,"Atilde":195,"Auml":196,"Ccedil":199,"ETH":208,"Eacute":201,"Ecirc":202,

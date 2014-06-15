@@ -12,11 +12,15 @@ define ceil(x)   Math.ceil(x)
 define floor(x)  Math.floor(x)
 define atan2(x)  Math.atan2(x)
 define exp(x)    Math.exp(x)
-define log(x)    Math.log(x)
+define ln(x)     Math.log(x)
+define loge(x)   Math.log(x)
+define log10(x)  (Math.log(x) / LN10)
+define log2(x)   (Math.log(x) / LN2)
+
 define max(x)    Math.max(x)
 define min(x)    Math.min(x)
 define random()  Math.random()
-define out(x) 	 console.log(x)
+define log(x) 	 console.log(x)
 define mod(x, y) (x%y+y)%y
 define PI        3.141592653589793
 define E         2.718281828459045

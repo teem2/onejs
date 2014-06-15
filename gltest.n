@@ -13,8 +13,7 @@ class MyGL extends GLNode{
 	vertex: mesh
 	pixel: #red
 	draw: (){
-		clearAll(#red)
-		out('here')
+		clearAll(#aero)
 		draw(this)
 	}
 }

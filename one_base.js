@@ -854,7 +854,7 @@ ONE.base_ = function(){
 	}
 
 	this.trace = function(){ ONE.logwrite(3, arguments); return arguments[0];}
-	this.out = function(){ ONE.logwrite(2, arguments); return arguments[0];}
+	this.log = function(){ ONE.logwrite(2, arguments); return arguments[0];}
 	this.warn = function(){ ONE.logwrite(1, arguments) }
 	this.error = function(){ ONE.logwrite(0, arguments) }
 }
