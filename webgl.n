@@ -14,12 +14,14 @@ class GLView{
 			alpha: false, 
 			preserveDrawingBuffer: true 
 		})
-		
+		var _gl = gl
 		window.onresize = =>{
-			canvas.style.width = parent.offsetWidth
-			canvas.style.height = parent.offsetHeight
-			canvas.width = canvas.style.width * pixelRatio
-			canvas.height = canvas.style.height * pixelRatio
+			var w = parent.offsetWidth
+			var h = parent.offsetHeight
+			canvas.style.width = w
+			canvas.style.height = h
+			canvas.width = w * pixelRatio
+			canvas.height = h * pixelRatio
 		}
 		window.onresize()
 	}
@@ -139,11 +141,11 @@ class GLNode{
 				if(!shader){
 					var pix_shader = gl.createShader(${gl.FRAGMENT_SHADER})
 					gl.shaderSource(pix_shader, "${pix_shader.replace(/\n/g,'\\\n')}")
-					if (!gl.getShaderParameter(pix_shader, ${gl.COMPILE_STATUS})) throw new Error(gl.getShaderInfoLog(ps))
+					if (!gl.getShaderParameter(pix_shader, ${gl.COMPILE_STATUS})) throw new Error(gl.getShaderInfoLog(pix_shader))
 
 					var vtx_shader = gl.createShader(${gl.VERTEX_SHADER})
 					gl.shaderSource(vtx_shader, "${vtx_shader.replace(/\n/g,'\\n\\\n')}")
-					if (!gl.getShaderParameter(vtx_shader, ${gl.COMPILE_STATUS})) throw new Error(gl.getShaderInfoLog(ps))
+					if (!gl.getShaderParameter(vtx_shader, ${gl.COMPILE_STATUS})) throw new Error(gl.getShaderInfoLog(vtx_shader))
 
 					shader = gl.createProgram()
 					gl.attachShader(shader, vtx_shader)
