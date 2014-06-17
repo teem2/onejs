@@ -1111,7 +1111,8 @@ ONE.parser_strict_ = function(){
 					default: out += String.fromCharCode(ch); break
 					}
 				}
-			} else {
+			} 
+			else {
 				// templated string
 				if(quote == 96 && this.stringTemplating && 
 					(ch == 36 && this.input.charCodeAt(this.tokPos+1) == 123)){

@@ -695,7 +695,7 @@ ONE.ast_ = function(){
 			}
 
 			this.Template = function( n ){
-				var ret = '"'
+				var ret = '`'
 				var chain = n.chain
 				var len = chain.length 
 				for(var i = 0; i < len; i++){
@@ -710,7 +710,7 @@ ONE.ast_ = function(){
 						if(item.value !== undefined) ret += item.value
 					}
 				}
-				ret += '"'
+				ret += '`'
 				return ret
 			}
 
@@ -1732,7 +1732,7 @@ ONE.ast_ = function(){
 					}
 					else {
 						if(item.value !== undefined){
-							ret += item.value.replace(/\n/g,'\\n')
+							ret += item.value.replace(/\n/g,'\\n').replace(/"/g,'\\"')
 						}
 					}
 				}

@@ -1,4 +1,3 @@
-//var {Root, Rect} = load('dom')
 import math
 import dom
 
@@ -307,7 +306,7 @@ Language(){
 	assert(arr.join('') == '0123')
 
 	// string templates
-	var str = `12{1+1+1}4`
+	var str = `12${1+1+1}4`
 	assert(str == '1234')
 
 	// bin and octal

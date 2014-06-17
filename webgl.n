@@ -1,4 +1,3 @@
-#js
 import math
 
 class GLView{
@@ -96,7 +95,7 @@ class GLNode{
 		_compile_draw( n ){
 			if(!n.args.length) throw new Error('draw needs args')
 		
-			var udid = 'd'+this.udid++
+			var uid = 'd' + this.uid++
 
 			var ovl = ToGLSL.overloads = []
 			for(var arg from n.args){
@@ -115,32 +114,35 @@ class GLNode{
 			var attr_decl = ''
 			var ret = ''
 
-			// lets compile the shader
-
+			// generate attribute declarations
 			for(var name in attribs){
 				var attr = attribs[name]
 				attr_decl += `
-					attribute ${ attr.t.name } ${ name };
-				`
+						attribute ${ attr.t.name } ${ name };`
 			}
+			// vertex shader
 			var vtx_shader = `
-				precision mediump float;
-				${ attr_decl }
-				void main(){
-					gl_Position = ${ vtx_expr };
-				}
-			`
+						precision mediump float;
+						${ attr_decl }
+						void main(){
+							gl_Position = ${ vtx_expr };
+						}
+					`
+			// pixel shader
+			var pix_shader = `
+
+					`
 
 			// we have to get a unique draw ID
 			ret += `
-				var sh = this.${udid}_shader
+				var sh = this.${uid}_shader
 				if(!sh){
 					var ps = gl.createShader(${gl.FRAGMENT_SHADER})
-					gl.shaderSource(ps, "${pix_shader.replace(/\n/g,'\\n')}")
+					gl.shaderSource(ps, "${pix_shader.replace(/\n/g,'\\\n')}")
 					if (!gl.getShaderParameter(ps, ${gl.COMPILE_STATUS})) throw new Error(gl.getShaderInfoLog(ps))
 
 					var vs = gl.createShader(${gl.VERTEX_SHADER})
-					gl.shaderSource(vs, "${vtx_shader.replace(/\n/g,'\\n')}")
+					gl.shaderSource(vs, "${vtx_shader.replace(/\n/g,'\\n\\\n')}")
 					if (!gl.getShaderParameter(ps, ${gl.COMPILE_STATUS})) throw new Error(gl.getShaderInfoLog(ps))
 
 					sh = gl.createProgram()
@@ -148,38 +150,32 @@ class GLNode{
 					gl.attachShader(sp, ps)
 					gl.linkProgram(sp)
 
-					this.${udid}_shader = sh
+					this.${uid}_shader = sh
 			`
 
 			for(var name in attribs){
 				var attr = attribs[name]
 				ret += `
 					
-				`
+					`
 			}
 
 			for(var name in attribs){
 				var attr = attribs[name]
 				ret += `
-				var vb = this.${udid}_glvb_${name}
-				if(!vb) vb = this.${udid}_glvb_${name} = gl.createBuffer()
-				gl.bindBuffer(${gl.ARRAY_BUFFER}, vb)
-				var ab = this.${udid}_glab_${name}
-				if(!ab.clean){
-					gl.bufferData(${gl.ARRAY_BUFFER}, ab, ${gl.STATIC_DRAW})
-					ab.clean = true
-				}
-				gl.vertexAttribPointer(this.${udid}_glattr_${name}, ${attr.t.slots}, ${gl.FLOAT}, true, ${attr.t.size}, 0)
+					var vb = this.${uid}_vb_${name}
+					if(!vb) vb = this.${uid}_vb_${name} = gl.createBuffer()
+					gl.bindBuffer(${gl.ARRAY_BUFFER}, vb)
+					var ab = this.${uid}_ab_${name}
+					if(!ab.clean){
+						gl.bufferData(${gl.ARRAY_BUFFER}, ab, ${gl.STATIC_DRAW})
+						ab.clean = true
+					}
+					gl.vertexAttribPointer(this.${uid}_at_${name}, ${attr.t.slots}, ${gl.FLOAT}, true, ${attr.t.size}, 0)
 				`
 			}
-			gl.drawArrays(gl.TRIANGLES)
-
-
-			// ok now we do drawElements, or drawArrays based on what we have
-			// lets start with drawArrays
-
-
-			log(ret)
+			// correctly indent the code
+			log(ret.replace(/\n\t\t\t\t/g,'\n'+this.indent))
 
 			return ''
 		}
@@ -196,8 +192,8 @@ class GLNode{
 		// plug the module of the ast node
 		js.module = ast.module
 		js.context = this
-		js.gl = owner.gl
-		js.udid = 0
+		js.gl = owner.gl // use the gl context to inline gl constants
+		js.uid = 0
 		if(ast.type != 'Function') throw new Error('GL Draw not a function')
 
 		var flags = js.pull_flags(ast)
