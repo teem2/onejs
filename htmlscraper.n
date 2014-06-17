@@ -12,7 +12,7 @@ class HTMLParser{
 	attr(name){} // attribute name
 	value(val){} // attribute value
 
-	// parse the function
+	// HTML parser function, 110 loc and very forgiving.
 	parse(source){
 		if(typeof source != 'string') source = source.toString()
 		var len = source.length
@@ -20,20 +20,19 @@ class HTMLParser{
 		var start = pos
 		while(pos < len){
 			var ch = source.charCodeAt(pos++)
-
 			if(ch == 60){ // <
 				// lets emit textnode since last
 				if(start != pos - 1 && text) text(source.slice(start, pos - 1))
 				var next = source.charCodeAt(pos)
 				if(next == 33){ // <!
 					after = source.charCodeAt(pos+1)
-					if(after == 45){ // <!-- comment
+					if(after == 45){ // <!- comment
 						pos += 2
 						while(pos < len){
 							ch = source.charCodeAt(pos++)
 							if(ch == 45 && source.charCodeAt(pos) == 45 &&
 							    source.charCodeAt(pos + 1) == 62){
-								pos += 3
+								pos += 2
 								comment(source.slice(start, pos - 3))
 								break
 							}
@@ -41,7 +40,7 @@ class HTMLParser{
 						start = pos
 						continue
 					}
-					if(after == 91){ // <![CDATA[  probably cdata, just parse to ]]>
+					if(after == 91){ // <![ probably followed by CDATA[ just parse to ]]>
 						pos += 8
 						start = pos
 						while(pos < len){
@@ -53,11 +52,9 @@ class HTMLParser{
 								break
 							}
 						}
-
 						start = pos
 						continue
 					}
-
 				}
 				if(next == 63){ // <? command
 					pos++
@@ -85,9 +82,8 @@ class HTMLParser{
 					start = pos
 					continue
 				}
-				// try to parse a normal tag
-				start = pos
-				var tag = true
+				start = pos // try to parse a tag
+				var tag = true // first name encountered is tagname
 				while(pos < len){
 					ch = source.charCodeAt(pos++)
 					// whitespace, end of tag or assign
@@ -96,10 +92,8 @@ class HTMLParser{
 							if(tag){ // lets emit the tagname
 								begin(source.slice(start, pos - 1))
 								tag = false
-							}
-							else { // lets emit an attribute name
-								attr(source.slice(start, pos - 1))
-							}
+							}// emit attribute name
+							else attr(source.slice(start, pos - 1))
 						}
 						start = pos
 						if(ch == 62){ // >
@@ -131,7 +125,7 @@ class HTMLParser{
 	}
 }
 
-// builds a very easy JS accessible HTML scraper
+// Builds a JS object tree accessible like json: tag_1.tag[2].attr
 class HTMLScraper extends HTMLParser{ 
 
 	class HTMLNode{
@@ -154,7 +148,7 @@ class HTMLScraper extends HTMLParser{
 			}
 		}
 
-		// selector query to return all
+		// selector query to return all nodes matching
 		whereAll(tagname, prop, value){
 			var ret = []
 			whereOne(tagname, prop, value, ret)
@@ -268,19 +262,13 @@ class HTMLScraper extends HTMLParser{
 		else node[name] = value
 	}
 	
-	var rx = /^[\r\n\s]+$/
+	var isempty = /^[\r\n\s]+$/ // discard empty textnodes
 	text(value){
-		// discard empty textnodes
-		if(!value.match(rx)) storenode('text', value)
+		if(!value.match(isempty)) storenode('text', value)
 	}
 	
-	comment(val){
-		storenode('comment', value)
-	}
-
-	cdata(val){
-		storenode('cdata', value)
-	}
+	comment(val) -> storenode('comment', value)
+	cdata(val) -> storenode('cdata', value)
 
 	attr(name){
 		if(name in node) last_attr = undefined

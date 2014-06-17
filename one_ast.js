@@ -218,6 +218,7 @@ ONE.ast_ = function(){
 			Object: { keys:3 },
 			Index: { object:1, index:1 },
 			Key: { object:1, key:1, exist:0 },
+			ThisCall: { object:1, key:1 },
 
 			Block:{ steps:2 },
 			List: { items:2 },
@@ -268,7 +269,6 @@ ONE.ast_ = function(){
 			Call: { fn:1, args:2 },
 			Create: { fn:1, body:1, arrow:0 },
 
-			ThisCall: { object:1, key:1 },
 			Class: { id:1, base:1, body:1 },
 
 			Quote: { quote:1 },
@@ -655,7 +655,7 @@ ONE.ast_ = function(){
 				var obj = n.object
 				var object_t = obj.type
 				var object = this.expand(obj, n)
-				if(object_t !== 'Index' && object_t !== 'Id' && object_t !== 'Key' && object_t !== 'Call'&& object_t !== 'This')
+				if(object_t !== 'Index' && object_t !== 'Id' && object_t !== 'Key' && object_t !== 'Call' && object_t !== 'This' && object_t !== 'ThisCall')
 					object = '(' + object + ')'
 				// when do we need parens? if its not a key or block or call
 				return object + '[' + this.expand( n.index, n ) + ']'
@@ -665,10 +665,20 @@ ONE.ast_ = function(){
 				var obj = n.object
 				var object_t = obj.type
 				var object = this.expand(obj, n)
-				if(object_t !== 'Index' && object_t !== 'Id' && object_t !== 'Key' && object_t !== 'Call'&& object_t !== 'This')
+				if(object_t !== 'Index' && object_t !== 'Id' && object_t !== 'Key' && object_t !== 'Call'&& object_t !== 'This' && object_t !== 'ThisCall')
 					object = '(' + object + ')'
 
 				return  object + (this.exist?'?.':'.') + this.expand(n.key, n)
+			}
+
+			this.ThisCall = function( n ){
+				var obj = n.object
+				var object_t = obj.type
+				var object = this.expand(obj, n)
+				if(object_t !== 'Index' && object_t !== 'Id' && object_t !== 'Key' && object_t !== 'Call'&& object_t !== 'This' && object_t !== 'ThisCall')
+					object = '(' + object + ')'
+
+				return  object + '::' + this.expand(n.key, n)
 			}
 
 			this.Block = function( n ){
@@ -1541,7 +1551,6 @@ ONE.ast_ = function(){
 				if(n.key.type !== 'Id') throw new Error('Unknown key type')
 				var key = n.key
 				var obj = n.object
-				var cmt = ''
 
 				var object = this.expand(obj, n)
 				var object_t = obj.type
@@ -1558,6 +1567,16 @@ ONE.ast_ = function(){
 					return '((' + tmp + '=' + object + ') && ' + tmp + '.' + n.key.name + ')'
 				}
 				return object + '.' + n.key.name
+			}
+
+			this.ThisCall = function( n ){
+				var obj = n.object
+				var object_t = obj.type
+				var object = this.expand(obj, n)
+				if(object_t !== 'Index' && object_t !== 'Id' && object_t !== 'Key' && object_t !== 'Call'&& object_t !== 'This' && object_t !== 'ThisCall')
+					object = '(' + object + ')'
+
+				return  object + '.' + n.key.name
 			}
 			
 			this.Array = function( n ){
@@ -1904,6 +1923,18 @@ ONE.ast_ = function(){
 				return ret
 			}
 
+			this.ForIn = function( n ){
+				var ret = 'for(' + this.expand(n.left, n) + ' in ' +
+					this.expand(n.right, n) + ')' 
+				var loop = this.expand(n.loop, n)
+				if(n.compr && outer.IsExpr[n.loop.type]){
+					ret += this.compr_assign +'('+ loop + ')'
+				}
+				else ret += loop
+
+				return ret
+			}
+
 			this.TypeVar = function( n ){
 				var name = n.kind.name
 				if(name == 'signal'){
@@ -2243,7 +2274,6 @@ ONE.ast_ = function(){
 					n.body.parent = n
 					// we can do a simple wait transform
 					str_body += this.block( n.body.steps, n.body, 1 )
-
 				} 
 				else str_body += this.depth + 'return ' + this.expand(n.body, n) 
 
@@ -2287,7 +2317,7 @@ ONE.ast_ = function(){
 				else if(n.id) ret += ' '+this.expand(n.id, n)
 
 				if( !str_param ) str_param = ''
-				ret += '(' + str_param + '){' 
+				ret += '(' + str_param + '){'
 
 				var tmp = ''
 
@@ -2677,7 +2707,9 @@ ONE.ast_ = function(){
 					op = n.assign_op
 				}
 				else{
-					ret = '('+output+'= {o:0,'+type.arr+':new '+type.view+'Array(' 
+					// store the type on our module for quick reference
+					this.module[type.name] = type
+					ret = '('+output+'= {o:0,t:module.'+type.name+','+type.arr+':new '+type.view+'Array(' 
 					if(dims) ret += '(' + this.expand(dims, n) + ')*' + nslots + ')}'
 					else ret += nslots + ')}'
 				}
@@ -3030,8 +3062,9 @@ ONE.ast_ = function(){
 							else call += '.' + fn.key.name
 						}
 					}
-					else if(fn.type == 'Index'){
-
+					else if(fn.type == 'ThisCall'){
+						cthis = 'this'
+						call = this.expand(fn, n)
 					}
 					else{
 						cthis = 'this'

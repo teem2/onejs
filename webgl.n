@@ -1,3 +1,4 @@
+#js
 import math
 
 class GLView{
@@ -33,52 +34,153 @@ class GLNode{
 		gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT)
 	}
 
+	type: triangle
+
 	class ToGLSL extends AST.ToCode{
-		// alright so first thing to do: when we reference something
+
+		// we have to resolve a property
+		resolve_overload( prop ){
+			var len = overloads.length
+			for(var i = len-1; i >= 0; i--){
+				var found = overloads[i][prop]
+				if(found !== undefined){
+					return found
+				}
+			}
+		}
+
+		// alright first we are going to resolve Id's by inlining them from overload
 		Id( n ){
-			// lets check 
+			// okay so we might have to resolve this thing
+			var resolve = this.resolve_overload(n.name)
+			
+			if(!resolve) throw new Error("cannot resolve "+n.name)
+
+			// allright we have the type
+			if(resolve.bind) return this.expand(resolve.bind, n)
+			if(typeof resolve.t != 'object') throw new Error('dont know what to do with resolve target')
+
 			return ''
 		}
 
+		// resolve index
+		Index( n ){
+			// so we got a bla[] 
+			if(!n.index){
+				if(n.object.type != 'Id') throw new Error('dont support property attributes')
+
+				var name = n.object.name
+				var obj = this.resolve_overload(name)
+
+				if(!obj) throw new Error('Cannot find vertex attribute[] '+name)
+
+				var attr = attribs[name]
+				if(attr && attr !== obj) throw new Error('Cannot redefine vertex attribute[] '+name)
+
+				attribs[name] = obj
+
+				return name // return name 
+			}
+			return AST.ToCode::Index(n)
+		}
+
+		// we have to resolve Id's 
 		Key( n ){
 			// okay! we have to check if object
-
+			return ''
 		}
 	}
 
-	class ToDraw extends AST.ToJS{
-		// we have to resolve functions on this
-		// and on the local module scope
-		draw_resolve( ctx, name ){
-
-			if(v == 'this')
-			var obj = this.context[v]
-			return obj
-		}
+	class ToDrawJS extends AST.ToJS{
 
 		_compile_draw( n ){
+			if(!n.args.length) throw new Error('draw needs args')
+		
+			var udid = 'd'+this.udid++
 
-			var root = n.args[0]
+			var ovl = ToGLSL.overloads = []
+			for(var arg from n.args){
+				if(arg.type == 'This') ovl.push(this.context)
+				else ovl.push(this[arg.name])
+			}
 
-			// draw has a set of arguments
-			draw_resolve( root.name )
-
-			var vertex = n.args[0]
-			var frag = n.args[1]
-			// we treat our arg as a direct shader expression
-			// lets serialize it
-			// alright so, we have a mesh.
 			ToGLSL.module = module
 			ToGLSL.context = context
-			ToGLSL.attribs = Object.create(null)
+			var attribs = ToGLSL.attribs = Object.create(null)
+
+			// now lets start the vertex compile
+			var vtx = ToGLSL.resolve_overload('vertex')
+			if(!vtx.bind) throw new Error('Unexpected vertex type')
+			var vtx_expr = ToGLSL.expand(vtx.bind)
+			var attr_decl = ''
+			var ret = ''
+
+			// lets compile the shader
+
+			for(var name in attribs){
+				var attr = attribs[name]
+				attr_decl += `
+					attribute ${ attr.t.name } ${ name };
+				`
+			}
+			var vtx_shader = `
+				precision mediump float;
+				${ attr_decl }
+				void main(){
+					gl_Position = ${ vtx_expr };
+				}
+			`
+
+			// we have to get a unique draw ID
+			ret += `
+				var sh = this.${udid}_shader
+				if(!sh){
+					var ps = gl.createShader(${gl.FRAGMENT_SHADER})
+					gl.shaderSource(ps, "${pix_shader.replace(/\n/g,'\\n')}")
+					if (!gl.getShaderParameter(ps, ${gl.COMPILE_STATUS})) throw new Error(gl.getShaderInfoLog(ps))
+
+					var vs = gl.createShader(${gl.VERTEX_SHADER})
+					gl.shaderSource(vs, "${vtx_shader.replace(/\n/g,'\\n')}")
+					if (!gl.getShaderParameter(ps, ${gl.COMPILE_STATUS})) throw new Error(gl.getShaderInfoLog(ps))
+
+					sh = gl.createProgram()
+					gl.attachShader(sp, vs)
+					gl.attachShader(sp, ps)
+					gl.linkProgram(sp)
+
+					this.${udid}_shader = sh
+			`
+
+			for(var name in attribs){
+				var attr = attribs[name]
+				ret += `
+					
+				`
+			}
+
+			for(var name in attribs){
+				var attr = attribs[name]
+				ret += `
+				var vb = this.${udid}_glvb_${name}
+				if(!vb) vb = this.${udid}_glvb_${name} = gl.createBuffer()
+				gl.bindBuffer(${gl.ARRAY_BUFFER}, vb)
+				var ab = this.${udid}_glab_${name}
+				if(!ab.clean){
+					gl.bufferData(${gl.ARRAY_BUFFER}, ab, ${gl.STATIC_DRAW})
+					ab.clean = true
+				}
+				gl.vertexAttribPointer(this.${udid}_glattr_${name}, ${attr.t.slots}, ${gl.FLOAT}, true, ${attr.t.size}, 0)
+				`
+			}
+			gl.drawArrays(gl.TRIANGLES)
 
 
-			var vertex_shader = outer.ToGLSL.expand(vertex)
-			// and then we have varyings between 
-			// if the frag shader references things, its determined
-			// wether or not it is computed in the pixel or vertexshader.
-			// by using the pixel type marker
-			var frag_shader = outer.ToGLSL.expand(frag)
+			// ok now we do drawElements, or drawArrays based on what we have
+			// lets start with drawArrays
+
+
+			log(ret)
+
 			return ''
 		}
 	}
@@ -87,14 +189,15 @@ class GLNode{
 		// we have to compile the draw signal
 		// alright lets stringify draw
 		// so lets stringify it.
-		var js = ToDraw
+		var js = ToDrawJS
 		var ast = draw.bind
 		// make a fresh scope and signals store
 		js.new_state()
 		// plug the module of the ast node
 		js.module = ast.module
 		js.context = this
-
+		js.gl = owner.gl
+		js.udid = 0
 		if(ast.type != 'Function') throw new Error('GL Draw not a function')
 
 		var flags = js.pull_flags(ast)

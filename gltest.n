@@ -2,18 +2,16 @@ import math
 import webgl
 import dom
 
-if(k in this) return
-
-
 class MyGL extends GLNode{
 	mesh = vec3[6](
 		0,0,0, 1,0,0, 0,1,0
 		1,0,0, 1,1,0, 0,1,0
 	)
-	vertex: mesh
+
+	vertex: mesh[]
 	pixel: #red
 	draw: (){
-		clearAll(#aero)
+		clearAll(#777)
 		draw(this)
 	}
 }
@@ -21,7 +19,7 @@ class MyGL extends GLNode{
 // build the simplest of scenegraphcs
 GLView{
 	init(document.body)
-	MyGL{
-
+	MyGL{ 
+		
 	}
 }

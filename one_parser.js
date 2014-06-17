@@ -587,7 +587,8 @@ ONE.parser_strict_ = function(){
 			var ch = this.input.charCodeAt(this.tokPos)
 			if (ch === 32) { // ' '
 				++this.tokPos
-			} else if (ch === 13) {
+			} 
+			else if (ch === 13) {
 				++this.tokPos
 				var next = this.input.charCodeAt(this.tokPos)
 				if (next === 10) {
@@ -595,24 +596,30 @@ ONE.parser_strict_ = function(){
 				}
 				this.skippedNewlines++
 				if(this.storeComments) this.lastComments.push(this.tokPos-2, -1)
-			} else if (ch === 10 || ch === 8232 || ch === 8233) {
+			} 
+			else if (ch === 10 || ch === 8232 || ch === 8233) {
 				++this.tokPos
 				this.skippedNewlines++
 				if(this.storeComments) this.lastComments.push(this.tokPos-1, -1)
-			} else if (ch > 8 && ch < 14) {
+			} 
+			else if (ch > 8 && ch < 14) {
 				++this.tokPos
-			} else if (ch === 47) { // '/'
+			} 
+			else if (ch === 47) { // '/'
 				var next = this.input.charCodeAt(this.tokPos + 1)
 				if (next === 42) { // '*'
 					this.skipBlockComment()
 				} else if (next === 47) { // '/'
 					this.skipLineComment()
 				} else break
-			} else if (ch === 160) { // '\xa0'
+			} 
+			else if (ch === 160) { // '\xa0'
 				++this.tokPos
-			} else if (ch >= 5760 && this.nonASCIIwhitespace.test(String.fromCharCode(ch))) {
+			} 
+			else if (ch >= 5760 && this.nonASCIIwhitespace.test(String.fromCharCode(ch))) {
 				++this.tokPos
-			} else {
+			} 
+			else {
 				break
 			}
 		}
@@ -1107,7 +1114,7 @@ ONE.parser_strict_ = function(){
 			} else {
 				// templated string
 				if(quote == 96 && this.stringTemplating && 
-					(ch == 123 || (ch == 36 && this.input.charCodeAt(this.tokPos+1) == 123))){
+					(ch == 36 && this.input.charCodeAt(this.tokPos+1) == 123)){
 					if(ch == 36) this.tokPos++
 					this.parenStack.push(96)
 					return this.finishToken(this._template, out)

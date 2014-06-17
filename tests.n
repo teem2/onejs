@@ -6,17 +6,15 @@ Dom1(){
 	class MyDiv extends Rect{
 		w = 10
 		h = 10
-		mouseover(){
-
-		}
+		mouseover(){}
 	}
 	Root{
 		init(document.body)
 		profile(3000) do(){
 			MyDiv{
 				fill = vec3(random(), random(), random())
-				x = random() * 800
-				y = random() * 600
+				x = random() * 400
+				y = random() * 300
 			}
 		}
 	}
@@ -411,6 +409,6 @@ for(var key in this){
 	}
 }
 for(var [name, fn] of run){
-	out('Testing:'+name)
+	log('Testing:'+name)
 	Base{ fn() }
 }
