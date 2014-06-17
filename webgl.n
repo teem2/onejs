@@ -135,43 +135,44 @@ class GLNode{
 
 			// we have to get a unique draw ID
 			ret += `
-				var sh = this.${uid}_shader
-				if(!sh){
-					var ps = gl.createShader(${gl.FRAGMENT_SHADER})
-					gl.shaderSource(ps, "${pix_shader.replace(/\n/g,'\\\n')}")
-					if (!gl.getShaderParameter(ps, ${gl.COMPILE_STATUS})) throw new Error(gl.getShaderInfoLog(ps))
+				var shader = this.${uid}_shader
+				if(!shader){
+					var pix_shader = gl.createShader(${gl.FRAGMENT_SHADER})
+					gl.shaderSource(pix_shader, "${pix_shader.replace(/\n/g,'\\\n')}")
+					if (!gl.getShaderParameter(pix_shader, ${gl.COMPILE_STATUS})) throw new Error(gl.getShaderInfoLog(ps))
 
-					var vs = gl.createShader(${gl.VERTEX_SHADER})
-					gl.shaderSource(vs, "${vtx_shader.replace(/\n/g,'\\n\\\n')}")
-					if (!gl.getShaderParameter(ps, ${gl.COMPILE_STATUS})) throw new Error(gl.getShaderInfoLog(ps))
+					var vtx_shader = gl.createShader(${gl.VERTEX_SHADER})
+					gl.shaderSource(vtx_shader, "${vtx_shader.replace(/\n/g,'\\n\\\n')}")
+					if (!gl.getShaderParameter(vtx_shader, ${gl.COMPILE_STATUS})) throw new Error(gl.getShaderInfoLog(ps))
 
-					sh = gl.createProgram()
-					gl.attachShader(sp, vs)
-					gl.attachShader(sp, ps)
-					gl.linkProgram(sp)
+					shader = gl.createProgram()
+					gl.attachShader(shader, vtx_shader)
+					gl.attachShader(shader, pix_shader)
+					gl.linkProgram(shader)
 
-					this.${uid}_shader = sh
+					this.${uid}_shader = shader
+				}
 			`
 
 			for(var name in attribs){
 				var attr = attribs[name]
 				ret += `
-					
+
 					`
 			}
 
 			for(var name in attribs){
 				var attr = attribs[name]
 				ret += `
-					var vb = this.${uid}_vb_${name}
-					if(!vb) vb = this.${uid}_vb_${name} = gl.createBuffer()
-					gl.bindBuffer(${gl.ARRAY_BUFFER}, vb)
-					var ab = this.${uid}_ab_${name}
-					if(!ab.clean){
-						gl.bufferData(${gl.ARRAY_BUFFER}, ab, ${gl.STATIC_DRAW})
-						ab.clean = true
-					}
-					gl.vertexAttribPointer(this.${uid}_at_${name}, ${attr.t.slots}, ${gl.FLOAT}, true, ${attr.t.size}, 0)
+				var vtx_buf = this.${uid}_vb_${name}
+				if(!vtx_buf) vtx_buf = this.${uid}_vb_${name} = gl.createBuffer()
+				gl.bindBuffer(${gl.ARRAY_BUFFER}, vtx_buf)
+				var arr_buf = this.${uid}_ab_${name}
+				if(!arr_buf.clean){
+					gl.bufferData(${gl.ARRAY_BUFFER}, arr_buf, ${gl.STATIC_DRAW})
+					arr_buf.clean = true
+				}
+				gl.vertexAttribPointer(this.${uid}_at_${name}, ${attr.t.slots}, ${gl.FLOAT}, true, ${attr.t.size}, 0)
 				`
 			}
 			// correctly indent the code
