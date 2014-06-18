@@ -3,11 +3,8 @@ import webgl
 import dom
 
 class MyGL extends GLNode{
-	mesh = vec3[6](
-		0,0,0, 1,0,0, 0,1,0
-		1,0,0, 1,1,0, 0,1,0
-	)
 
+	mesh = webgl.vec3Rect(0,0,0.5,0.5)
 	vertex: mesh[]
 	pixel: #orange
 	draw: (){
@@ -19,7 +16,7 @@ class MyGL extends GLNode{
 // build the simplest of scenegraphcs
 GLView{
 	init(document.body)
-	MyGL{ 
-
+	MyGL{
+		
 	}
 }

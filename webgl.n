@@ -22,10 +22,17 @@ class GLView{
 			canvas.style.height = h
 			canvas.width = w * pixelRatio
 			canvas.height = h * pixelRatio
-			_gl.viewport(0,0,w,h)
+			_gl.viewport(0,0,w * pixelRatio, h * pixelRatio)
 		}
 		window.onresize()
 	}
+}
+
+vec3Rect(x,y,w,h){
+	return vec3[6](
+		x,y,0, x+w,0,0, 0,y+h,0
+		x+w,0,0, x+w,y+h,0, 0,y+h,0
+	)
 }
 
 class GLNode{
@@ -116,12 +123,12 @@ class GLNode{
 			ToGLSL.context = context
 			var attribs = ToGLSL.attribs = Object.create(null)
 
-			// now lets start the vertex compile
+			// compile vertex shader
 			var vtx = ToGLSL.resolve_overload('vertex')
 			if(!vtx.bind) throw new Error('Unexpected vertex type')
 			var vtx_expr = ToGLSL.expand(vtx.bind)
 
-			// now lets start the vertex compile
+			// compile pixel shader
 			var pix = ToGLSL.resolve_overload('pixel')
 			if(!pix.bind) throw new Error('Unexpected vertex type')
 			var pix_expr = ToGLSL.expand(pix.bind)
@@ -141,15 +148,15 @@ class GLNode{
 			// vertex shader
 			var vtx_shader = `
 				precision mediump float;
-				${ uni_decl }${ attr_decl }${ vary_decl }
+				${uni_decl}${attr_decl}${vary_decl}
 				void main(){
-					gl_Position = vec4(${vtx_expr},0);
+					gl_Position = vec4(${vtx_expr},1.0);
 				}
 			`
 			// pixel shader
 			var pix_shader = `
 				precision mediump float;
-				${ uni_decl }${ vary_decl }
+				${uni_decl}${vary_decl}
 				void main(){
 					gl_FragColor = ${pix_expr};
 				}
@@ -202,17 +209,15 @@ class GLNode{
 				}
 				var al = this.${uid}_al_${name}
 				gl.enableVertexAttribArray(al)
-				gl.vertexAttribPointer(al, ${attr.t.slots}, ${gl.FLOAT}, true, ${attr.t.size}, 0)
+				gl.vertexAttribPointer(al, ${attr.t.slots}, ${gl.FLOAT}, false, ${attr.t.size}, 0)
 				`
 			}
 			// drawing function
 			ret += `
 				gl.drawArrays(gl.TRIANGLES, 0, ${len})
 			`
-
 			// correctly indent the code
 			ret = ret.replace(/\n\t\t\t\t/g, '\n'+this.indent)
-
 			return ret
 		}
 	}

@@ -16,7 +16,9 @@ function browser(){
 		var x = new XMLHttpRequest()
 		x.onreadystatechange = function(){
 			if(x.readyState != 4) return
-			if(x.status == 200) return location.reload()
+			if(x.status == 200){
+				return location.reload()
+			}
 			setTimeout(reloader, (Date.now() - rtime) < 1000?500:0)
 		}
 		x.open('GET', "/_reloader_")
@@ -84,6 +86,7 @@ function nodejs(){
 	console.log("Listening on "+addr+":"+port)
 	function staticServe(req, res){
 		var name = url.parse(req.url).pathname
+		if(name == '/') name = '/index.html'
 		var fullpath = path.join(root, name)
 		if(name == "/_reloader_"){
 			// set a timer for 15 seconds
