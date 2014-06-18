@@ -128,6 +128,11 @@ class HTMLParser{
 // Builds a JS object tree accessible like json: tag_1.tag[2].attr
 class HTMLScraper extends HTMLParser{ 
 
+	// void tags
+	enum void_tag{
+		area, base, br, col, embed, hr, img, input, keygen, link, menuitem, meta, param, source, track, wbr
+	}
+
 	class HTMLNode{
 
 		// poor mans selector query for tagname == tagname, prop == value
@@ -172,33 +177,120 @@ class HTMLScraper extends HTMLParser{
 			for(var k from keys){
 				if(k !== 'owner' && k !== 'parent' && k !== 'tagname'){
 					var val = this[k]
-					if(Array.isArray(val)){ // ignore arrays
-					} 
-					else if(val && typeof val.logTree == 'function'){
+					if(Array.isArray(val)) continue
+					if(val && typeof val.logTree == 'function'){
 						val.logTree(s+k+'.')
+						continue
 					}
-					else if(typeof val == 'string'){
+					if(typeof val == 'string'){
 						if(val.length > 40)
-							log(s+k+' = ' + val.slice(0,40).replace(/\n/g,'\\n')+'...')
+							log(s+k+' = ' + val.slice(0,40).replace(/[\r\n]/g,'\\n')+'...')
 						else
-							log(s+k+' = ' + val.replace(/\n/g,'\\n'))
+							log(s+k+' = ' + val.replace(/[\r\n]/g,'\\n'))
 					}
 				}
 			}
 		}
+		
+		// insert a new tag by name
+		appendChild(name, value){
+			if(arguments.length == 1){
+				var cpy = name
+				value = new HTMLNode()
+				name = cpy.tagname
+				for(var k in cpy) value[k] = cpy[k]
+			}
+			var old = this[name]
+			if(old !== undefined){
+				if(Array.isArray(old)){
+					this[name + '_' + old.length] = value
+					old.push(value)
+				}
+				else{
+					this[name + '_0'] = old
+					this[name + '_1'] = value
+					this[name] = [old, value]
+				}
+			}
+			else this[name] = value
+		}
+
+		// serialize HTML again, it does auto indenting. with tabs.
+		toString(indent = ''){
+			var keys = Object.keys(this)
+			var ret = ''
+			var hastag = this.tagname!== undefined
+			if(hastag) ret += '<' + this.tagname
+			var tags = []
+			for(var k from keys){
+				if(k !== 'owner' && k !== 'parent' && k !== 'tagname'){
+					var val = this[k]
+					if(k.charCodeAt(0) == 36){ // attribute
+						if(ret[ret.length - 1] != ' ') ret += ' '
+						ret += k.slice(1)
+						var delim = "'"
+						if(val !== 1){
+							if(val.indexOf(delim) !== -1) delim = '"'
+							ret += '=' + delim + val + delim
+						}
+						continue
+					} 
+					if(Array.isArray(val)) continue
+					if(val && typeof val.logTree == 'function'){
+						tags.push(val)
+						continue
+					}
+					if(typeof val == 'string'){
+						if(k.indexOf('text') == 0){
+							tags.push(val)
+							continue
+						}
+						if(k.indexOf('cdata') == 0){
+							tags.push('<![CDATA['+val+']]>')
+							continue
+						}
+						if(k.indexOf('comment') == 0){
+							tags.push('<!--'+val+'-->')
+							continue
+						}
+						throw new Error('Value is string, but not attribute or known tag '+k+' = '+val)
+					}
+				}
+			}
+			// check if we are selfclosing
+			if(hastag && this.tagname in void_tag){
+				ret += '/>'
+				return ret
+			}
+			if(hastag) ret += '>\n'
+			var sub = hastag? indent + '\t': indent
+			for(var tag from tags){
+				if(typeof tag == 'string'){
+					// we need to re-indent text-blocks here..
+					// lets scan from the beginning to the first character
+					// reset counter at newline
+					// then strip that beginning part
+					// and replace the re-indent \n.... with \n+sub
+
+					ret += sub + tag + '\n'
+				}
+				else{
+					ret += sub + tag.toString(sub) + '\n'
+				}
+			}
+			if(hastag) ret += indent + '</'+this.tagname+'>'
+			return ret
+		}
 	}
 
-	// returns js accessible tree
-	parse(source){
+	// destructured named arguments with default values
+	// and assign-on-this
+	parse(source, @stripempty){
 		node = new HTMLNode()
 		HTMLParser.parse.call(this, source)
 		return node
 	}
 
-	// void tags
-	enum void_tag{
-		area, base, br, col, embed, hr, img, input, keygen, link, menuitem, meta, param, source, track, wbr
-	}
 
 	// todo, add decoding of these entity things
 	var entities = {
@@ -240,41 +332,24 @@ class HTMLScraper extends HTMLParser{
 	begin(name){
 		var newnode = new HTMLNode()	
 		newnode.parent = node
-		storenode(name, newnode)
+		node.appendChild(name, newnode)
 		newnode.tagname = name
 		node = newnode
 	}
 	
-	// stores a node on the object tree
-	storenode(name, value){
-		var old = node[name]
-		if(old !== undefined){
-			if(Array.isArray(old)){
-				node[name + '_' + old.length] = value
-				old.push(value)
-			}
-			else{
-				node[name + '_0'] = old
-				node[name + '_1'] = value
-				node[name] = [old, value]
-			}
-		}
-		else node[name] = value
-	}
-	
 	var isempty = /^[\r\n\s]+$/ // discard empty textnodes
+
 	text(value){
-		if(!value.match(isempty)) storenode('text', value)
+		if(!value.match(isempty)) node.appendChild('text', value)
 	}
-	
-	comment(val) -> storenode('comment', value)
-	cdata(val) -> storenode('cdata', value)
+
+	comment(val) -> node.appendChild('comment', value)
+	cdata(val) -> node.appendChild('cdata', value)
 
 	attr(name){
 		if(name in node) last_attr = undefined
 		else {
-			node[name] = 1
-			last_attr = name
+			node[last_attr = '$'+name] = 1
 		}
 	}
 

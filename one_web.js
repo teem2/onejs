@@ -30,12 +30,10 @@ ONE.browser_boot_ = function(){
 		ONE.Base.enumfalse.apply(ONE.Base, Object.keys( ONE.Base ) )
 
 		// check if we are on onejs.io, we load the prefix
-		var type = "index"
-		var m = location.hostname.match(/(.*?)\.onejs\.io/)
-		if(m) type = m[1]
-
-		var m = location.pathname.match(/\/([^\/\.]+)/)
-		var root = location.hash?location.hash.slice(1):(m?m[0]:type)
+		var type = "main"
+		//var m = location.hostname.match(/(.*?)\.onejs\.io/)
+		//if(m) type = m[1]
+		var root = location.hash?location.hash.slice(1):type
 
 		var obj = ONE.Base.create(ONE,function(){ this.__class__='Root'})
 		ONE.$.http_load(obj, root)
@@ -65,7 +63,7 @@ ONE.browser_boot_ = function(){
 
 	this.http_load = function( obj, module, callback, isroot ){
 		var url = module + '.n'
-		this.http_get( url, function on_http_get(code, error){
+		function on_http_get(code, error){
 			if( error ) throw new Error("Could not load "+url+" "+error)
 
 			function run(){
@@ -78,17 +76,23 @@ ONE.browser_boot_ = function(){
 				//})
 			}
 			// lets analyze our data and load all our deps.
-			var ast = obj.parse('->{'+code+'\n}', undefined, undefined, undefined, url, true)
-			var deps = 0
+			var ast = obj.parse('->{'+code+'\n}', url)
+			var deps = 0, hasdeps = 0
 			// load our dependencies
+			var dep = ast.getDependencies()
 			ast.getDependencies().forEach(function(file){
-				deps++
+				deps++, hasdeps = 1
 				ONE.$.http_load( obj, file, function on_http_load(){
 					if(!--deps) run()
 				})
 			})
-			if(!deps) run()
-		})
+			if(!hasdeps) run()
+		}
+		var elem = document.getElementById(module)
+		if(elem){
+			setTimeout(function(){on_http_get(elem.innerHTML)},0)
+		}
+		else this.http_get(url, on_http_get)
 	}
 
 	this.auto_reloader = function(){

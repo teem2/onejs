@@ -279,6 +279,7 @@ ONE.parser_strict_ = function(){
 	this._debugger = {keyword: "debugger"}
 	this._default = {keyword: "default"}
 	this._do = {keyword: "do", isLoop: true}
+	this._on = {keyword: "on", isLoop: true}
 	this._else = {keyword: "else", beforeExpr: true}
 	this._finally = {keyword: "finally"}
 	this._for = {keyword: "for", isLoop: true}
@@ -1038,9 +1039,7 @@ ONE.parser_strict_ = function(){
 
 	this.readNumber = function(startsWithDot) {
 		var start = this.tokPos, isFloat = false
-		// we stop parsing octals starting with 0
-		var octal = this.input.charCodeAt(this.tokPos) === 48
-		
+
 		if (!startsWithDot && this.readInt(10) === null) this.raise(start, "Invalid number")
 		if (this.input.charCodeAt(this.tokPos) === 46) {
 			++this.tokPos
@@ -1057,14 +1056,11 @@ ONE.parser_strict_ = function(){
 
 		if (this.isIdentifierStart(this.input.charCodeAt(this.tokPos))){
 			this.injectMul = true
-			return this.finishToken(this._num, val)
-			// inject a *
 		}
 
 		var str = this.input.slice(start, this.tokPos), val
 		if (isFloat) val = parseFloat(str)
-		else if (!octal || str.length === 1) val = parseInt(str, 10)
-		else this.raise(start, "Old octal syntax, use new 0o"+str.slice(1))
+		else val = parseInt(str, 10)
 		return this.finishToken(this._num, val)
 	}
 	// Read a string value, interpreting backslash-escapes.
@@ -2278,7 +2274,7 @@ ONE.parser_strict_ = function(){
 			node.arrow = this.tokType.type
 			this.next()
 			return this.parseArrowFunction(node, base)
-
+		case this._on:
 		case this._do:
 			// do on next line followed by { } is interpreted as the JS do/while
 			if( this.lastSkippedNewlines && this.input.charCodeAt(this.tokPos) == 123)return base

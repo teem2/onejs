@@ -9,7 +9,13 @@ ONE.ast_ = function(){
 
 	var modules = {}
 
-	this.parse = function( source, module, locals, template, filename, noclone ){
+	// external parse api
+	this.parse = function( source, filename ){
+		return this._parse(source, undefined, undefined, undefined, filename, true)
+	}
+
+	// internal parse api used by compiler
+	this._parse = function( source, module, locals, template, filename, noclone ){
 		parser.sourceFile = filename || ''
 
 		var node = parserCache[source]
@@ -74,7 +80,7 @@ ONE.ast_ = function(){
 				var fn = Function.call(null, code)()
 				return fn
 			}
-			ast = this.parse( ast, undefined, undefined, undefined, filename, true )
+			ast = this.parse(ast, filename)// undefined, undefined, undefined, filename, true )
 		}
 		// alright we have to compile us some code!
 		var js = this.AST.ToJS
@@ -311,11 +317,10 @@ ONE.ast_ = function(){
 				for( var k in tag ){
 					var t = tag[ k ]
 					
-					copy += '\tvar _'+v+'=n.'+k+';if(_'+v+')c.'+k+'=_'+v+'\n'
+					copy += '\tvar _'+v+'=n.'+k+';if(_'+v+' !== undefined)c.'+k+'=_'+v+'\n'
 
 					if( t === 0){
-						clone += '\tvar _'+v+' = n.'+k+'\n\tif(_'+v+')c.'+k+'=_'+v+'\n'
-
+						clone += '\tvar _'+v+' = n.'+k+'\n\tif(_'+v+' !== undefined)c.'+k+'=_'+v+'\n'
 					} 
 					else if( t === 1){
 						clone += '\tvar _'+v+' = n.'+k+'\n'+
@@ -1029,8 +1034,9 @@ ONE.ast_ = function(){
 			this.Do = function( n ){
 				var ret = ''
 				ret += this.expand(n.call, n) 
-				if(ret[ret.length - 1] == '\n') ret += this.depth + 'do '
-				else ret += ' do '
+				var verb = this.kind + ' '
+				if(ret[ret.length - 1] == '\n') ret += this.depth + ' ' + verb
+				else ret += ' ' + verb
 				ret += this.expand(n.arg, n)
 				if(n.catch){
 					if(ret[ret.length - 1] == '\n') ret += this.depth
@@ -1148,62 +1154,61 @@ ONE.ast_ = function(){
 				return ''
 			}
 
-			this.globals = {
-				Object:1,
-				Array:1, 
-				String:1, 
-				Number:1,
-				Date:1, 
-				Boolean:1,
-				Error:1,
-				Math:1,
-				RegExp:1,
-				Function:1,
-				undefined:1,
-				Float32Array:1,
-				Float64Array:1,
-				Int16Array:1,
-				Int32Array:1,
-				Int8Array:1,
-				Uint16Array:1,
-				Uint32Array:1,
-				Uint8Array:1,
-				Uint8ClampedArray:1,
-				ParallelArray:1,
-				Map:1,
-				Set:1,
-				WeakMap:1,
-				WeakSet:1,
-				ArrayBuffer:1,
-				DataView:1,
-				JSON:1,
-				Iterator:1,
-				Generator:1,
-				Promise:1,
-				XMLHttpRequest:1,
-				Intl:1,
-				arguments:1,
-				isNaN:1,
-				isFinite:1,
-				parseFloat:1,
-				parseInt:1,
-				decodeURI:1,
-				decodeURIComponent:1,
-				encodeURI:1,
-				encodeURIComponent:1,
-				escape:1,
-				unescape:1,
-				setInterval:1,
-				clearInterval:1,
-				setTimeout:1,
-				clearTimeout:1,
-				console:1,
-				module:1,
-				window:1,
-				document:1,
-				require:1,
-				__dirname:1
-			}
+			var globals = this.globals = Object.create(null)
+			globals.Object = 1
+			globals.Array = 1 
+			globals.String = 1 
+			globals.Number = 1
+			globals.Date = 1 
+			globals.Boolean = 1
+			globals.Error = 1
+			globals.Math = 1
+			globals.RegExp = 1
+			globals.Function = 1
+			globals.undefined = 1
+			globals.Float32Array = 1
+			globals.Float64Array = 1
+			globals.Int16Array = 1
+			globals.Int32Array = 1
+			globals.Int8Array = 1
+			globals.Uint16Array = 1
+			globals.Uint32Array = 1
+			globals.Uint8Array = 1
+			globals.Uint8ClampedArray = 1
+			globals.ParallelArray = 1
+			globals.Map = 1
+			globals.Set = 1
+			globals.WeakMap = 1
+			globals.WeakSet = 1
+			globals.ArrayBuffer = 1
+			globals.DataView = 1
+			globals.JSON = 1
+			globals.Iterator = 1
+			globals.Generator = 1
+			globals.Promise = 1
+			globals.XMLHttpRequest = 1
+			globals.Intl = 1
+			globals.arguments = 1
+			globals.isNaN = 1
+			globals.isFinite = 1
+			globals.parseFloat = 1
+			globals.parseInt = 1
+			globals.decodeURI = 1
+			globals.decodeURIComponent = 1
+			globals.encodeURI = 1
+			globals.encodeURIComponent = 1
+			globals.escape = 1
+			globals.unescape = 1
+			globals.setInterval = 1
+			globals.clearInterval = 1
+			globals.setTimeout = 1
+			globals.clearTimeout = 1
+			globals.console = 1
+			globals.module = 1
+			globals.window = 1
+			globals.document = 1
+			globals.require = 1
+			globals.__dirname = 1
 
 			this.find_type = function( name ){
 				var type = this.module.types[name]
@@ -1377,6 +1382,7 @@ ONE.ast_ = function(){
 				if(type && (field = type.fields[name])){
 					return '_.'+type.arr+'[_.o+'+(field.off / outer.viewSize[type.view])+']'
 				}
+
 				if( name in this.scope ){
 					var type = this.scope[name]
 					if(n && typeof type == 'object'){
@@ -1384,8 +1390,11 @@ ONE.ast_ = function(){
 					}
 					return name
 				}
+
 				if( name in this.globals ) return name
+
 				var def = this.find_define(name)
+				
 				if(def){
 					return this.expand(def, n)
 				}
@@ -1650,8 +1659,9 @@ ONE.ast_ = function(){
 				// right hand side is auto-enumerated when not provided
 
 				var name = n.id.name 
-				
-				this.scope[name] = 3
+
+				this.scope[name] = 1
+
 
 				var ret = 'var '+name+' = this.'+name+' = '
 
@@ -2236,7 +2246,7 @@ ONE.ast_ = function(){
 							if(param.init){
 								str_body += this.depth + 'if(' + name + '===undefined)' + name + '=' + this.expand(param.init, param) + this.newline 
 							}
-							if(param.id.flag == 46){
+							if(param.id.flag == 64){
 								str_body += this.depth + 'this.' + name + '=' + name + ';' + this.newline 
 							} 
 							else {
@@ -2303,18 +2313,24 @@ ONE.ast_ = function(){
 								this.module.exports[name] = n
 							}
 							ret += this.expand(n.name, n) + this.space + '=' + this.space
+							//console.log(ret)							
 						}
 					}
 				}
 
-				ret += 'function'
+				if(n.await) ret = ret  + 'ONE._await('
 
-				if(n.await) ret = 'ONE._await(' + ret
+				ret += 'function'
 
 				if(n.gen || n.auto_gen) ret += '*'
 				if( nametag === null ) ret += ''
 				else if( nametag ) ret += ' '+nametag
-				else if(n.id) ret += ' '+this.expand(n.id, n)
+				else if(n.id){
+					if(n.gen || n.auto_gen){
+						ret = 'var ' + this.expand(n.id, n) + ' = ' + ret
+					}
+					else ret += ' '+this.expand(n.id, n)
+				}
 
 				if( !str_param ) str_param = ''
 				ret += '(' + str_param + '){'
@@ -2459,7 +2475,7 @@ ONE.ast_ = function(){
 					localstr += name+':'+name
 				}
 
-				ret +=  'this.parse("' + body + '",module'
+				ret +=  'this._parse("' + body + '",module'
 				if( localstr ) ret += ',{' + localstr + '}'
 				if( obj ){
 					if(!localstr) ret += ',null'
@@ -2628,7 +2644,7 @@ ONE.ast_ = function(){
 				// forward to Call
 				// WARNING we might have double calls if you fetch
 				// the class via functioncall.
-				return this.Call( n, undefined, true )
+				return this.Call( n, undefined, undefined, true )
 				return  fn + '.new(this'+(arg?', '+arg:arg)+')'
 			}
 
@@ -2881,7 +2897,7 @@ ONE.ast_ = function(){
 				return '(('+arg+') || '+body+')'				
 			}
 
-			this.Call = function( n, extra, isnew ){
+			this.Call = function( n, extra, pre, isnew ){
 				var fn  = n.fn
 				fn.parent = n
 				// assert macro
@@ -2893,6 +2909,7 @@ ONE.ast_ = function(){
 				var args = n.args
 
 				// add extra args for processing
+				if(pre) args = Array.prototype.concat.apply(pre, args)
 				if(extra) args = Array.prototype.concat.apply(args, extra)
 				if(isnew) args = Array.prototype.concat.apply(['this'], args)
 
@@ -3117,7 +3134,7 @@ ONE.ast_ = function(){
 					if(obj) obj += ','
 					obj += name+':'+(name in this.scope?name:'this.'+name)
 				}
-				return 'this.parse("' + body + '",module,null'+(obj?',{' + obj + '})':')')
+				return 'this._parse("' + body + '",module,null'+(obj?',{' + obj + '})':')')
 			}
 
 			this.Rest = function( n ){
@@ -3126,24 +3143,23 @@ ONE.ast_ = function(){
 
 			this.Do = function( n ){
 				var call = n.call
-				var extra = [n.arg]
+				var args = [n.arg]
 				n.arg.indo = 1
 				if(n.catch){
-					extra.push( n.catch )
+					args.push( n.catch )
 					n.catch.indo = 1
 				}
-
 				var then = (n.then ? this.expand(n.then, n) : '')
-				if( call.type !== 'Call'){
-					// make a fake call node
+				if( call.type !== 'Call'){ // make a fake call node
 					call = {
 						parent:call.parent,
 						fn:call,
 						args:[]
 					}
-				} else call.parent = n
-
-				return this.Call( call, extra ) + then
+				} 
+				else call.parent = n
+				if(n.kind == 'do') return this.Call(call, args) + then
+				return this.Call(call, undefined, args)
 			}
 
 		})

@@ -185,9 +185,13 @@ Language(){
 	// class methods
 	class ctest{
 		method() -> 1
+		method2(@thisarg){}
 	}
 	cnew = new ctest()
 	assert( cnew.method() == 1 )
+	// this assignment args
+	cnew.method2(10)
+	assert(cnew.thisarg == 10)
 
 	// arrow syntax
 	arrow = a => a + 5

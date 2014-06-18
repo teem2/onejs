@@ -1,0 +1,135 @@
+#!/usr/bin/env node --harmony one_node.js
+/**
+ *  ONEJS Static nodejs server
+ * 
+ *  Copyright (C) 2014 ONEJS 
+ *
+ *  MIT license: Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * 
+ */
+import node
+import htmlscraper
+
+var addr = "0.0.0.0"
+var port = 80
+var fs_root = Path.resolve(__dirname)
+
+class StaticServer extends HttpServer{
+	// when you assign to something you must make it explicit
+	// when you read from something you can omit it.
+	watch( path ){
+
+		files ?= {}
+		if(files[path]) return
+
+		files[path] = fs.watchFile(path).then 
+		do(){
+			log("---- " + path + " changed, sending reload to frontend ----" )
+			for(var res of pending){
+				res.writeHead(200)
+				res.end('Reload')
+			}
+		}
+	}
+
+	// lets package our app
+	package( file, root ){
+		var html = await fs.readFile(file)
+		var tree = HTMLScraper.parse(html)
+
+		// lets inline each script tag
+		for(var v from tree.html.head.script){
+			if(v.$src){
+				if(v.$src == 'reloader.js'){
+					delete v.$src
+					continue
+				}
+				var file = await fs.readFile(v.$src)
+				delete v.$src
+				v.text = file.toString()
+			}
+		}
+
+		// recursively find all our dependencies
+		var onejs = {}
+		function fetch(file){
+			var code = await fs.readFile(file + '.n')
+			onejs[file] = code.toString()
+			var ast = parse('->{' + code + '\n}')
+			for(var dep from ast.getDependencies()){
+				await fetch(dep)
+			}
+		}
+		// lets fetch our app root
+		await fetch(root)
+
+		// add new tags 
+		for(var file in onejs) tree.html.head.appendChild on{
+			tagname:'script'
+			$type: 'text/onejs'
+			$id: file == root ? 'main' : file
+			text: onejs[file]
+		}
+		// ok first lets stringify it again.
+		return tree.toString()
+	}
+
+	route("/_reloader_") 
+	do( req, res ){
+		(pending ?= []).push(res)
+	}
+
+	route(/.*/) 
+	do( req, res ){
+		var path = req.url.pathname
+		var fullpath = Path.join(fs_root, path)
+
+		log(`Reading ${path}`)
+
+		// lets do some quick n dirty packaging
+		if(path == '/'){
+			var host = req.headers.host
+			var root = ''
+			if(host.indexOf('localhost') == 0){
+				root = 'index'
+			}
+			else{
+				root = host.slice(0, host.indexOf('.') - 1)
+				console.log('first', root)
+			}
+
+			// lets fetch the root
+			var pkg = await package('index.html', root)
+			// deflate it
+			var data = await zlib.deflate(pkg)
+			res.writeHead(200) do {
+				"Content-Type": "text/html"
+				"Content-encoding":"deflate"
+			}			
+			res.write(data)
+			res.end()
+			return
+		}
+
+		// flat read the crap
+		fs.readFile(fullpath).then
+		do(data){
+			res.writeHead(200) do {"Content-Type": mime.fromFilename(fullpath)}
+			res.write(data)
+			res.end()
+			watch(fullpath)
+		}
+		catch(e){
+			log(`File not found ${fullpath}`)
+			res.writeHead(404)
+			res.end('File not found')
+		}
+	}
+
+	init( port, addr ){
+		log(`Starting webserver on ${addr}:${port}`)
+		super()
+	}
+}
+
+new StaticServer( port, addr )

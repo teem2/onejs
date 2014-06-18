@@ -30,8 +30,8 @@ class GLView{
 
 vec3Rect(x,y,w,h){
 	return vec3[6](
-		x,y,0, x+w,0,0, 0,y+h,0
-		x+w,0,0, x+w,y+h,0, 0,y+h,0
+		x,y,0, x+w,y,0, x,y+h,0
+		x+w,y,0, x+w,y+h,0, x,y+h,0
 	)
 }
 
@@ -46,6 +46,52 @@ class GLNode{
 	type: triangle
 
 	class ToGLSL extends AST.ToCode{
+		enum variables{
+			gl_PointCoord, gl_FrontFacing, gl_FragCoord, gl_Position
+			gl_PointSize, gl_ClipDistance, gl_VertexID, gl_InstanceID
+			gl_MaxVertexAttribs, gl_MaxVertexUniformVectors
+			gl_MaxVaryingVectors, gl_MaxVertexTextureImageUnits
+			gl_MaxCombinedTextureImageUnits, gl_MaxTextureImageUnits
+			gl_MaxFragmentUniformVectors, gl_MaxDrawBuffers
+		}	
+
+		enum types{
+			half, float, double, short, long
+			mat2, mat3, mat4
+			vec2, vec3, vec4
+			ivec2, ivec3, ivec4
+			bvec2, bvec3, bvec4
+			hvec2, hvec3, hvec4
+			dvec2, dvec3, dvec4
+			fvec2, fvec3, fvec4
+			sampler2D
+			samplerCube
+		}
+
+		enum functions{
+			sizeof, radians, degrees
+			sin, cos, tan
+			asin, acos, atan
+			pow, exp, log, exp2, log2
+			sqrt, inversesqrt
+			abs, sign, floor, ceil, fract
+			mod, min, max, clamp
+			mix, step, smoothstep
+			length, distance
+			dot, cross, normalize
+			faceforward, reflect, refract
+			matrixCompMult
+			lessThan, lessThanEqual
+			greaterThan, greaterThanEqual
+			equal, notEqual
+			any, all, not
+			texture2DLod
+			texture2DProjLod
+			textureCubeLod
+			texture2D
+			texture2DProj
+			textureCube
+		}
 
 		// we have to resolve a property
 		resolve_overload( prop ){
@@ -60,10 +106,15 @@ class GLNode{
 
 		// alright first we are going to resolve Id's by inlining them from overload
 		Id( n ){
+			var name = n.name
 			// if we are # bla lets resolve the color and inline.
 			if(n.flag == 35){ // is a color
-				vec4 col = this.context.color(n.name)
+				vec4 col = this.context.color(name)
 				return 'vec4(' + col.x + ','+col.y+','+col.z+',1.0)'
+			}
+
+			if(name in functions || name in variables){
+				return n.name
 			}
 
 			// okay so we might have to resolve this thing
@@ -96,14 +147,39 @@ class GLNode{
 
 				return name // return name 
 			}
+
 			return AST.ToCode::Index(n)
 		}
 
 		// we have to resolve Id's 
 		Key( n ){
+			var objname = n.object.name
+			if(objname in variables){
+				return objname+'.'+n.key.name
+			}
 			// okay! we have to check if object
-			return ''
+			return AST.ToCode::Key(n)
 		}
+
+		Call = function( n, extra, pre ){
+			var fn = this.expand(n.fn, n)
+			var fn_t = n.fn.type
+			if(fn_t == 'List' || fn_t == 'Logic' || fn_t == 'Condition') 
+				fn = '(' + fn + ')'
+			var arg = ''
+			if(pre) arg += this.list(pre, n)
+			if(n.args && n.args.length){
+				if(arg) arg += ', '
+				arg += this.list(n.args, n)
+			}
+			if(extra){
+				if(arg) arg += ', '
+				arg += this.list(extra, n)
+			}
+			return fn + '(' + arg + ')'
+		}
+
+		Do = AST.ToJS.Do
 	}
 
 	class ToDrawJS extends AST.ToJS{
@@ -147,7 +223,7 @@ class GLNode{
 			}
 			// vertex shader
 			var vtx_shader = `
-				precision mediump float;
+				precision highp float;
 				${uni_decl}${attr_decl}${vary_decl}
 				void main(){
 					gl_Position = vec4(${vtx_expr},1.0);
@@ -155,7 +231,7 @@ class GLNode{
 			`
 			// pixel shader
 			var pix_shader = `
-				precision mediump float;
+				precision highp float;
 				${uni_decl}${vary_decl}
 				void main(){
 					gl_FragColor = ${pix_expr};
@@ -246,7 +322,7 @@ class GLNode{
 
 		_draw = Function('module','return ' + code)(js.module)
 
-
+		// just run it immediately, once.
 		_draw(owner.gl)
 	}
 }

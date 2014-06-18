@@ -62,13 +62,21 @@ ONE.nodejs_boot_ = function(){
 	function loadFile( obj, module ){
 		var file = module +'.n'
 		try{
-			var code = fs.readFileSync(file)
+			var code = fs.readFileSync(file).toString()
 			if(watcher) watchFile( file )
 		} 
 		catch (e){
 			console.log('Cant open '+file, e)
 			process.exit(-1)
 		}
+		// skip #! header
+		if(code.charCodeAt(0) == 35 &&
+		   code.charCodeAt(1) == 33){
+		   	var pos = 0, len = code.length
+			while(pos < len) if(code.charCodeAt(++pos)==10) break
+			code = code.slice(pos)
+		}
+
 		var ast = obj.parse('->{'+code+'\n}', undefined, undefined, undefined, file, true)
 		ast.getDependencies().forEach(function(file){
 			loadFile( obj, file )
