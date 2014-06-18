@@ -94,7 +94,7 @@ class StaticServer extends HttpServer{
 				root = 'index'
 			}
 			else{
-				root = host.slice(0, host.indexOf('.') - 1)
+				root = host.slice(0, host.indexOf('.'))
 				console.log('first', root)
 			}
 
