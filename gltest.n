@@ -9,7 +9,7 @@ class MyGL extends GLNode{
 	)
 
 	vertex: mesh[]
-	pixel: #red
+	pixel: #orange
 	draw: (){
 		clearAll(#aero)
 		draw(this)

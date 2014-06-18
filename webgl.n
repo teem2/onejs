@@ -52,6 +52,12 @@ class GLNode{
 
 		// alright first we are going to resolve Id's by inlining them from overload
 		Id( n ){
+			// if we are # bla lets resolve the color and inline.
+			if(n.flag == 35){ // is a color
+				vec4 col = this.context.color(n.name)
+				return 'vec4(' + col.x + ','+col.y+','+col.z+',1.0)'
+			}
+
 			// okay so we might have to resolve this thing
 			var resolve = this.resolve_overload(n.name)
 			
@@ -113,38 +119,52 @@ class GLNode{
 			var vtx = ToGLSL.resolve_overload('vertex')
 			if(!vtx.bind) throw new Error('Unexpected vertex type')
 			var vtx_expr = ToGLSL.expand(vtx.bind)
+
+			// now lets start the vertex compile
+			var pix = ToGLSL.resolve_overload('pixel')
+			if(!pix.bind) throw new Error('Unexpected vertex type')
+			var pix_expr = ToGLSL.expand(pix.bind)
+
+			var vary_decl = ''
 			var attr_decl = ''
+			var uni_decl = ''
 			var ret = ''
 
 			// generate attribute declarations
 			for(var name in attribs){
 				var attr = attribs[name]
 				attr_decl += `
-						attribute ${ attr.t.name } ${ name };`
+				attribute ${attr.t.name} ${name};
+				`
 			}
 			// vertex shader
 			var vtx_shader = `
-						precision mediump float;
-						${ attr_decl }
-						void main(){
-							gl_Position = ${ vtx_expr };
-						}
-					`
+				precision mediump float;
+				${ uni_decl }${ attr_decl }${ vary_decl }
+				void main(){
+					gl_Position = vec4(${vtx_expr},0);
+				}
+			`
 			// pixel shader
 			var pix_shader = `
-
-					`
-
+				precision mediump float;
+				${ uni_decl }${ vary_decl }
+				void main(){
+					gl_FragColor = ${pix_expr};
+				}
+			`
 			// we have to get a unique draw ID
 			ret += `
 				var shader = this.${uid}_shader
 				if(!shader){
 					var pix_shader = gl.createShader(${gl.FRAGMENT_SHADER})
-					gl.shaderSource(pix_shader, "${pix_shader.replace(/\n/g,'\\\n')}")
+					gl.shaderSource(pix_shader, "${pix_shader.replace(/\n\t/g,'\\n\\\n\t\t\t')}")
+					gl.compileShader(pix_shader)
 					if (!gl.getShaderParameter(pix_shader, ${gl.COMPILE_STATUS})) throw new Error(gl.getShaderInfoLog(pix_shader))
 
 					var vtx_shader = gl.createShader(${gl.VERTEX_SHADER})
-					gl.shaderSource(vtx_shader, "${vtx_shader.replace(/\n/g,'\\n\\\n')}")
+					gl.shaderSource(vtx_shader, "${vtx_shader.replace(/\n\t/g,'\\n\\\n\t\t\t')}")
+					gl.compileShader(vtx_shader)
 					if (!gl.getShaderParameter(vtx_shader, ${gl.COMPILE_STATUS})) throw new Error(gl.getShaderInfoLog(vtx_shader))
 
 					shader = gl.createProgram()
@@ -153,34 +173,46 @@ class GLNode{
 					gl.linkProgram(shader)
 
 					this.${uid}_shader = shader
-				}
 			`
 
+			for(var name in uniforms) ret += `
+					this.${uid}_ul_${name} = gl.getUniformLocation(shader, "${name}");`
+
+			for(var name in attribs)ret += `
+					this.${uid}_vb_${name} = gl.createBuffer()
+					this.${uid}_al_${name} = gl.getAttribLocation(shader, "${name}");`
+
+			ret += `
+				}
+				gl.useProgram(shader)
+			`
+			var len = 0
 			for(var name in attribs){
 				var attr = attribs[name]
+				var abname = `${uid}_ab_${name}`
+				len = attr.f4.buffer.byteLength / attr.t.size
+				this.context[abname] = attr.f4.buffer
 				ret += `
-
-					`
-			}
-
-			for(var name in attribs){
-				var attr = attribs[name]
-				ret += `
-				var vtx_buf = this.${uid}_vb_${name}
-				if(!vtx_buf) vtx_buf = this.${uid}_vb_${name} = gl.createBuffer()
-				gl.bindBuffer(${gl.ARRAY_BUFFER}, vtx_buf)
-				var arr_buf = this.${uid}_ab_${name}
+				gl.bindBuffer(${gl.ARRAY_BUFFER}, this.${uid}_vb_${name})
+				var arr_buf = this.${abname}
 				if(!arr_buf.clean){
 					gl.bufferData(${gl.ARRAY_BUFFER}, arr_buf, ${gl.STATIC_DRAW})
 					arr_buf.clean = true
 				}
-				gl.vertexAttribPointer(this.${uid}_at_${name}, ${attr.t.slots}, ${gl.FLOAT}, true, ${attr.t.size}, 0)
+				var al = this.${uid}_al_${name}
+				gl.enableVertexAttribArray(al)
+				gl.vertexAttribPointer(al, ${attr.t.slots}, ${gl.FLOAT}, true, ${attr.t.size}, 0)
 				`
 			}
-			// correctly indent the code
-			log(ret.replace(/\n\t\t\t\t/g,'\n'+this.indent))
+			// drawing function
+			ret += `
+				gl.drawArrays(gl.TRIANGLES, 0, ${len})
+			`
 
-			return ''
+			// correctly indent the code
+			ret = ret.replace(/\n\t\t\t\t/g, '\n'+this.indent)
+
+			return ret
 		}
 	}
 
@@ -204,7 +236,11 @@ class GLNode{
 		if(flags.indexOf('js') != -1) out(code)
 
 		// lets eval it in our current space
+		log(code)
+
 		_draw = Function('module','return ' + code)(js.module)
+
+
 		_draw(owner.gl)
 	}
 }
