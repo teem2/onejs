@@ -1492,9 +1492,8 @@ ONE.ast_ = function(){
 						//var marg = this.macroarg[base]
 						//if(marg) base = marg.name
 						var type = this.scope[base]
-
 						var isthis 
-						if(typeof type == 'object' || (isthis = type = this.typemethod)){
+						if(typeof type == 'object' && !type.__class__ || (isthis = type = this.typemethod)){
 							// alright so now we need to walk back down
 							// the parent chain and decode our offset
 							if(!isthis) node = node.parent

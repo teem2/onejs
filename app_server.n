@@ -12,6 +12,9 @@ import htmlscraper
 
 var addr = "0.0.0.0"
 var port = 80
+//var addr = "127.0.0.1"
+//var port = 2001
+
 var fs_root = Path.resolve(__dirname)
 
 class StaticServer extends HttpServer{
@@ -86,28 +89,42 @@ class StaticServer extends HttpServer{
 
 		log(`Reading ${path}`)
 
+		if(path == '/pull'){
+			log('Updating and clearing cache!')
+			child_process.exec('git pull')
+			child_process.exec('rm -rf cache_*')
+            res.writeHead(200)
+            res.end()
+            return
+		}
 		// lets do some quick n dirty packaging
 		if(path == '/'){
 			var host = req.headers.host
 			var root = ''
-			if(host.indexOf('localhost') == 0){
-				root = 'index'
+			if(host.indexOf('localhost') == 0) root = 'index'
+			else root = host.slice(0, host.indexOf('.'))
+			var cache_file = 'cache_'+root
+			var exist = await fs.exists(cache_file)
+			var header = {
+				"Content-Type": "text/html"
+				"Content-encoding":"deflate"
 			}
-			else{
-				root = host.slice(0, host.indexOf('.'))
-				console.log('first', root)
+			if(exist){
+				log('Loading cached '+cache_file)
+				var rstream = fs.createReadStream(cache_file)
+				res.writeHead(200, header)
+				rstream.pipe(res)
+				return
 			}
 
 			// lets fetch the root
 			var pkg = await package('index.html', root)
 			// deflate it
 			var data = await zlib.deflate(pkg)
-			res.writeHead(200) do {
-				"Content-Type": "text/html"
-				"Content-encoding":"deflate"
-			}			
+			res.writeHead(200, header)
 			res.write(data)
 			res.end()
+			fs.writeFile(cache_file, data)
 			return
 		}
 

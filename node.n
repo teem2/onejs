@@ -4,6 +4,7 @@ var _fs = require('fs')
 var _http = require('http')
 var _url = require('url')
 var _zlib = require('zlib')
+var _child_process = require('child_process')
 
 Path = require('path')
 
@@ -15,7 +16,7 @@ function signalify( api ){
 		}
 		if(k in this) return
 
-		this[k] = ( ...args )		 ->Signal.wrap do(sig){
+		this[k] = ( ...args ) ->Signal.wrap do(sig){
 			api[k](...args) do(err, data){
 				if(err) return sig.throw(err)
 				sig.end(data)
@@ -48,10 +49,25 @@ class mime{
 class fs{
 	signalify(_fs)
 	readString(path) -> readFile(path).map do v->v.toString()
+	exists(file) ->Signal.wrap do(sig){
+		_fs.exists(file,function(exist){
+			sig.end(exist)
+		})
+	}
+	createReadStream(file) -> _fs.createReadStream(file)
 }
 
 class zlib{
 	signalify(_zlib)
+}
+
+class child_process{
+	exec(call) -> Signal.wrap do(sig){
+		_child_process.exec(call) do(err, stdout = '', stderr = ''){
+			if(err) sig.throw(err)
+			else sig.end(stdout + stderr)			
+		}
+	}
 }
 
 class HttpServer{
@@ -61,7 +77,7 @@ class HttpServer{
 	init( port, addr ){
 
 		server = _http.createServer() do( req, res ){
-			console.log(req.headers.host)
+			console.log()
 			var url = _url.parse(req.url)
 			var path = url.pathname
 			for(var [match, body] of routes){
