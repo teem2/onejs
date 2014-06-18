@@ -29,8 +29,13 @@ ONE.browser_boot_ = function(){
 		// hide all the props
 		ONE.Base.enumfalse.apply(ONE.Base, Object.keys( ONE.Base ) )
 
+		// check if we are on onejs.io, we load the prefix
+		var type = "index"
+		var m = location.hostname.match(/(.*?)\.onejs\.io/)
+		if(m) type = m[0]
+
 		var m = location.pathname.match(/\/([^\/\.]+)/)
-		var root = location.hash?location.hash.slice(1):(m?m[0]:"index")
+		var root = location.hash?location.hash.slice(1):(m?m[0]:type)
 
 		var obj = ONE.Base.create(ONE,function(){ this.__class__='Root'})
 		ONE.$.http_load(obj, root)
