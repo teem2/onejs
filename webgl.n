@@ -22,6 +22,7 @@ class GLView{
 			canvas.style.height = h
 			canvas.width = w * pixelRatio
 			canvas.height = h * pixelRatio
+			_gl.viewport(0,0,w,h)
 		}
 		window.onresize()
 	}
