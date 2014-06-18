@@ -32,7 +32,7 @@ ONE.browser_boot_ = function(){
 		// check if we are on onejs.io, we load the prefix
 		var type = "index"
 		var m = location.hostname.match(/(.*?)\.onejs\.io/)
-		if(m) type = m[0]
+		if(m) type = m[1]
 
 		var m = location.pathname.match(/\/([^\/\.]+)/)
 		var root = location.hash?location.hash.slice(1):(m?m[0]:type)
