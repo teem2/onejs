@@ -33,7 +33,26 @@ ONE.browser_boot_ = function(){
 		var type = "main"
 		//var m = location.hostname.match(/(.*?)\.onejs\.io/)
 		//if(m) type = m[1]
-		var root = location.hash?location.hash.slice(1):type
+		
+		var root
+		if(location.hash){
+			function reloader(){
+				var rtime = Date.now()
+				var x = new XMLHttpRequest()
+				x.onreadystatechange = function(){
+					if(x.readyState != 4) return
+					if(x.status == 200){
+						return location.reload()
+					}
+					setTimeout(reloader, (Date.now() - rtime) < 1000?500:0)
+				}
+				x.open('GET', "/_reloader_")
+				x.send()
+			}
+			reloader()
+			root = location.hash.slice(1)
+		}
+		else root = type
 
 		var obj = ONE.Base.create(ONE,function(){ this.__class__='Root'})
 		ONE.$.http_load(obj, root)

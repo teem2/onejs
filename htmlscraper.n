@@ -266,12 +266,7 @@ class HTMLScraper extends HTMLParser{
 			var sub = hastag? indent + '\t': indent
 			for(var tag from tags){
 				if(typeof tag == 'string'){
-					// we need to re-indent text-blocks here..
-					// lets scan from the beginning to the first character
-					// reset counter at newline
-					// then strip that beginning part
-					// and replace the re-indent \n.... with \n+sub
-
+					// TODO! reindent textblocks
 					ret += sub + tag + '\n'
 				}
 				else{
