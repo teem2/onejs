@@ -1,3 +1,4 @@
+#js
 //  NodeJS API Classes
 //  Copyright (C) 2014 ONEJS 
 var _fs = require('fs')
@@ -98,7 +99,7 @@ class HttpServer{
 		server = _http.createServer() do( req, res ){
 			var url = _url.parse(req.url)
 			var path = url.pathname
-			console.log('pathname', path)
+			console.log('pathname', path, routes.length)
 			for(var [match, body] of routes){
 				console.log(typeof match, match === path)
 				if(typeof match == 'string' and match === path) break 
