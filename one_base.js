@@ -772,25 +772,48 @@ ONE.base_ = function(){
 				proto = Object.getPrototypeOf(proto)
 			}
 		}
+		
+		// default allows a throw to be transformed to a value
+		this.default = function(onDefault){
+			if(onDefault in this) throw new Error('Cannot overload defaults')
+			this.onDefault = onDefault
+			return this
+		}
+
+		// default allows a throw to be transformed
+		this.catch = function(onError){
+			if(onError){
+				if(!this.hasOwnProperty('onError')) this.onError = onError
+				else if(!Array.isArray(this.onError)) this.onError = [this.onError, onError]
+				else this.onError.push( onError )
+			}
+			return this
+		}
 
 		// throw and exception in the signal
-		this.throw = function(error){
+		this.throw = function(error, next){
+
 			if(this.ended) throw new Error('Cant throw on an ended signal')
+			if(this.onDefault) return this.end( this.onDefault(error) )
+
 			this.ended = true
 			this.error = error
 			// call error
 			var proto = this 
 			var owner = this.owner
 			var s
+			var handled
 			while(proto && (s = proto.onError)){
  				if(proto.hasOwnProperty('onError')){
-					if(!Array.isArray(s)) s.call(owner, error, this)
+ 					handled = true
+					if(!Array.isArray(s)) s.call(owner, error, next, this)
 					else for(var i = 0, l = s.length; i < l; i++){
-						s[i].call(owner, error, thi )
+						s[i].call(owner, error, next, this)
 					}
 				}
 				proto = Object.getPrototypeOf(proto)
 			}			
+			return handled
 		}
 	}
 
@@ -864,12 +887,14 @@ ONE._await = function( generator, bound, _catch ){
 		var iter = generator.apply(this, arguments)
 		return ONE.Signal.wrap(function(sig){
 			function error(e){
+				// throw forward
 				sig.throw(e)
-				iter.throw(e)
+				// lets not throw in the iterator for now
+				//if(!ret) iter.throw(e)
 			}
 			function next( value ){
 				var iterval = iter.next( value )
-				if(iterval.done === false){
+				if(iterval.done === false){ // we have a promise
 					iterval.value.then( next, error )
 				}
 				else{

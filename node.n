@@ -77,7 +77,6 @@ class HttpServer{
 	init( port, addr ){
 
 		server = _http.createServer() do( req, res ){
-			console.log()
 			var url = _url.parse(req.url)
 			var path = url.pathname
 			for(var [match, body] of routes){

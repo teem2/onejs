@@ -86,8 +86,11 @@ function nodejs(){
 	console.log("Listening on "+addr+":"+port)
 	function staticServe(req, res){
 		var name = url.parse(req.url).pathname
+
+		// if we fetch /, look at the domain to serve up a single gzipped packaged file
 		if(name == '/') name = '/index.html'
 		var fullpath = path.join(root, name)
+
 		if(name == "/_reloader_"){
 			// set a timer for 15 seconds
 			setTimeout(function(){
@@ -96,7 +99,8 @@ function nodejs(){
 			},15000)
 			watchRes.push(res)
 			return
-		}        
+		}
+
 		fs.exists(fullpath, function(x) {
 			if(!x){
 				console.log('File not found:'+fullpath)

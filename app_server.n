@@ -10,10 +10,10 @@
 import node
 import htmlscraper
 
-var addr = "0.0.0.0"
-var port = 80
-//var addr = "127.0.0.1"
-//var port = 2001
+//var addr = "0.0.0.0"
+//var port = 80
+var addr = "127.0.0.1"
+var port = 2001
 
 var fs_root = Path.resolve(__dirname)
 
@@ -63,15 +63,10 @@ class StaticServer extends HttpServer{
 				await fetch(dep)
 			}
 		}
-		// lets fetch our app root
-		try{
-			await fetch(root)
-		}
-		catch(e){
-			return ''
-		}
+		await fetch(root)
+
 		// add new tags 
-		for(var file in onejs) tree.html.head.appendChild on{
+		for(var file in onejs) tree.html.head.appendChild() on{
 			tagname:'script'
 			$type: 'text/onejs'
 			$id: file == root ? 'main' : file
@@ -122,7 +117,12 @@ class StaticServer extends HttpServer{
 			}
 
 			// lets fetch the root
-			var pkg = await package('index.html', root)
+			var pkg = await package('index.html', root).catch on->{
+				console.log("Exception!")
+				res.writeHead(501)
+				res.end()
+			}
+
 			// deflate it
 			var data = await zlib.deflate(pkg)
 			res.writeHead(200, header)
