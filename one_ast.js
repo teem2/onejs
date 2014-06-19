@@ -1814,8 +1814,8 @@ ONE.ast_ = function(){
 				var iter = this.alloc_tmpvar(n)
 				
 				var ret = 'for('
-				ret += iter+'=ONE.iterator(' + this.expand(n.right, n) + '),'+result+'=null;' +
-						iter+'&&(!'+result+'||!'+result+'.done);){' + this.newline
+				ret += iter+'=ONE.iterator(' + this.expand(n.right, n) + '),'+result+'=null;ONE.trace(' +
+						iter+'&&(!'+result+'||!'+result+'.done));){' + this.newline
 
 				var od = this.depth
 				this.depth += this.indent 
