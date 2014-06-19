@@ -100,7 +100,7 @@ class HttpServer{
 			var path = url.pathname
 			console.log('pathname', path)
 			for(var [match, body] of routes){
-				console.log(typeof match, match, path)
+				console.log(typeof match, match === path)
 				if(typeof match == 'string' and match === path) break 
 				else if(path.match(match)) break
 			}
