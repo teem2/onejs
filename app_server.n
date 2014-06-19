@@ -10,7 +10,7 @@
 import node
 import htmlscraper
 
-var live = true
+var live = 1
 if(live){
 	var addr = "0.0.0.0"
 	var port = 80
@@ -23,22 +23,6 @@ else{
 var fs_root = Path.resolve(__dirname)
 
 class StaticServer extends HttpServer{
-	// when you assign to something you must make it explicit
-	// when you read from something you can omit it.
-	watch( path ){
-
-		files ?= {}
-		if(files[path]) return
-
-		files[path] = fs.watchFile(path).then 
-		do(){
-			log("---- " + path + " changed, sending reload to frontend ----" )
-			for(var res of pending){
-				res.writeHead(200)
-				res.end('Reload')
-			}
-		}
-	}
 
 	// lets package our app
 	package( file, root ){
@@ -81,74 +65,88 @@ class StaticServer extends HttpServer{
 		return tree.toString()
 	}
 
-	route("/_reloader_") 
-	do( req, res ){
+	route("/_reloader_") do( req, res ){
 		(pending ?= []).push(res)
 	}
 
-	route(/.*/) 
-	do( req, res ){
+	route("/pull") do( req, res ){
+		log('Updating and clearing cache!')
+		child_process.exec('git pull')
+		child_process.exec('rm -rf cache_*')
+		res.writeHead(200)
+		res.end()
+	}
+
+	if(live) route("/") do( req, res ){
+		var host = req.headers.host
+		var root = ''
+		if(host.indexOf('localhost') == 0) root = 'index'
+
+		else root = host.slice(0, host.indexOf('.'))
+
+		var cache_file = 'cache_'+root
+		var exist = await fs.exists(cache_file)
+		var header = {
+			"Content-Type": "text/html"
+			"Content-encoding":"deflate"
+		}
+		if(exist){
+			log('Loading cached ' + cache_file)
+			var stream = fs.createReadStream(cache_file)
+			res.writeHead(200, header)
+			stream.pipe(res)
+			return
+		}
+
+		// lets fetch the root
+		var pkg = await package('index.html', root).catch do(){
+			console.log("Exception!")
+			res.writeHead(501)
+			res.end()
+		}
+
+		// deflate it
+		var data = await zlib.deflate(pkg)
+		res.writeHead(200, header)
+		res.write(data)
+		res.end()
+		fs.writeFile(cache_file, data)
+	}
+
+	route(/.*/) do( req, res ){
 		var path = req.url.pathname
-		if(!live && path == '/') path = 'index.html'
+		if(path == '/') path = 'index.html'
 		var fullpath = Path.join(fs_root, path)
 
 		log(`Reading ${path}`)
 
-		if(path == '/pull'){
-			log('Updating and clearing cache!')
-			child_process.exec('git pull')
-			child_process.exec('rm -rf cache_*')
-			res.writeHead(200)
-			res.end()
-			return
-		}
-		// lets do some quick n dirty packaging
-		if(path == '/'){
-			var host = req.headers.host
-			var root = ''
-			if(host.indexOf('localhost') == 0) root = 'index'
-			else root = host.slice(0, host.indexOf('.'))
-			var cache_file = 'cache_'+root
-			var exist = await fs.exists(cache_file)
-			var header = {
-				"Content-Type": "text/html"
-				"Content-encoding":"deflate"
-			}
-			if(exist){
-				log('Loading cached ' + cache_file)
-				var stream = fs.createReadStream(cache_file)
-				res.writeHead(200, header)
-				stream.pipe(res)
-				return
-			}
-
-			// lets fetch the root
-			var pkg = await package('index.html', root).catch do(){
-				console.log("Exception!")
-				res.writeHead(501)
-				res.end()
-			}
-
-			// deflate it
-			var data = await zlib.deflate(pkg)
-			res.writeHead(200, header)
-			res.write(data)
-			res.end()
-			fs.writeFile(cache_file, data)
-			return
-		}
-
-		// read the file
-		var data = await fs.readFile(fullpath).catch do(){
-			log(`File not found ${fullpath}`)
+		// read and return the file
+		var exist = await fs.exists(fullpath)
+		if(!exist){
 			res.writeHead(404)
 			res.end('File not found')
+			return
 		}
 
-		res.writeHead(200) do {"Content-Type": mime.fromFilename(fullpath)}
-		res.write(data)
-		res.end()
+		var stream = fs.createReadStream(fullpath)
+		res.writeHead(200, {"Content-Type": mime.fromFilename(fullpath)})
+		stream.pipe(res)
 		watch(fullpath)
+	}
+
+	watch( path ){
+
+		files ?= {}
+		if(files[path]) return
+
+		files[path] = fs.watchFileFast(path) do(){
+			log("---- " + path + " changed, sending reload to frontend ----" )
+			for(var res of pending){
+				res.writeHead(200)
+				res.end('Reload')
+			}
+			pending = []
+		}
 	}
 
 	init( port, addr ){

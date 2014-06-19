@@ -1,3 +1,4 @@
+#js
 //  NodeJS API Classes
 //  Copyright (C) 2014 ONEJS 
 var _fs = require('fs')
@@ -25,6 +26,34 @@ function signalify( api ){
 	}
 }
 
+class fs{
+	signalify(_fs)
+	exists(file) ->Signal.wrap do(sig){
+		_fs.exists(file,function(exist){
+			sig.end(exist)
+		})
+	}
+	createReadStream(file) -> _fs.createReadStream(file)
+
+	// fast file watcher
+	var stats = {}
+	var delta = 0
+	var watch = 'mtime'
+	watchFileFast(filename, callback){
+		return setInterval(function(){
+			var stat = await fs.stat(filename)
+			var diff = 0
+			if(stat[watch].toString() != stats[filename]){ 
+				stats[filename] = stat[watch].toString()
+				if(Date.now() - delta > 2000){
+					delta = Date.now()
+					callback()
+				}
+			}
+		},50)
+	}
+}
+
 class mime{
 
 	htm  = "text/html"
@@ -46,16 +75,7 @@ class mime{
 	}
 }
 
-class fs{
-	signalify(_fs)
-	readString(path) -> readFile(path).map do v->v.toString()
-	exists(file) ->Signal.wrap do(sig){
-		_fs.exists(file,function(exist){
-			sig.end(exist)
-		})
-	}
-	createReadStream(file) -> _fs.createReadStream(file)
-}
+
 
 class zlib{
 	signalify(_zlib)

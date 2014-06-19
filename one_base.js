@@ -910,6 +910,7 @@ ONE._await = function( generator, bound, _catch ){
 
 ONE.iterator = function( what ){
 	// check what it is.
+	if(what === null || what === undefined) return
 	if(typeof what.next == 'function') return what
 	if(typeof what != 'object') throw new Error('Cannot iterate over object')
 
