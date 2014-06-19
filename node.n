@@ -98,6 +98,7 @@ class HttpServer{
 		server = _http.createServer() do( req, res ){
 			var url = _url.parse(req.url)
 			var path = url.pathname
+			console.log('pathname', path)
 			for(var [match, body] of routes){
 				if(typeof match == 'string' and match == path) break 
 				else if(path.match(match)) break
