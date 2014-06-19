@@ -10,10 +10,10 @@
 import node
 import htmlscraper
 
-//var addr = "0.0.0.0"
-//var port = 80
-var addr = "127.0.0.1"
-var port = 2001
+var addr = "0.0.0.0"
+var port = 80
+//var addr = "127.0.0.1"
+//var port = 2001
 
 var fs_root = Path.resolve(__dirname)
 
