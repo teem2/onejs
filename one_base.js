@@ -925,9 +925,10 @@ ONE.iterator = function( what ){
 	return {
 		next:function(){
 			this.index++
-			console.log(this.index)
 			if(this.index >= this.length - 1) this.done = true
 			this.value = what[this.index]
+			console.log(this.index, this.done)
+
 			return this
 		},
 		done: false,
