@@ -8,6 +8,20 @@ window.ONE = {}
 ONE.browser_boot_ = function(){
 
 	window.addEventListener("load", function(){
+		function reloader(){
+			var rtime = Date.now()
+			var x = new XMLHttpRequest()
+			x.onreadystatechange = function(){
+				if(x.readyState != 4) return
+				if(x.status == 200){
+					return location.reload()
+				}
+				setTimeout(reloader, (Date.now() - rtime) < 1000?500:0)
+			}
+			x.open('GET', "/_reloader_")
+			x.send()
+		}
+
 		var dt = Date.now()
 		// make self a class
 		ONE.base_.apply( ONE )
@@ -36,19 +50,6 @@ ONE.browser_boot_ = function(){
 		
 		var root
 		if(location.hash){
-			function reloader(){
-				var rtime = Date.now()
-				var x = new XMLHttpRequest()
-				x.onreadystatechange = function(){
-					if(x.readyState != 4) return
-					if(x.status == 200){
-						return location.reload()
-					}
-					setTimeout(reloader, (Date.now() - rtime) < 1000?500:0)
-				}
-				x.open('GET', "/_reloader_")
-				x.send()
-			}
 			reloader()
 			root = location.hash.slice(1)
 		}

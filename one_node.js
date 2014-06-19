@@ -77,7 +77,7 @@ ONE.nodejs_boot_ = function(){
 			code = code.slice(pos)
 		}
 
-		var ast = obj.parse('->{'+code+'\n}', undefined, undefined, undefined, file, true)
+		var ast = obj.parse('->{'+code+'\n}', file)
 		ast.getDependencies().forEach(function(file){
 			loadFile( obj, file )
 		})
