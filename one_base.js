@@ -908,11 +908,6 @@ ONE._await = function( generator, bound, _catch ){
 	return ret
 }
 
-ONE.tracer = function( what ){
-	console.log('trace', what)
-	return what
-}
-
 ONE.iterator = function( what ){
 	// check what it is.
 	if(what === null || what === undefined) return
@@ -932,8 +927,6 @@ ONE.iterator = function( what ){
 			this.index++
 			if(this.index >= this.length - 1) this.done = true
 			this.value = what[this.index]
-			console.log(this.index, this.done, this.length)
-
 			return this
 		},
 		done: false,
