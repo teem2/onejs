@@ -10,10 +10,15 @@
 import node
 import htmlscraper
 
-var addr = "0.0.0.0"
-var port = 80
-//var addr = "127.0.0.1"
-//var port = 2001
+var live = true
+if(live){
+	var addr = "0.0.0.0"
+	var port = 80
+}
+else{
+	var addr = "127.0.0.1"
+	var port = 2001
+}
 
 var fs_root = Path.resolve(__dirname)
 
@@ -66,7 +71,7 @@ class StaticServer extends HttpServer{
 		await fetch(root)
 
 		// add new tags 
-		for(var file in onejs) tree.html.head.appendChild() on{
+		for(var file in onejs) tree.html.head.appendChild() do {
 			tagname:'script'
 			$type: 'text/onejs'
 			$id: file == root ? 'main' : file
@@ -84,6 +89,7 @@ class StaticServer extends HttpServer{
 	route(/.*/) 
 	do( req, res ){
 		var path = req.url.pathname
+		if(!live && path == '/') path = 'index.html'
 		var fullpath = Path.join(fs_root, path)
 
 		log(`Reading ${path}`)
@@ -92,9 +98,9 @@ class StaticServer extends HttpServer{
 			log('Updating and clearing cache!')
 			child_process.exec('git pull')
 			child_process.exec('rm -rf cache_*')
-            res.writeHead(200)
-            res.end()
-            return
+			res.writeHead(200)
+			res.end()
+			return
 		}
 		// lets do some quick n dirty packaging
 		if(path == '/'){
@@ -109,15 +115,15 @@ class StaticServer extends HttpServer{
 				"Content-encoding":"deflate"
 			}
 			if(exist){
-				log('Loading cached '+cache_file)
-				var rstream = fs.createReadStream(cache_file)
+				log('Loading cached ' + cache_file)
+				var stream = fs.createReadStream(cache_file)
 				res.writeHead(200, header)
-				rstream.pipe(res)
+				stream.pipe(res)
 				return
 			}
 
 			// lets fetch the root
-			var pkg = await package('index.html', root).catch on->{
+			var pkg = await package('index.html', root).catch do(){
 				console.log("Exception!")
 				res.writeHead(501)
 				res.end()
@@ -132,19 +138,17 @@ class StaticServer extends HttpServer{
 			return
 		}
 
-		// flat read the crap
-		fs.readFile(fullpath).then
-		do(data){
-			res.writeHead(200) do {"Content-Type": mime.fromFilename(fullpath)}
-			res.write(data)
-			res.end()
-			watch(fullpath)
-		}
-		catch(e){
+		// read the file
+		var data = await fs.readFile(fullpath).catch do(){
 			log(`File not found ${fullpath}`)
 			res.writeHead(404)
 			res.end('File not found')
 		}
+
+		res.writeHead(200) do {"Content-Type": mime.fromFilename(fullpath)}
+		res.write(data)
+		res.end()
+		watch(fullpath)
 	}
 
 	init( port, addr ){
