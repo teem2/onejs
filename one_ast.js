@@ -1814,7 +1814,7 @@ ONE.ast_ = function(){
 				var iter = this.alloc_tmpvar(n)
 				
 				var ret = 'for('
-				ret += iter+'=ONE.iterator(' + this.expand(n.right, n) + '),'+result+'=null;ONE.trace(' +
+				ret += iter+'=ONE.iterator(' + this.expand(n.right, n) + '),'+result+'=null;ONE.tracer(' +
 						iter+'&&(!'+result+'||!'+result+'.done));){' + this.newline
 
 				var od = this.depth
