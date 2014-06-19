@@ -41,15 +41,15 @@ class StaticServer extends HttpServer{
 		var tree = HTMLScraper.parse(html)
 
 		// lets inline each script tag
-		for(var v from tree.html.head.script){
-			if(v.$src){
-				if(v.$src == 'reloader.js'){
-					delete v.$src
+		for(var script from tree.html.head.script){
+			if(script.$src){
+				if(script.$src == 'reloader.js'){
+					delete script.$src
 					continue
 				}
-				var file = await fs.readFile(v.$src)
-				delete v.$src
-				v.text = file.toString()
+				var file = await fs.readFile(script.$src)
+				delete script.$src
+				script.text = file.toString()
 			}
 		}
 
@@ -64,8 +64,12 @@ class StaticServer extends HttpServer{
 			}
 		}
 		// lets fetch our app root
-		await fetch(root)
-
+		try{
+			await fetch(root)
+		}
+		catch(e){
+			return ''
+		}
 		// add new tags 
 		for(var file in onejs) tree.html.head.appendChild on{
 			tagname:'script'
