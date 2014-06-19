@@ -927,7 +927,7 @@ ONE.iterator = function( what ){
 			this.index++
 			if(this.index >= this.length - 1) this.done = true
 			this.value = what[this.index]
-			console.log(this.index, this.done)
+			console.log(this.index, this.done, this.length)
 
 			return this
 		},
