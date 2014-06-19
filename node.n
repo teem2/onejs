@@ -101,11 +101,9 @@ class HttpServer{
 			var path = url.pathname
 			console.log('pathname', path, routes.length)
 			for(var [match, body] of routes){
-				console.log(typeof match, match === path)
 				if(typeof match == 'string' && match === path) break 
 				else if(path.match(match)) break
 			}
-			console.log(routes.length, match, path)
 			if(!body){
 				res.writeHead(404)
 				res.end("no route found")

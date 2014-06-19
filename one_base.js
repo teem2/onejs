@@ -908,6 +908,11 @@ ONE._await = function( generator, bound, _catch ){
 	return ret
 }
 
+ONE.trace = function( what ){
+	console.log('trace', what)
+	return what
+}
+
 ONE.iterator = function( what ){
 	// check what it is.
 	if(what === null || what === undefined) return
