@@ -14,6 +14,7 @@ ONE.browser_boot_ = function(){
 			x.onreadystatechange = function(){
 				if(x.readyState != 4) return
 				if(x.status == 200){
+					//console.clear()
 					return location.reload()
 				}
 				setTimeout(reloader, (Date.now() - rtime) < 1000?500:0)
@@ -47,17 +48,19 @@ ONE.browser_boot_ = function(){
 		var type = "main"
 		//var m = location.hostname.match(/(.*?)\.onejs\.io/)
 		//if(m) type = m[1]
-		
+
 		var root
 		if(location.hash){
 			reloader()
 			root = location.hash.slice(1)
+			var hack = location.hash.indexOf('?')
+			if(hack !== -1) root = root.slice(0,hack-1)
 		}
 		else root = type
 
 		var obj = ONE.Base.create(ONE,function(){ this.__class__='Root'})
 		ONE.$.http_load(obj, root)
-		
+
 		//console.log("profile init "+(Date.now() - dt)+'ms')
 	})
 

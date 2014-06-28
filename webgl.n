@@ -3,17 +3,19 @@ import math
 class GLView{
 	init( parent ){
 		if(!parent) return
-
+		
 		pixelRatio = window.devicePixelRatio
 		canvas = document.createElement("canvas")
 		parent.appendChild(canvas)
-
-		gl = canvas.getContext('webgl', {
-			antialias:false, 
+		gl = canvas.getContext('webgl',{
+			alpha: false,
+			depth: true,
+			stencil: false,
+			antialias: false,
 			premultipliedAlpha: false,
-			alpha: false, 
-			preserveDrawingBuffer: true 
+			preserveDrawingBuffer: true
 		})
+		
 		var _gl = gl
 		window.onresize = =>{
 			var w = parent.offsetWidth
@@ -28,10 +30,10 @@ class GLView{
 	}
 }
 
-vec3Rect(x,y,w,h){
+vec3Rect( x, y, w, h, z = 0 ){
 	return vec3[6](
-		x,y,0, x+w,y,0, x,y+h,0
-		x+w,y,0, x+w,y+h,0, x,y+h,0
+		x,y,z,   x+w,y,z,   x,y+h,z
+		x+w,y,z, x+w,y+h,z, x,y+h,z
 	)
 }
 
@@ -45,175 +47,277 @@ class GLNode{
 
 	type: triangle
 
-	class ToGLSL extends AST.ToCode{
-		enum variables{
-			gl_PointCoord, gl_FrontFacing, gl_FragCoord, gl_Position
-			gl_PointSize, gl_ClipDistance, gl_VertexID, gl_InstanceID
-			gl_MaxVertexAttribs, gl_MaxVertexUniformVectors
-			gl_MaxVaryingVectors, gl_MaxVertexTextureImageUnits
-			gl_MaxCombinedTextureImageUnits, gl_MaxTextureImageUnits
-			gl_MaxFragmentUniformVectors, gl_MaxDrawBuffers
-		}	
+	enum glsl_variables{
+		gl_PointCoord, gl_FrontFacing, gl_FragCoord, gl_Position
+		gl_PointSize, gl_ClipDistance, gl_VertexID, gl_InstanceID
+		gl_MaxVertexAttribs, gl_MaxVertexUniformVectors
+		gl_MaxVaryingVectors, gl_MaxVertexTextureImageUnits
+		gl_MaxCombinedTextureImageUnits, gl_MaxTextureImageUnits
+		gl_MaxFragmentUniformVectors, gl_MaxDrawBuffers
+	}
 
-		enum types{
-			half, float, double, short, long
-			mat2, mat3, mat4
-			vec2, vec3, vec4
-			ivec2, ivec3, ivec4
-			bvec2, bvec3, bvec4
-			hvec2, hvec3, hvec4
-			dvec2, dvec3, dvec4
-			fvec2, fvec3, fvec4
-			sampler2D
-			samplerCube
+	enum glsl_types{
+		half, float, double, short, long
+		mat2, mat3, mat4
+		vec2, vec3, vec4
+		ivec2, ivec3, ivec4
+		bvec2, bvec3, bvec4
+		hvec2, hvec3, hvec4
+		dvec2, dvec3, dvec4
+		fvec2, fvec3, fvec4
+		sampler2D
+		samplerCube
+	}
+
+	enum glsl_functions{
+		sizeof, radians, degrees
+		sin, cos, tan
+		asin, acos, atan
+		pow, exp, log, exp2, log2
+		sqrt, inversesqrt
+		abs, sign, floor, ceil, fract
+		mod, min, max, clamp
+		mix, step, smoothstep
+		length, distance
+		dot, cross, normalize
+		faceforward, reflect, refract
+		matrixCompMult
+		lessThan, lessThanEqual
+		greaterThan, greaterThanEqual
+		equal, notEqual
+		any, all, not
+		texture2DLod
+		texture2DProjLod
+		textureCubeLod
+		texture2D
+		texture2DProj
+		textureCube
+	}
+
+	class DepTraceGLSL extends AST.Walk{
+		// causes dependency marks to travel up the tree
+		// uniform has mark 1 
+		// attribute has mark 2
+		// pixel has mark 3		
+		All( n ){
+			// lets propagate up our mark to our parent
+			var parent = n.parent
+			var nmark = n.mark
+			if(!nmark || !parent) return
+			var pmark = parent.mark
+			if(!pmark) parent.mark = nmark
+			else if(pmark < nmark) parent.mark = nmark 
 		}
 
-		enum functions{
-			sizeof, radians, degrees
-			sin, cos, tan
-			asin, acos, atan
-			pow, exp, log, exp2, log2
-			sqrt, inversesqrt
-			abs, sign, floor, ceil, fract
-			mod, min, max, clamp
-			mix, step, smoothstep
-			length, distance
-			dot, cross, normalize
-			faceforward, reflect, refract
-			matrixCompMult
-			lessThan, lessThanEqual
-			greaterThan, greaterThanEqual
-			equal, notEqual
-			any, all, not
-			texture2DLod
-			texture2DProjLod
-			textureCubeLod
-			texture2D
-			texture2DProj
-			textureCube
+		Do( n, parent ){
+			n.parent = parent
+			AST.Walk::Do(n, parent)
+			// fuse mark properly
+			if(n.arg.mark > n.call.mark) n.call.mark = n.arg.mark
 		}
 
-		// we have to resolve a property
-		resolve_overload( prop ){
-			var len = overloads.length
-			for(var i = len-1; i >= 0; i--){
-				var found = overloads[i][prop]
-				if(found !== undefined){
-					return found
+		Id( n, parent ){
+			n.parent = parent
+			var name = n.name
+			if(n.flag == 35) return // is color
+			if(name in glsl_functions || name in glsl_variables){ 
+				if(name == 'gl_FragCoord') n.mark = 3
+				return
+			}
+			// lets resolve name
+			var prop = context[name]
+			if(prop === undefined) throw new Error('Cannot resolve ' + name)
+			if(typeof prop == 'object'){
+				if(!prop.bind) throw new Error('invalid property ' + name)
+				// we have a bind
+				// check if its a value, or a fully static type constructor
+				if(prop.bind.type == 'Value'){
+					if(prop.bind.kind != 'num') throw new Error('invalid type in DepTraceGLSL ' + prop.bind.kind)
+					n.mark = prop.bind.mark = 1
+					prop.bind.infer = 'float'
+				}
+				else {
+					//!TODO check type constructor
+					// otherwise we forward into the property
+					this[prop.bind.type](prop.bind)
 				}
 			}
+			if(n.kind && n.kind.name == 'pixel'){
+				n.mark = 3	// mark us as pixel			
+			}
+			All(n)
+		}
+		
+		Index( n, parent ){
+			n.parent = parent
+			if(!n.index){ // we are an attribute
+				n.mark = 2				
+				return All(n)
+			}
+			return AST.Walk::Index(n)
+		}
+		
+		Key( n, parent ){
+			n.parent = parent
+			var objname = n.object.name
+			
+			if(objname in glsl_variables){
+				if(objname == 'gl_FragCoord') n.mark = 3
+				return All(n)
+			}
+			// okay! we have to check if object
+			return AST.Walk::Key(n)
+		}
+	}
+	
+	// generate the uniform computation JS
+	class GenUniformJS extends AST.ToCode{
+		
+	}
+	
+	// generate JS
+	class GenGLSL extends AST.ToCode{
+
+		// otherwise if we are not 'pixel' we need to spit out varyings.
+		expand( n, parent ){
+			//log(n.type)
+			if(n.mark == 1){ // we are a uniform dependent expression
+				// the problem is, Do needs to fuse its arg mark
+				// into its call
+				log(n.toDump())
+			}
+			// output vertex varying
+			if(pixel && n.mark == 2){
+				//log('here', n.toDump())
+			}
+			// otherwise output self
+			return AST.ToCode::expand(n, parent)
 		}
 
-		// alright first we are going to resolve Id's by inlining them from overload
+		// Id resolver
 		Id( n ){
 			var name = n.name
 			// if we are # bla lets resolve the color and inline.
 			if(n.flag == 35){ // is a color
-				vec4 col = this.context.color(name)
-				return 'vec4(' + col.x + ','+col.y+','+col.z+',1.0)'
+				vec4 col = context.color(name)
+				return 'vec4(' + col.x + ',' + col.y + ',' + col.z + ',1.0)'
 			}
-
-			if(name in functions || name in variables){
+			
+			if(name in glsl_functions || name in glsl_variables){
 				return n.name
 			}
-
-			// okay so we might have to resolve this thing
-			var resolve = this.resolve_overload(n.name)
 			
-			if(!resolve) throw new Error("cannot resolve "+n.name)
-
+			var resolve = context[n.name]
+			if(!resolve) throw new Error("cannot resolve " + n.name)
 			// allright we have the type
-			if(resolve.bind) return this.expand(resolve.bind, n)
+			// if athe resolve.bind is a single value, or struct constructor
+			// we will bind to it as a uniform.
+			if(resolve.bind) return expand(resolve.bind, n)
 			if(typeof resolve.t != 'object') throw new Error('dont know what to do with resolve target')
-
+			
 			return ''
 		}
-
+		
 		// resolve index
 		Index( n ){
 			// so we got a bla[] 
 			if(!n.index){
 				if(n.object.type != 'Id') throw new Error('dont support property attributes')
-
+				
 				var name = n.object.name
-				var obj = this.resolve_overload(name)
-
-				if(!obj) throw new Error('Cannot find vertex attribute[] '+name)
-
+				var obj = context[name]
+				
+				if(!obj) throw new Error('Cannot find vertex attribute[] ' + name)
+				
 				var attr = attribs[name]
 				if(attr && attr !== obj) throw new Error('Cannot redefine vertex attribute[] '+name)
-
+				
 				attribs[name] = obj
-
+				
 				return name // return name 
 			}
-
 			return AST.ToCode::Index(n)
 		}
-
+		
 		// we have to resolve Id's 
 		Key( n ){
 			var objname = n.object.name
-			if(objname in variables){
-				return objname+'.'+n.key.name
+			
+			if(objname in glsl_variables){
+				return objname + '.' + n.key.name
 			}
+			
 			// okay! we have to check if object
 			return AST.ToCode::Key(n)
 		}
-
-		Call = function( n, extra, pre ){
-			var fn = this.expand(n.fn, n)
+		
+		// implementation of Call that deals with extra and pre args
+		Call( n ){
+			var fn = expand(n.fn, n)
 			var fn_t = n.fn.type
 			if(fn_t == 'List' || fn_t == 'Logic' || fn_t == 'Condition') 
 				fn = '(' + fn + ')'
 			var arg = ''
-			if(pre) arg += this.list(pre, n)
+			if(n.first_args) arg += list(n.first_args, n)
 			if(n.args && n.args.length){
 				if(arg) arg += ', '
-				arg += this.list(n.args, n)
+				arg += list(n.args, n)
 			}
-			if(extra){
+			if(n.last_args){
 				if(arg) arg += ', '
-				arg += this.list(extra, n)
+				arg += list(n.last_args, n)
 			}
 			return fn + '(' + arg + ')'
 		}
-
+		
 		Do = AST.ToJS.Do
 	}
 
-	class ToDrawJS extends AST.ToJS{
-
-		_compile_draw( n ){
-			if(!n.args.length) throw new Error('draw needs args')
+	class GenDrawJS extends AST.ToJS{
 		
+		_compile_draw( n ){
+
 			var uid = 'd' + this.uid++
+			
+			GenGLSL.module = module
+			GenGLSL.context = context
+			var attribs = GenGLSL.attribs = Object.create(null)
+			
+			DepTraceGLSL.context = context
+			
+			var pix = context.pixel
+			if(!pix.bind) throw new Error('Unexpected pixel type')
+			
+			// call the dependency trace on our expression
+			DepTraceGLSL.pixel = 1
+			DepTraceGLSL[pix.bind.type]( pix.bind )
+			
+			//log(pix.bind.toDump())
 
-			var ovl = ToGLSL.overloads = []
-			for(var arg from n.args){
-				if(arg.type == 'This') ovl.push(this.context)
-				else ovl.push(this[arg.name])
-			}
+			// the run the code generator
+			var pix_uniforms = GenGLSL.uniforms = []
+			var pix_varyings = GenGLSL.varyings = []
+			var pix_expr = GenGLSL.expand(pix.bind)
+			
+			// serialize uniforms and varyings
 
-			ToGLSL.module = module
-			ToGLSL.context = context
-			var attribs = ToGLSL.attribs = Object.create(null)
-
+			
 			// compile vertex shader
-			var vtx = ToGLSL.resolve_overload('vertex')
+			var vtx = context.vertex
 			if(!vtx.bind) throw new Error('Unexpected vertex type')
-			var vtx_expr = ToGLSL.expand(vtx.bind)
 
-			// compile pixel shader
-			var pix = ToGLSL.resolve_overload('pixel')
-			if(!pix.bind) throw new Error('Unexpected vertex type')
-			var pix_expr = ToGLSL.expand(pix.bind)
+			DepTraceGLSL.pixel = 0
+			DepTraceGLSL[vtx.bind.type](vtx.bind)
+			
+			log(vtx.bind.toDump())
 
+			var vtx_expr = GenGLSL.expand(vtx.bind)
+			
 			var vary_decl = ''
 			var attr_decl = ''
 			var uni_decl = ''
 			var ret = ''
-
+			
 			// generate attribute declarations
 			for(var name in attribs){
 				var attr = attribs[name]
@@ -245,27 +349,27 @@ class GLNode{
 					gl.shaderSource(pix_shader, "${pix_shader.replace(/\n\t/g,'\\n\\\n\t\t\t')}")
 					gl.compileShader(pix_shader)
 					if (!gl.getShaderParameter(pix_shader, ${gl.COMPILE_STATUS})) throw new Error(gl.getShaderInfoLog(pix_shader))
-
+					
 					var vtx_shader = gl.createShader(${gl.VERTEX_SHADER})
 					gl.shaderSource(vtx_shader, "${vtx_shader.replace(/\n\t/g,'\\n\\\n\t\t\t')}")
 					gl.compileShader(vtx_shader)
 					if (!gl.getShaderParameter(vtx_shader, ${gl.COMPILE_STATUS})) throw new Error(gl.getShaderInfoLog(vtx_shader))
-
+					
 					shader = gl.createProgram()
 					gl.attachShader(shader, vtx_shader)
 					gl.attachShader(shader, pix_shader)
 					gl.linkProgram(shader)
-
+					
 					this.${uid}_shader = shader
 			`
-
+		
 			for(var name in uniforms) ret += `
 					this.${uid}_ul_${name} = gl.getUniformLocation(shader, "${name}");`
-
+			
 			for(var name in attribs)ret += `
 					this.${uid}_vb_${name} = gl.createBuffer()
 					this.${uid}_al_${name} = gl.getAttribLocation(shader, "${name}");`
-
+			
 			ret += `
 				}
 				gl.useProgram(shader)
@@ -302,7 +406,7 @@ class GLNode{
 		// we have to compile the draw signal
 		// alright lets stringify draw
 		// so lets stringify it.
-		var js = ToDrawJS
+		var js = GenDrawJS
 		var ast = draw.bind
 		// make a fresh scope and signals store
 		js.new_state()
@@ -318,7 +422,7 @@ class GLNode{
 		if(flags.indexOf('js') != -1) out(code)
 
 		// lets eval it in our current space
-		log(code)
+		//log(code)
 
 		_draw = Function('module','return ' + code)(js.module)
 

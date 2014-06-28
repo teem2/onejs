@@ -2,6 +2,8 @@
 //  Copyright (C) 2014 ONEJS 
 var _fs = require('fs')
 var _http = require('http')
+var _https = require('https')
+
 var _url = require('url')
 var _zlib = require('zlib')
 var _child_process = require('child_process')
@@ -75,6 +77,7 @@ class mime{
 }
 
 class zlib{
+	api = _zlib
 	signalify(_zlib)
 }
 
@@ -117,23 +120,43 @@ class HttpServer{
 }
 
 class HttpClient{
-	get( @url ) -> Signal.wrap do(sig){
+	get( url, ...args ) -> request('GET', url, ...args)
+	post( url, ...args) -> request('POST', url, ...args)
+	api = _http
+	request( method, @url, headers, body ) -> Signal.wrap do(sig){
 		url = _url.parse( url )
 		var data = []
+		var dataLen = 0
 
-		var req = _http.request({
+		var req = api.request({
 			hostname: url.hostname, 
-			port: url.port || 80,
-			method: 'GET', 
+			port: url.port || 443,
+			method: method, 
+			headers: headers,
 			path: url.path} ) 
 
 		do( res, err ){
 			if(res.statusCode != 200) sig.throw(res)
-			res.setEncoding('utf8')
-			res.on('data') do chunk => data.push(chunk)
-			res.on('end') do => sig.end(data.join(''))
+			sig.headers = res.headers
+			res.on('data') do(chunk){
+				data.push(chunk)
+				dataLen += chunk.length
+			}
+			res.on('end') do(){
+				var buf = new Buffer(dataLen)
+				var pos = 0
+				for(var d from data){
+					d.copy(buf, pos)
+					pos += d.length
+				}
+				sig.end(buf)
+			}
 		}
-
+		if(?body) req.write(body)
 		req.end()
 	}
+}
+
+class HttpsClient extends HttpClient{
+	api = _https
 }

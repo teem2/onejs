@@ -286,7 +286,6 @@ class HTMLScraper extends HTMLParser{
 		return node
 	}
 
-
 	// todo, add decoding of these entity things
 	var entities = {
 		"amp":"&","gt":">","lt":"<","quot":"\"","apos":"'","AElig":198,"Aacute":193,"Acirc":194,
@@ -338,8 +337,8 @@ class HTMLScraper extends HTMLParser{
 		if(!value.match(isempty)) node.appendChild('text', value)
 	}
 
-	comment(val) -> node.appendChild('comment', value)
-	cdata(val) -> node.appendChild('cdata', value)
+	comment(val) ->node.appendChild('comment', value)
+	cdata(val) ->node.appendChild('cdata', value)
 
 	attr(name){
 		if(name in node) last_attr = undefined

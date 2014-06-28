@@ -10,14 +10,14 @@
 import node
 import htmlscraper
 
-var live = 1
+var live = 0
 if(live){
 	var addr = "0.0.0.0"
 	var port = 80
 }
 else{
-	var addr = "127.0.0.1"
-	var port = 2001
+	var addr = "0.0.0.0"
+	var port = 2000
 }
 
 var fs_root = Path.resolve(__dirname)

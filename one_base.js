@@ -957,6 +957,28 @@ Function.prototype.prototypeOf = function( other ){
 	return other instanceof this
 }
 
+Object.defineProperty( Array.prototype, 'last', {
+	configurable:false,
+	enumerable:false,
+	get:function(){
+		return this[this.length - 1]
+	},
+	set:function(value){
+		this[this.length - 1] = value
+	}
+})
+
+Object.defineProperty( Array.prototype, 'first', {
+	configurable:false,
+	enumerable:false,
+	get:function(){
+		return this[0]
+	},
+	set:function(value){
+		this[0] = value
+	}
+})
+
 Math._mod = function( x, y ){
 	return (x%y+y)%y
 }

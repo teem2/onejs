@@ -8,10 +8,19 @@ class MyGL extends GLNode{
 
 	vertex: mesh[]
 
-	pixel: mix(#orange, #black) do
-		clamp(0.,1.) on 
-			(abs on sin on .025 * gl_FragCoord.x + 3.sin on 0.01 * gl_FragCoord.y) 
-			* (abs on cos on 0.025 * gl_FragCoord.y)
+	slide: 0.5
+
+	touchdown(v){
+		start = slide
+		capture do(v){
+			slide = start + v.x
+		}
+	}
+
+	pixel: mix(#447, #black) do
+			step(slide) do
+			(sin on .025 * gl_FragCoord.x + 3. * sin on 0.01 * gl_FragCoord.y) 
+			* (cos on 0.025 * gl_FragCoord.y)
 
 	draw: (){
 		clearAll(#aero)
@@ -23,6 +32,6 @@ class MyGL extends GLNode{
 GLView{
 	init(document.body)
 	MyGL{
-
+		
 	}
 }
