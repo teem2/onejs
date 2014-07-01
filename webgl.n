@@ -68,7 +68,7 @@ class GLNode{
 		sampler2D
 		samplerCube
 	}
-
+	
 	enum glsl_functions{
 		sizeof, radians, degrees
 		sin, cos, tan
@@ -93,34 +93,44 @@ class GLNode{
 		texture2DProj
 		textureCube
 	}
-
+	
+	var glsl_uniform_map = {
+		float:'uniform1f',
+		vec2:'uniform2f',
+		vec3:'uniform3f',
+		vec4:'uniform4f',
+	}
+	
 	class DepTraceGLSL extends AST.Walk{
 		// causes dependency marks to travel up the tree
-		// uniform has mark 1 
+		// uniform has mark 1
 		// attribute has mark 2
-		// pixel has mark 3		
-		All( n ){
+		// pixel has mark 3
+		All( n, omark ){
 			// lets propagate up our mark to our parent
 			var parent = n.parent
-			var nmark = n.mark
+			var nmark = omark || n.mark
 			if(!nmark || !parent) return
 			var pmark = parent.mark
 			if(!pmark) parent.mark = nmark
-			else if(pmark < nmark) parent.mark = nmark 
+			else if(pmark < nmark) parent.mark = nmark
+			// lets keep it simple and copy our 'infer' up
+			// any deviations from this are custom overloaded
+			if(!parent.infer) parent.infer = n.infer
 		}
-
+		
 		Do( n, parent ){
 			n.parent = parent
 			AST.Walk::Do(n, parent)
 			// fuse mark properly
 			if(n.arg.mark > n.call.mark) n.call.mark = n.arg.mark
 		}
-
+		
 		Id( n, parent ){
 			n.parent = parent
 			var name = n.name
 			if(n.flag == 35) return // is color
-			if(name in glsl_functions || name in glsl_variables){ 
+			if(name in glsl_functions || name in glsl_variables){
 				if(name == 'gl_FragCoord') n.mark = 3
 				return
 			}
@@ -134,66 +144,160 @@ class GLNode{
 				if(prop.bind.type == 'Value'){
 					if(prop.bind.kind != 'num') throw new Error('invalid type in DepTraceGLSL ' + prop.bind.kind)
 					n.mark = prop.bind.mark = 1
-					prop.bind.infer = 'float'
+					n.infer = prop.bind.infer = module.types.float
+					// lets replace the property with the actual value.
+					prop.value = prop.bind.value
+					// unbind the expression
+					prop.bind = undefined
 				}
 				else {
 					//!TODO check type constructor
 					// otherwise we forward into the property
-					this[prop.bind.type](prop.bind)
+					this[prop.bind.type](prop.bind, n)
 				}
 			}
-			if(n.kind && n.kind.name == 'pixel'){
-				n.mark = 3	// mark us as pixel			
+			else throw new Error('Add other property types ' + name)
+			if(n.kind){
+				// lets set our 'infer' to this type
+				if(n.kind.name == 'pixel'){
+					n.mark = 3	// mark us as pixel
+				}
+				else{
+					// where do we get our typemap?
+					n.infer = module.types[n.kind.name]
+					if(!n.infer) throw new Error('cannot find type ' + n.kind.name)
+				}
 			}
 			All(n)
 		}
 		
 		Index( n, parent ){
 			n.parent = parent
-			if(!n.index){ // we are an attribute
-				n.mark = 2				
-				return All(n)
+			if(!n.index){
+				var nmark = n.mark = 2 // mark as attribute
+				if(n.object.kind && n.object.kind.name == 'pixel')
+					nmark = 3
+				// what is our our type however?..
+				var attrib = context[n.object.name]
+				if(!attrib) throw new Error('cannot fetch attribute '+n.object.name)
+				n.infer = attrib.t
+				return All(n, nmark)
 			}
 			return AST.Walk::Index(n)
 		}
 		
 		Key( n, parent ){
 			n.parent = parent
-			var objname = n.object.name
-			
-			if(objname in glsl_variables){
-				if(objname == 'gl_FragCoord') n.mark = 3
-				return All(n)
+			// we are a *.key
+			// what we dont want to do is resolve the key.
+			// we only want to walk the object.
+			if(n.object.type == 'Id'){ 
+				var objname = n.object.name
+				
+				if(objname in glsl_variables){
+					if(objname == 'gl_FragCoord') n.mark = 3
+					return All(n)
+				}
 			}
-			// okay! we have to check if object
-			return AST.Walk::Key(n)
+			// only try to walk/resolve the object
+			this[n.object.type](n.object, n)
+			// we have to have an inferred type on object now
+			if(!n.infer) throw new Error('key access without type')
+
+			var fields = n.infer.fields
+			if(!fields) throw new Error('key access on type without fields')
+
+			var type = fields[n.key.name]
+			if(!type) throw new Error('type '+n.infer.name+' has no field '+n.key.name)
+
+			n.infer = type
+
+			return All(n)
 		}
 	}
-	
-	// generate the uniform computation JS
-	class GenUniformJS extends AST.ToCode{
-		
-	}
-	
-	// generate JS
-	class GenGLSL extends AST.ToCode{
 
+	// generate the uniform computation JS
+	class GenUniformJS extends AST.ToJS{
+		// ok so, we have to expand into proper JS
+		// depending on type oc.
+		// what code do we generate?
+		// what if a reference is a typed array type
+		//
+		// okay! we need to
+		Id( n ){
+			var name = n.name
+			// if we are # bla lets resolve the color and inline.
+			if(n.flag == 35){ // is a color
+				return 'this.color("' + name + '")'
+			}
+			
+			if(name in glsl_functions || name in glsl_variables){
+				return name
+			}
+			
+			var prop = context[name]
+			if(prop === undefined) throw new Error("cannot resolve " + name)
+			// allright we have the type
+			// if athe resolve.bind is a single value, or struct constructor
+			// we will bind to it as a uniform.
+			if(prop.bind){
+				// alright so if bind is a single value
+				// we should replace the signal with this actual
+				// value, not the expression
+				// and wire 
+				return expand(resolve.bind, n)
+			} 
+			else { // its an immediate value, fetch it on this
+				return 'this.' + name +'.valueOf()'
+			}
+
+			return ''
+		}
+	}
+
+	// generate the GLSL
+	class GenGLSL extends AST.ToCode{
+		
 		// otherwise if we are not 'pixel' we need to spit out varyings.
 		expand( n, parent ){
 			//log(n.type)
+			if(!n.mark){ // precompile?..
+			
+			}
 			if(n.mark == 1){ // we are a uniform dependent expression
-				// the problem is, Do needs to fuse its arg mark
-				// into its call
-				log(n.toDump())
+				// okay
+				if(!n.infer) throw new Error('Failed to infer type'+n.toDump())
+				// okay so, we are a uniform. we splice in
+				// a temp uniform, and we define it
+				var uni = {
+					name: 'uni' + (uniform_id++)
+					node: n
+				}
+				uniforms.push(uni)
+				return uni.name
+				// and call GenUniformJS on us.
+				// now what does that do in this case?
+				// if GenUniform finds an id reference
 			}
 			// output vertex varying
 			if(pixel && n.mark == 2){
+				// ok so, what if we already have a varying
+				// with the exact same 'node'
+				
+				
+				// alright we need to output a vertex varying
+				var vary = {
+					name: 'var' + (varying_id++)
+					node: n
+				}
+				varyings.push(vary)
+				return vary.name
 				//log('here', n.toDump())
 			}
 			// otherwise output self
 			return AST.ToCode::expand(n, parent)
 		}
-
+		
 		// Id resolver
 		Id( n ){
 			var name = n.name
@@ -204,23 +308,23 @@ class GLNode{
 			}
 			
 			if(name in glsl_functions || name in glsl_variables){
-				return n.name
+				return name
 			}
 			
-			var resolve = context[n.name]
-			if(!resolve) throw new Error("cannot resolve " + n.name)
+			var prop = context[name]
+			if(prop === undefined) throw new Error("cannot resolve " + name)
 			// allright we have the type
 			// if athe resolve.bind is a single value, or struct constructor
 			// we will bind to it as a uniform.
-			if(resolve.bind) return expand(resolve.bind, n)
-			if(typeof resolve.t != 'object') throw new Error('dont know what to do with resolve target')
+			if(prop.bind) return expand(prop.bind, n)
+			//if(typeof prop.t != 'object') throw new Error('dont know what to do with resolve target')
 			
 			return ''
 		}
 		
 		// resolve index
 		Index( n ){
-			// so we got a bla[] 
+			// so we got a bla[]
 			if(!n.index){
 				if(n.object.type != 'Id') throw new Error('dont support property attributes')
 				
@@ -234,40 +338,28 @@ class GLNode{
 				
 				attribs[name] = obj
 				
-				return name // return name 
+				return name // return name
 			}
 			return AST.ToCode::Index(n)
 		}
 		
-		// we have to resolve Id's 
+		// we have to resolve Id's
 		Key( n ){
-			var objname = n.object.name
-			
-			if(objname in glsl_variables){
-				return objname + '.' + n.key.name
+			if(n.object.type == 'Id'){
+				var objname = n.object.name  
+				if(objname in glsl_variables){
+					return objname + '.' + n.key.name
+				}
 			}
+			// lets do a type inference
+			// our object has a type.
+			// so that means that we can access properties on it
+			// and check their type. huzzah
 			
+			// lets only resolve the object, en just postfix the key
+			return this.expand(n.object, n) + '.' + n.key.name
 			// okay! we have to check if object
-			return AST.ToCode::Key(n)
-		}
-		
-		// implementation of Call that deals with extra and pre args
-		Call( n ){
-			var fn = expand(n.fn, n)
-			var fn_t = n.fn.type
-			if(fn_t == 'List' || fn_t == 'Logic' || fn_t == 'Condition') 
-				fn = '(' + fn + ')'
-			var arg = ''
-			if(n.first_args) arg += list(n.first_args, n)
-			if(n.args && n.args.length){
-				if(arg) arg += ', '
-				arg += list(n.args, n)
-			}
-			if(n.last_args){
-				if(arg) arg += ', '
-				arg += list(n.last_args, n)
-			}
-			return fn + '(' + arg + ')'
+			//return AST.ToCode::Key(n)
 		}
 		
 		Do = AST.ToJS.Do
@@ -276,9 +368,10 @@ class GLNode{
 	class GenDrawJS extends AST.ToJS{
 		
 		_compile_draw( n ){
-
+			
 			var uid = 'd' + this.uid++
 			
+			// setup module/context
 			GenGLSL.module = module
 			GenGLSL.context = context
 			var attribs = GenGLSL.attribs = Object.create(null)
@@ -289,34 +382,75 @@ class GLNode{
 			if(!pix.bind) throw new Error('Unexpected pixel type')
 			
 			// call the dependency trace on our expression
-			DepTraceGLSL.pixel = 1
-			DepTraceGLSL[pix.bind.type]( pix.bind )
-			
+			GenGLSL.pixel = DepTraceGLSL.pixel = 1
+			DepTraceGLSL.module = module
+			DepTraceGLSL[pix.bind.type](pix.bind)
 			//log(pix.bind.toDump())
-
-			// the run the code generator
-			var pix_uniforms = GenGLSL.uniforms = []
-			var pix_varyings = GenGLSL.varyings = []
-			var pix_expr = GenGLSL.expand(pix.bind)
 			
-			// serialize uniforms and varyings
+			// the run the code generator
+			GenGLSL.uniform_id = 0
+			GenGLSL.varying_id = 0
 
+			var pix_uniforms = GenGLSL.uniforms = []
+			var varyings = GenGLSL.varyings = []
+			var pix_expr = GenGLSL.expand(pix.bind)
 			
 			// compile vertex shader
 			var vtx = context.vertex
 			if(!vtx.bind) throw new Error('Unexpected vertex type')
-
-			DepTraceGLSL.pixel = 0
+			
+			// dependency trace vertex shader shader
+			GenGLSL.pixel = DepTraceGLSL.pixel = 0
 			DepTraceGLSL[vtx.bind.type](vtx.bind)
 			
-			log(vtx.bind.toDump())
-
+			// compile vertex shader
+			var vtx_uniforms = GenGLSL.uniforms = []
 			var vtx_expr = GenGLSL.expand(vtx.bind)
 			
+			var vary_merged = ''
 			var vary_decl = ''
+			var vary_assign = ''
 			var attr_decl = ''
-			var uni_decl = ''
+			var pix_uni_decl = ''
+			var vtx_uni_decl = ''
 			var ret = ''
+			
+			// merge identical varyings
+			var vary_merge = {}
+			// generate varying assigns
+			for(var vary from varyings){
+				
+				GenGLSL.uniforms = vtx_uniforms
+				var code = GenGLSL.expand(vary.node)
+				var merge = vary_merge[code]
+				if(?merge){
+					vary_merged += `
+				#define ${vary.name} ${merge}
+					`
+					continue
+				}
+				vary_merge[code] = vary.name
+				vary_decl +=`
+				varying ${vary.node.infer.name} ${vary.name};
+				`
+				vary_assign += `
+					${vary.name} = ${code};
+				`
+			}
+			
+			// generate pixel uniform
+			for(var uni from pix_uniforms){
+				pix_uni_decl += `
+				uniform ${uni.node.infer.name} ${uni.name};
+				`
+			}
+
+			// generate vertex uniform
+			for(var uni from vtx_uniforms){
+				vtx_uni_decl += `
+				uniform ${uni.node.infer.name} ${uni.name};
+				`
+			}
 			
 			// generate attribute declarations
 			for(var name in attribs){
@@ -328,15 +462,16 @@ class GLNode{
 			// vertex shader
 			var vtx_shader = `
 				precision highp float;
-				${uni_decl}${attr_decl}${vary_decl}
+				${vtx_uni_decl}${attr_decl}${vary_decl}
 				void main(){
 					gl_Position = vec4(${vtx_expr},1.0);
+					${vary_assign}
 				}
 			`
 			// pixel shader
 			var pix_shader = `
 				precision highp float;
-				${uni_decl}${vary_decl}
+				${pix_uni_decl}${vary_decl}${vary_merged}
 				void main(){
 					gl_FragColor = ${pix_expr};
 				}
@@ -362,14 +497,18 @@ class GLNode{
 					
 					this.${uid}_shader = shader
 			`
-		
-			for(var name in uniforms) ret += `
-					this.${uid}_ul_${name} = gl.getUniformLocation(shader, "${name}");`
 			
+			for(var uni from pix_uniforms) ret += `
+					this.${uid}_ul_${uni.name} = gl.getUniformLocation(shader, "${uni.name}");`
+
+			for(var uni from vtx_uniforms) ret += `
+					this.${uid}_ul_${uni.name} = gl.getUniformLocation(shader, "${uni.name}");`
+
+					
 			for(var name in attribs)ret += `
 					this.${uid}_vb_${name} = gl.createBuffer()
 					this.${uid}_al_${name} = gl.getAttribLocation(shader, "${name}");`
-			
+					
 			ret += `
 				}
 				gl.useProgram(shader)
@@ -377,9 +516,11 @@ class GLNode{
 			var len = 0
 			for(var name in attribs){
 				var attr = attribs[name]
+				
 				var abname = `${uid}_ab_${name}`
 				len = attr.f4.buffer.byteLength / attr.t.size
-				this.context[abname] = attr.f4.buffer
+				context[abname] = attr.f4.buffer
+				
 				ret += `
 				gl.bindBuffer(${gl.ARRAY_BUFFER}, this.${uid}_vb_${name})
 				var arr_buf = this.${abname}
@@ -392,6 +533,24 @@ class GLNode{
 				gl.vertexAttribPointer(al, ${attr.t.slots}, ${gl.FLOAT}, false, ${attr.t.size}, 0)
 				`
 			}
+			
+			// generate uniform setting
+			for(var uni from pix_uniforms.concat(vtx_uniforms)){
+				
+				GenUniformJS.module = module
+				GenUniformJS.context = context
+				var js = GenUniformJS.expand(uni.node)
+				
+				var map = glsl_uniform_map[uni.node.infer.name]
+				if(!map) throw new Error('unsupported uniform type' + uni.type.name)
+				ret +=`
+				var v = ${js}
+				if(this.${uid}_uv_${uni.name} !== v){
+					gl.${map}(this.${uid}_ul_${uni.name}, this.${uid}_uv_${uni.name} = v)
+				}
+				`
+			}
+
 			// drawing function
 			ret += `
 				gl.drawArrays(gl.TRIANGLES, 0, ${len})
@@ -416,16 +575,16 @@ class GLNode{
 		js.gl = owner.gl // use the gl context to inline gl constants
 		js.uid = 0
 		if(ast.type != 'Function') throw new Error('GL Draw not a function')
-
+		
 		var flags = js.pull_flags(ast)
-		var code = js.Function( ast, undefined, ['gl'] )
+		var code = js.Function(ast, undefined, ['gl'])
 		if(flags.indexOf('js') != -1) out(code)
-
+		
 		// lets eval it in our current space
-		//log(code)
-
+		log(code)
+		
 		_draw = Function('module','return ' + code)(js.module)
-
+		
 		// just run it immediately, once.
 		_draw(owner.gl)
 	}

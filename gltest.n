@@ -7,21 +7,25 @@ class MyGL extends GLNode{
 	mesh = webgl.vec3Rect(-1,-1,2,2)
 
 	vertex: mesh[]
-
-	slide: 0.5
-
+	
+	slide: 0.1
+	
 	touchdown(v){
 		start = slide
 		capture do(v){
 			slide = start + v.x
 		}
 	}
-
+	
+	vx: vertex.x
+	
 	pixel: mix(#447, #black) do
-			step(slide) do
-			(sin on .025 * gl_FragCoord.x + 3. * sin on 0.01 * gl_FragCoord.y) 
-			* (cos on 0.025 * gl_FragCoord.y)
-
+			//step(slide + 0.1) do
+			sin on 8. * pixel mesh[].x
+			* pixel vertex.y
+			//(sin on 8. * mesh[].x)
+			//* (cos on 8. * mesh[].y)
+		
 	draw: (){
 		clearAll(#aero)
 		draw(this)

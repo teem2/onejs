@@ -1871,6 +1871,7 @@ ONE.parser_strict_ = function(){
 		if (this.eat(this._in)) return this.parseForIn(node, init, compr)
 		if (this.eat(this._to)) return this.parseForTo(node, init, compr)
 		if (this.eat(this._of)) return this.parseForOf(node, init, compr)
+		if (this.eat(this._from)) return this.parseForFrom(node, init, compr)
 
 		return this.parseFor(node, init)
 	}

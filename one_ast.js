@@ -523,7 +523,7 @@ ONE.ast_ = function(){
 				n.parent = parent
 				n.genstart = this.line
 
-				if(!this[n.type])throw new Error(n.type)
+				if(!this[n.type]) throw new Error(n.type)
 
 				var ret = this[type || n.type](n)
 				n.genend = this.line
@@ -570,7 +570,7 @@ ONE.ast_ = function(){
 
 				for(var i = 0; i < len; i++){
 					if(ret !== '') ret += split
-					ret += this.expand(n[ i ], parent)
+					ret += this.expand(n[i], parent)
 					if(ret[ret.length - 1] == '\n') ret += i == len - 1? this.depth:this.depth+this.indent
 				}
 
@@ -581,7 +581,7 @@ ONE.ast_ = function(){
 				return this.block(n.steps, n, true)
 			}
 
-			this.Empty = function( n ){ 
+			this.Empty = function( n ){
 				return ''
 			}
 
@@ -721,7 +721,7 @@ ONE.ast_ = function(){
 				return ret
 			}
 
-			this.Break = function( n ){ 
+			this.Break = function( n ){
 				return 'break'+(n.label?' '+this.expand(n.label, n):'')
 			}
 
@@ -1014,7 +1014,17 @@ ONE.ast_ = function(){
 				var fn_t = n.fn.type
 				if(fn_t == 'List' || fn_t == 'Logic' || fn_t == 'Condition') 
 					fn = '(' + fn + ')'
-				return fn + '(' + this.list(n.args, n) + ')'
+				var arg = ''
+				if(n.first_args) arg += this.list(n.first_args, n)
+				if(n.args && n.args.length){
+					if(arg) arg += ', '
+					arg += this.list(n.args, n)
+				}
+				if(n.last_args){
+					if(arg) arg += ', '
+					arg += this.list(n.last_args, n)
+				}
+				return fn + '(' + arg + ')'
 			}
 
 			this.Class = function( n ){
@@ -1134,6 +1144,11 @@ ONE.ast_ = function(){
 				if(k == 'parent' || k == 'tokens' || k == 'start' || k == 'end' || k == 'module' || k == 'locals'
 					|| k == 'loc' || k == 'type' || k == 'pthis' || k=='source') continue;
 				var v = n[k]
+				// decode type inference a bit
+				if(k == 'infer'){
+					ret += '\n' + tab + k + ':' + (v?v.name:'undefined')
+					continue
+				}
 				if(typeof v !== 'function'){
 					if(typeof v == 'object'){
 						if(v !== null && Object.keys(v).length > 0)

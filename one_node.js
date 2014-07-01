@@ -9,6 +9,7 @@ ONE.nodejs_boot_ = function(){
 	global.ONE = ONE
 	require('./one_base.js')
 	require('./one_parser.js')
+	require('./one_genjs.js')
 	require('./one_ast.js')
 
 	// make self a class

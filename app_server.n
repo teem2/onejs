@@ -66,6 +66,10 @@ class StaticServer extends HttpServer{
 	}
 
 	route("/_reloader_") do( req, res ){
+		setTimeout(15000) on(){
+			res.writeHead(204)
+			res.end()			
+		}
 		(pending ?= []).push(res)
 	}
 

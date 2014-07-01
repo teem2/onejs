@@ -1,18 +1,18 @@
 ONE.GenJS_ = function(modules, parserCache){
 
 	this.typeMap = Object.create(null)
-	this.typeMap.bool    = { size:1, slots:1, view:'Int32', arr:'i4', prim:1 }
-	this.typeMap.int8    = { size:1, slots:1, view:'Int8', arr:'i1', prim:1 }
-	this.typeMap.uint8   = { size:2, slots:1, view:'Uint8', arr:'u1', prim:1 }
-	this.typeMap.int16   = { size:2, slots:1, view:'Int16', arr:'i2', prim:1 }
-	this.typeMap.uint16  = { size:2, slots:1, view:'Uint16', arr:'u2', prim:1 }
-	this.typeMap.int     = { size:4, slots:1, view:'Int32', arr:'i4', prim:1 }
-	this.typeMap.int32   = { size:4, slots:1, view:'Int32', arr:'i4', prim:1 }
-	this.typeMap.uint32  = { size:4, slots:1, view:'Uint32', arr:'u4', prim:1 }
-	this.typeMap.float   = { size:4, slots:1, view:'Float32', arr:'f4', prim:1 }
-	this.typeMap.float32 = { size:4, slots:1, view:'Float32', arr:'f4', prim:1 }
-	this.typeMap.double  = { size:8, slots:1, view:'Float64', arr:'f8', prim:1 }
-	this.typeMap.float64 = { size:8, slots:1, view:'Float64', arr:'f8', prim:1 }
+	this.typeMap.bool    = { size:1, slots:1, view:'Int32', arr:'i4', name:'bool', prim:1 }
+	this.typeMap.int8    = { size:1, slots:1, view:'Int8', arr:'i1', name:'int8', prim:1 }
+	this.typeMap.uint8   = { size:2, slots:1, view:'Uint8', arr:'u1', name:'uint8', prim:1 }
+	this.typeMap.int16   = { size:2, slots:1, view:'Int16', arr:'i2', name:'int16', prim:1 }
+	this.typeMap.uint16  = { size:2, slots:1, view:'Uint16', arr:'u2', name:'uint16', prim:1 }
+	this.typeMap.int     = { size:4, slots:1, view:'Int32', arr:'i4', name:'int', prim:1 }
+	this.typeMap.int32   = { size:4, slots:1, view:'Int32', arr:'i4', name:'int32', prim:1 }
+	this.typeMap.uint32  = { size:4, slots:1, view:'Uint32', arr:'u4', name:'uint32', prim:1 }
+	this.typeMap.float   = { size:4, slots:1, view:'Float32', arr:'f4', name:'float', prim:1 }
+	this.typeMap.float32 = { size:4, slots:1, view:'Float32', arr:'f4', name:'float32', prim:1 }
+	this.typeMap.double  = { size:8, slots:1, view:'Float64', arr:'f8', name:'double', prim:1 }
+	this.typeMap.float64 = { size:8, slots:1, view:'Float64', arr:'f8', name:'float64', prim:1 }
 	this.viewSize = {
 		Int8:1,
 		Uint8:1,
@@ -25,7 +25,7 @@ ONE.GenJS_ = function(modules, parserCache){
 	}
 
 	this.ToJS = this.ToCode.extend(this, function(outer){
-		
+
 		this.newline = '\n'
 
 		this.promise_catch = 1
@@ -58,7 +58,7 @@ ONE.GenJS_ = function(modules, parserCache){
 			var steps
 			if(n.body && (steps = n.body.steps) && steps[0] && steps[0].flag == 35){
 				var ret = steps[0].name
-				steps.splice(0,1)
+				steps.splice(0, 1)
 				return ret
 			}
 			return ''
@@ -66,10 +66,10 @@ ONE.GenJS_ = function(modules, parserCache){
 
 		var globals = this.globals = Object.create(null)
 		globals.Object = 1
-		globals.Array = 1 
-		globals.String = 1 
+		globals.Array = 1
+		globals.String = 1
 		globals.Number = 1
-		globals.Date = 1 
+		globals.Date = 1
 		globals.Boolean = 1
 		globals.Error = 1
 		globals.Math = 1
@@ -140,7 +140,6 @@ ONE.GenJS_ = function(modules, parserCache){
 				if(defines && (def = defines[name])) return def
 			}
 		}
-
 		// destructuring helpers
 		this._destrucArrayOrObj = function(v, acc, nest, fn, vars){
 			// alright we must store our object fetch on a ref
@@ -149,13 +148,13 @@ ONE.GenJS_ = function(modules, parserCache){
 			var ret = ''
 			var od = this.depth
 			this.depth = this.depth + this.indent
-		
-			ret += '(' + this.destruc_prefix + nest + '=' + this.destruc_prefix + 
+
+			ret += '(' + this.destruc_prefix + nest + '=' + this.destruc_prefix +
 				(nest-1) + acc + ')===undefined||(' + this.newline + this.depth
 
 			if(v.type == 'Object') ret += this._destrucObject(v, nest + 1, fn, vars)
 			else ret += this._destrucArray(v, nest + 1, fn, vars)
-		
+
 			this.depth = od
 			ret += this.newline+this.depth + ')'
 
@@ -174,7 +173,7 @@ ONE.GenJS_ = function(modules, parserCache){
 				if(midrest){
 					acc = '['+tmpvar+'.length-'+(elems.length - i)+']'
 				}
-				else acc = '[' + i + ']' 
+				else acc = '[' + i + ']'
 
 				if(v.type == 'Rest'){
 					if(midrest){
@@ -186,7 +185,7 @@ ONE.GenJS_ = function(modules, parserCache){
 					}
 					if(v.id.type !=='Id') throw new Error('Unknown rest id type')
 					if(i) ret += ',' + this.newline + this.depth
-					var name = v.id.name 
+					var name = v.id.name
 					if(vars){ vars.push(v); if(v.flag == 46) name = 'this.'+name}
 					else name = this.resolve(name)
 					// what if we have elems following?
@@ -199,11 +198,11 @@ ONE.GenJS_ = function(modules, parserCache){
 				}
 				else if(v.type == 'Id') {
 					if(i) ret += ',' + this.newline + this.depth
-					var name = v.name 
+					var name = v.name
 					if(vars){ vars.push(v); if(v.flag == 46) name = 'this.'+name}
 					else name = this.resolve(name)
 					ret += name + '='+ tmpvar + acc
-				} 
+				}
 				else if(v.type == 'Object' || v.type == 'Array') {
 					if(i) ret += ',' + this.newline + this.depth
 					ret += this._destrucArrayOrObj(v, acc, nest, fn, vars)
@@ -225,18 +224,18 @@ ONE.GenJS_ = function(modules, parserCache){
 				if(k.short){
 					// lets output a prop
 					if(i) ret += ',' + this.newline + this.depth
-					var name = k.key.name 
+					var name = k.key.name
 					if(vars) vars.push(k.key)
-					else name = this.resolve(name)							
+					else name = this.resolve(name)
 					ret += name + '='+this.destruc_prefix+(nest - 1)+acc
-				} 
+				}
 				else if(v.type == 'Id') {
 					if(i) ret += ',' + this.newline + this.depth
-					var name = v.name 
+					var name = v.name
 					if(vars){ vars.push(v); if(v.flag == 46) name = 'this.'+name}
 					else name = this.resolve(name)
 					ret += name + '='+this.destruc_prefix +(nest - 1)+acc
-				} 
+				}
 				else if(v.type == 'Object' || v.type == 'Array') {
 					if(i) ret += ',' + this.newline + this.depth
 					ret += this._destrucArrayOrObj(v, acc, nest, fn, vars)
@@ -252,11 +251,11 @@ ONE.GenJS_ = function(modules, parserCache){
 
 			var ret = ''
 			var olddepth = this.depth
-			this.depth = this.depth + this.indent					
+			this.depth = this.depth + this.indent
 
 			if( init )
-				ret = '(' + this.destruc_prefix + '0=' + (def? def + '||': '') + 
-					(typeof init == 'string'?init:this.expand( init, n )) + 
+				ret = '(' + this.destruc_prefix + '0=' + (def? def + '||': '') +
+					(typeof init == 'string'?init:this.expand( init, n )) +
 					',(' + this.newline + this.depth
 			else{
 				if(!def) throw new Error('Destructuring assignment without init value')
@@ -305,7 +304,7 @@ ONE.GenJS_ = function(modules, parserCache){
 			if( name in this.globals ) return name
 
 			var def = this.find_define(name)
-			
+
 			if(def){
 				return this.expand(def, n)
 			}
@@ -359,7 +358,7 @@ ONE.GenJS_ = function(modules, parserCache){
 					if(!fn.store_var) throw new Error("Storage .. operator read but not set in function")
 					return this.store_prefix
 				}
-				if(flag === 35){ 
+				if(flag === 35){
 					if(!n.name){
 						if(!this.typemethod) throw new Error('Type method template found outside of typemethod')
 						this.template_marked = true
@@ -376,7 +375,7 @@ ONE.GenJS_ = function(modules, parserCache){
 			return this.resolve( n.name, n )
 		}
 
-		this.Value = function( n ){ 
+		this.Value = function( n ){
 			if(n.raw === undefined) return n.value
 			if(n.kind == 'string' && n.raw[0] == '`'){
 				return '"'+n.raw.slice(1,-1).replace(/\n/g,'\\n').replace(/"/g,'\\"')+'"'
@@ -391,19 +390,19 @@ ONE.GenJS_ = function(modules, parserCache){
 					return n.value
 				}
 			}
-			return n.raw 
+			return n.raw
 		}
 
 		this.decodeStructAccess = function( n ){
 			var node = n
 			while(node){
 				if(node.type == 'Id'){
-					// check 
+					// check
 					var base = this.resolve(node.name)
 					//var marg = this.macroarg[base]
 					//if(marg) base = marg.name
 					var type = this.scope[base]
-					var isthis 
+					var isthis
 					if(typeof type == 'object' && !type.__class__ || (isthis = type = this.typemethod)){
 						// alright so now we need to walk back down
 						// the parent chain and decode our offset
@@ -437,7 +436,7 @@ ONE.GenJS_ = function(modules, parserCache){
 							node = node.parent
 						}
 						// alright so what we can do is actually take the pointer and assign to it
-						// what if its not 
+						// what if its not
 						// check if we terminated at a value field or a compound field
 						var voff = base+'.o+' +idx+ (off / outer.viewSize[type.view])
 						if((!node.index || field.dim) && !field.prim){
@@ -497,7 +496,7 @@ ONE.GenJS_ = function(modules, parserCache){
 
 			return  object + '.' + n.key.name
 		}
-		
+
 		this.Array = function( n ){
 			//!TODO x = [\n[1]\n[2]] barfs up with comments
 
@@ -519,7 +518,7 @@ ONE.GenJS_ = function(modules, parserCache){
 							var id = elem.id
 							if(id === undefined  || id.name == 'arguments'){
 								ret = 'Array.prototype.slice.call(arguments,0)'
-							} 
+							}
 							else ret = 'Array.prototype.slice.call('+this.expand(id, n)+',0)'
 						}
 						else{
@@ -555,20 +554,20 @@ ONE.GenJS_ = function(modules, parserCache){
 				else if(last == 2) ret += ')'
 			}
 			else {
-				var ret = '['+ 
-					this.list( n.elems, n ) + 
-				']' 
+				var ret = '['+
+					this.list( n.elems, n ) +
+				']'
 			}
 			return ret
 		}
-				
+
 		this.Enum = function( n ){
 			// okay lets convert our enum structure into an object on this.
 			// we can accept a block with steps of type assign
 			// and a lefthandside of type id
 			// right hand side is auto-enumerated when not provided
 
-			var name = n.id.name 
+			var name = n.id.name
 
 			this.scope[name] = 1
 
@@ -637,13 +636,13 @@ ONE.GenJS_ = function(modules, parserCache){
 		this.Template = function( n ){
 			var ret = '"'
 			var chain = n.chain
-			var len = chain.length 
+			var len = chain.length
 			for(var i = 0; i < len; i++){
 				var item = chain[i]
 				if(item.type == 'Block'){
 					if(item.steps.length == 1 && outer.IsExpr[item.steps[0].type]){
 						ret += '"+(' + this.expand(item.steps[0], n) + ')+"'
-					} 
+					}
 					// we dont support non expression blocks
 					else {
 						throw new Error("Statement block in interpolated string not supported")
@@ -665,11 +664,11 @@ ONE.GenJS_ = function(modules, parserCache){
 			ret += this.expand(n.test, n)
 			ret +=  ')' + this.space
 
-			var then = this.expand(n.then, n) 
+			var then = this.expand(n.then, n)
 
 			if(n.compr && outer.IsExpr[n.then.type]){
 				ret += this.compr_assign + '(' + then +')'
-			} 
+			}
 			else ret += then
 
 			if(n.else){
@@ -683,7 +682,7 @@ ONE.GenJS_ = function(modules, parserCache){
 		this.For = function( n ){
 			var ret ='for(' + this.expand(n.init, n)+';'+
 					this.expand(n.test, n) + ';' +
-					this.expand(n.update, n) + ')'	
+					this.expand(n.update, n) + ')'
 			var loop = this.expand(n.loop, n)
 			if(n.compr){
 				ret += this.compr_assign + '(' + loop + ')'
@@ -707,29 +706,29 @@ ONE.GenJS_ = function(modules, parserCache){
 				var id = defs[0].id
 				if(id.type == 'Object' || id.type == 'Array') destruc = id
 				else value = id.name, this.scope[value] = 1
-			} 
+			}
 			else if(left.type == 'Id'){
 				value = this.resolve(left.name)
-			} 
+			}
 			else if(left.type == 'List'){
 				var items = left.items
 				var id = defs[p++].id
 				if(id.type == 'Object' || id.type == 'Array') destruc = id
 				else value = id.name, this.scope[value] = 1
-			} 
+			}
 			else if(left.type == 'Object' || left.type == 'Array'){
 				destruc = left
 			}
 			// alright so now what we need to do is make a for loop.
 			var result = this.alloc_tmpvar(n)
 			var iter = this.alloc_tmpvar(n)
-			
+
 			var ret = 'for('
 			ret += iter+'=ONE.iterator(' + this.expand(n.right, n) + '),'+result+'=null;' +
 					iter+'&&(!'+result+'||!'+result+'.done);){' + this.newline
 
 			var od = this.depth
-			this.depth += this.indent 
+			this.depth += this.indent
 			ret += this.depth + result + '=' + iter + '.next()' + this.newline
 			// destructure result.value
 			if(destruc){
@@ -748,7 +747,7 @@ ONE.GenJS_ = function(modules, parserCache){
 				ret += destr
 			} else {
 				ret += this.depth + value + '=' + result + '.value' + this.newline
-			}			
+			}
 			this.depth = od
 			var loop = this.expand(n.loop, n)
 			if( loop[loop.length-1]=='}' ) ret += loop.slice(1,-1) //!todo fix this
@@ -781,10 +780,10 @@ ONE.GenJS_ = function(modules, parserCache){
 				if(len > 2) alen = defs[p++].id.name, this.scope[alen] = 1
 				if(len > 1) iter = defs[p++].id.name, this.scope[iter] = 1
 				if(len > 0) value = defs[p++].id.name, this.scope[value] = 1
-			} 
+			}
 			else if(left.type == 'Id'){
 				value = this.resolve(left.name)
-			} 
+			}
 			else if(left.type == 'List'){
 				var items = left.items
 				var len = items.length
@@ -800,11 +799,11 @@ ONE.GenJS_ = function(modules, parserCache){
 
 			arr = this.alloc_tmpvar(n)
 			// and then we have to allocate two or three tmpvars.
-			// we fetch the 
+			// we fetch the
 			var ret = 'for('
 			if( isvar ) ret += 'var '
 			ret += arr + '=' + this.expand(n.right, n) + ',' + alen + '=' + arr + '.length,' +
-				iter + '=0,' + value + '=' + arr + '[0];' + iter + '<' + alen + ';' + value + '=' + arr + '[++' + iter + '])' 
+				iter + '=0,' + value + '=' + arr + '[0];' + iter + '<' + alen + ';' + value + '=' + arr + '[++' + iter + '])'
 			var loop = this.expand(n.loop, n)
 
 			if(n.compr) ret += this.comp_assign + '(' + loop + ')'
@@ -821,13 +820,13 @@ ONE.GenJS_ = function(modules, parserCache){
 			if(left.type == 'Var'){
 				if(left.defs.length != 1) throw new Error("for to only supports one argument")
 				iter = left.defs[0].id.name
-			} 
+			}
 			else if(left.type == 'Id'){
 				iter = this.resolve(left.name)
-			} 
+			}
 			if(left.type == 'Assign'){
 				iter = this.resolve(left.left.name)
-			} 
+			}
 			else if(left.type == 'List'){
 				if(left.items.length != 1) throw new Error("for to only supports one argument")
 				iter = this.resolve(left.items[0].name)
@@ -845,7 +844,7 @@ ONE.GenJS_ = function(modules, parserCache){
 
 		this.ForIn = function( n ){
 			var ret = 'for(' + this.expand(n.left, n) + ' in ' +
-				this.expand(n.right, n) + ')' 
+				this.expand(n.right, n) + ')'
 			var loop = this.expand(n.loop, n)
 			if(n.compr && outer.IsExpr[n.loop.type]){
 				ret += this.compr_assign +'('+ loop + ')'
@@ -896,7 +895,7 @@ ONE.GenJS_ = function(modules, parserCache){
 				ret += this.newline
 				return ret
 			}
-			
+
 			return 'var ' + this.flat( n.defs, n )
 
 			throw new Error("implement TypeVar")
@@ -946,10 +945,10 @@ ONE.GenJS_ = function(modules, parserCache){
 			this.scope[n.id.name] = type
 
 			// if we have a type, we need to check the init call to be a constructor.
-			return this.expand(n.id, n) + 
+			return this.expand(n.id, n) +
 				(n.init ? this.space+'='+this.space + this.expand(n.init, n) : '')
 		}
-		
+
 		this.Define = function( n ){
 			// its a macro function
 			if(n.id.type == 'Function'){
@@ -996,7 +995,7 @@ ONE.GenJS_ = function(modules, parserCache){
 				type.construct = Object.create(base.construct || null)
 				type.size = base.size
 				type.view = base.view
-			} 
+			}
 			else {
 				type.fields = {}
 				type.methods = {}
@@ -1071,7 +1070,7 @@ ONE.GenJS_ = function(modules, parserCache){
 		}
 
 		this.Class = function( n ){
-			
+
 			var base = n.base?this.expand(n.base, n):'this.Base'
 			var name = n.id.name
 
@@ -1082,10 +1081,10 @@ ONE.GenJS_ = function(modules, parserCache){
 			}
 
 			this.scope[name] = 2
-			var ret = 'var ' + name + ' = this.' + name + 
-					' = ' + base + '.extend(this,'+ 
-					this.Function( n, null, ['outer'] ) + 
-					', "' + name + '")'	
+			var ret = 'var ' + name + ' = this.' + name +
+					' = ' + base + '.extend(this,'+
+					this.Function( n, null, ['outer'] ) +
+					', "' + name + '")'
 			return ret
 		}
 
@@ -1101,7 +1100,7 @@ ONE.GenJS_ = function(modules, parserCache){
 
 			var olddepth = this.depth
 			this.depth += this.indent
-			
+
 			var str_body = ''
 			var str_param = ''
 
@@ -1114,7 +1113,7 @@ ONE.GenJS_ = function(modules, parserCache){
 				var name = n.rest.id.name
 				this.scope[name] = 1
 				if(plen)
-					str_body += this.depth + 'var '+name+' = arguments.length>' + plen + '?' + 
+					str_body += this.depth + 'var '+name+' = arguments.length>' + plen + '?' +
 					'Array.prototype.slice.call(arguments,' + plen + '):[]' + this.newline
 				else
 					str_body += this.depth + 'var '+name+' = Array.prototype.slice.call(arguments,0)' + this.newline
@@ -1129,12 +1128,12 @@ ONE.GenJS_ = function(modules, parserCache){
 				for(var i = 0;i<plen;i++){
 					var param = params[i]
 					param.parent = n
-
+					
 					// destructuring arguments
 					if(param.id.type == 'Array' || param.id.type == 'Object'){
 						var vars = []
 						var tmp = this.desarg_prefix+i
-						var dest = this.destructure(n, param.id, param.init, n, vars, tmp) + this.newline 
+						var dest = this.destructure(n, param.id, param.init, n, vars, tmp) + this.newline
 						
 						var vardef = ''
 						for(var v = 0;v<vars.length;v++){
@@ -1148,32 +1147,32 @@ ONE.GenJS_ = function(modules, parserCache){
 						str_body += this.depth + 'var ' + vardef
 						str_body += (vardef?','+this.space:'')+this.destruc_prefix+'0=' + dest
 						str_param +=  (str_param?split:'') + tmp
-					} 
+					}
 					else {
 						var name = param.id.name
 						str_param += (str_param?split:'') + name //name
 						if( str_param[str_param.length - 1] == '\n' ) str_param += this.depth
 						if(param.init){
-							str_body += this.depth + 'if(' + name + '===undefined)' + name + '=' + this.expand(param.init, param) + this.newline 
+							str_body += this.depth + 'if(' + name + '===undefined)' + name + '=' + this.expand(param.init, param) + this.newline
 						}
 						if(param.id.flag == 64){
-							str_body += this.depth + 'this.' + name + '=' + name + ';' + this.newline 
-						} 
+							str_body += this.depth + 'this.' + name + '=' + name + ';' + this.newline
+						}
 						else {
 							var kind = param.id.kind
 							if(kind){
-								var kname 
+								var kname
 								if(kind.type == 'Index') kname = kind.object.name
 								else kname = kind.name
-							
+								
 								var type = this.find_type(kname)
-
+								
 								if(!type) throw new Error("Undefined type "+kname+" used on argument "+name)
 								this.scope[name] = type
 							}
 							else this.scope[name] =  1
 						}
-
+						
 					}
 				}
 			}
@@ -1187,16 +1186,16 @@ ONE.GenJS_ = function(modules, parserCache){
 					str_param += name
 				}
 			}
-
+			
 			// expand the function
 			if( n.body.type == 'Block' ){
 				var steps = n.body.steps
 				n.body.parent = n
 				// we can do a simple wait transform
 				str_body += this.block( n.body.steps, n.body, 1 )
-			} 
-			else str_body += this.depth + 'return ' + this.expand(n.body, n) 
-
+			}
+			else str_body += this.depth + 'return ' + this.expand(n.body, n)
+			
 			// Auto function to this bind detection
 			var bind = false
 			if(n.arrow === '=>' || n.indo && !n.arrow) bind = true
@@ -1207,7 +1206,7 @@ ONE.GenJS_ = function(modules, parserCache){
 				if(n.name.name == 'bind' && !n.name.flag){
 					ret += '('
 					isvarbind = true
-				} 
+				}
 				else {
 					var kind = n.name.kind
 					if(kind && (kind.name == 'get' || kind.name == 'set')){
@@ -1223,15 +1222,15 @@ ONE.GenJS_ = function(modules, parserCache){
 							this.module.exports[name] = n
 						}
 						ret += this.expand(n.name, n) + this.space + '=' + this.space
-						//console.log(ret)							
+						//console.log(ret)
 					}
 				}
 			}
-
+			
 			if(n.await) ret = ret  + 'ONE._await('
-
+			
 			ret += 'function'
-
+			
 			if(n.gen || n.auto_gen) ret += '*'
 			if( nametag === null ) ret += ''
 			else if( nametag ) ret += ' '+nametag
@@ -1241,12 +1240,12 @@ ONE.GenJS_ = function(modules, parserCache){
 				}
 				else ret += ' '+this.expand(n.id, n)
 			}
-
+			
 			if( !str_param ) str_param = ''
 			ret += '(' + str_param + '){'
-
+			
 			var tmp = ''
-
+			
 			if( n.destruc_vars ){
 				for(var i = 0;i<n.destruc_vars;i++){
 					if(tmp) tmp += ','+this.space
@@ -1259,33 +1258,33 @@ ONE.GenJS_ = function(modules, parserCache){
 					tmp += this.tmp_prefix + i
 				}
 			}
-
+			
 			if( n.store_var ){
 				if(tmp) tmp += ','+this.space
 				tmp += this.store_prefix
 			}
-
+			
 			if( n.call_var ){
 				if(tmp) tmp += ','+this.space
 				tmp += this.call_tmpvar
 			}
-
+			
 			if(tmp){
 				ret += 'var ' + tmp + this.newline
 			}
 			else ret += this.newline
-
+			
 			this.depth = olddepth
 			this.scope = scope
-
-			ret += str_body + this.depth 
-
+			
+			ret += str_body + this.depth
+			
 			//if( ret[ret.length - 1] != '\n') ret += this.newline + this.depth
-
+			
 			if(typemethod){
 				ret += this.depth+this.indent+'return _'+this.newline + this.depth
 			}
-
+			
 			ret += '}'
 			if( n.await ){
 				if( bind ) ret += ',this'
@@ -1299,11 +1298,11 @@ ONE.GenJS_ = function(modules, parserCache){
 					ret += ',' + this.resolve( params[i].id )
 				}
 				ret += ')'
-			} 
+			}
 			
 			return ret
 		}
-
+		
 		this.find_function = function( n ){
 			var p = n.parent
 			while(p){
@@ -1326,7 +1325,7 @@ ONE.GenJS_ = function(modules, parserCache){
 			fn.auto_gen = 1
 			return 'yield' + (n.arg ? ' ' + this.expand(n.arg, n):'')
 		}
-
+		
 		this.Await = function( n ){
 			var fn = this.find_function( n )
 			if(!fn) throw new Error('Await cannot find enclosing function')
@@ -1334,12 +1333,12 @@ ONE.GenJS_ = function(modules, parserCache){
 			fn.await = 1
 			return 'yield'+ (n.arg ? ' ' + this.expand(n.arg, n):'')
 		}
-
+		
 		this.Update = function( n ){
-			var ret 
+			var ret
 			if( n.prefix ) ret = n.op + this.expand(n.arg, n)
 			else {
-				if( n.op === '!') throw new Error("Postfix ! not implemented")					
+				if( n.op === '!') throw new Error("Postfix ! not implemented")
 				if(n.op ==='~'){
 					ret = 'this.out('+this.expand(n.arg, n) + ')'
 				}
@@ -1347,33 +1346,33 @@ ONE.GenJS_ = function(modules, parserCache){
 			}
 			return ret
 		}
-
+		
 		this.Signal = function( n ){
-
+			
 			if(n.left.type != 'Id') throw new Error('Signal assign cant use left hand type')
-
+			
 			var id = n.left.name
 			if(this.scope[id]) throw new Error('Implement signal assign to local vars')
-
+			
 			var ret
-
+			
 			ret = 'this.signal("'+id+'",'
-
+			
 			// and it also supports local vars
 			// we need to check for % vars and pass them into parse.
 			var esc = outer.ToEscaped
 			var tpl = esc.templates = {}
 			var locals = esc.locals = {}
-
+			
 			// if we have a variable in scope, we need to bind the expression to it
 			esc.scope = this.scope
-
+			
 			esc.depth = this.depth
 			var body = esc.expand(n.right, n)
-
+			
 			// cache the AST for parse()
 			parserCache[body] = n.right
-
+			
 			var obj = ''
 			for( var name in tpl ){
 				if(obj) obj += ','
@@ -1384,7 +1383,7 @@ ONE.GenJS_ = function(modules, parserCache){
 				if(local) obj += ','
 				localstr += name+':'+name
 			}
-
+			
 			ret +=  'this._parse("' + body + '",module'
 			if( localstr ) ret += ',{' + localstr + '}'
 			if( obj ){
@@ -1392,7 +1391,7 @@ ONE.GenJS_ = function(modules, parserCache){
 				ret += ',{' + obj + '}'
 			}
 			ret += '))'
-
+			
 			return ret
 		}
 
@@ -1415,7 +1414,7 @@ ONE.GenJS_ = function(modules, parserCache){
 				}
 				// so what operator are we?
 				if(n.left.inferptr){ // we are an assign to a struct type
-					// we need to know what the rhs is. 
+					// we need to know what the rhs is.
 					n.right.assign_type = n.left.infer
 					n.right.assign_left = left
 					n.right.assign_op = n.op
@@ -1424,25 +1423,25 @@ ONE.GenJS_ = function(modules, parserCache){
 					if(n.right.assign_left){
 						if(!n.right.infer || n.right.infer.slots != n.left.infer.slots)
 							throw new Error('Incompatible types in assignment')
-
+						
 						// do a structure copy
 						// allocate tempvars
 						var func = this.find_function(n)
 						if(!func.type_nesting) func.type_nesting = 2
 						else func.type_nesting += 2
-
+						
 						if(!func.destruc_vars || func.type_nesting+1 > func.destruc_vars)
 							func.destruc_vars = func.type_nesting
-
+						
 						var tmp_l = this.destruc_prefix + (func.destruc_vars - 2)
 						var tmp_r = this.destruc_prefix + (func.destruc_vars - 1)
 						var nslots = n.left.infer.slots
 						var arr = n.left.infer.arr
 						var ret = '(' + tmp_l + '=' + left + ',' + tmp_r + '=' + right
 						for(var i = 0;i<nslots;i++){
-							ret += ',' + tmp_l + '.' + arr + '[' + tmp_l +'.o+'+ i + ']'+ 
+							ret += ',' + tmp_l + '.' + arr + '[' + tmp_l +'.o+'+ i + ']'+
 								n.op + tmp_r + '.' + arr + '[' + tmp_r +'.o+'+ i + ']'
-						} 
+						}
 						func.type_nesting -=2
 						ret += ','+tmp_r+')'
 					}
@@ -1452,12 +1451,12 @@ ONE.GenJS_ = function(modules, parserCache){
 				}
 				else {
 					ret += left
-					if(ret[ ret.length - 1 ] == '\n') ret += this.indent + this.depth
+					if(ret[ret.length - 1] == '\n') ret += this.indent + this.depth
 					ret += this.space + n.op + this.space + this.expand(n.right, n)
 				}
-			} 
+			}
 			else {
-				ret = 'this[' + this.expand(n.left, n) + ']' + this.space + n.op + 
+				ret = 'this[' + this.expand(n.left, n) + ']' + this.space + n.op +
 					this.space + this.expand(n.right, n)
 			}
 			return ret
@@ -1468,7 +1467,9 @@ ONE.GenJS_ = function(modules, parserCache){
 			var leftstr
 
 			// lets check types
-			if(n.left.infer || n.right.infer){
+			if(n.left.infer && n.left.infer.slots > 1 || 
+			   n.right.infer && n.right.infer.slots > 1){
+				// lets check compoundness
 				throw new Error('operator not defined for type')
 			}
 
@@ -1484,19 +1485,19 @@ ONE.GenJS_ = function(modules, parserCache){
 				return 'Array(' + left + ').join(' + right + ')'
 			} // mathematical modulus
 
-			if(n.op == '%%') return 'Math._mod(' + left + ',' + right + ')' 
+			if(n.op == '%%') return 'Math._mod(' + left + ',' + right + ')'
 			// floor division
-			if(n.op == '%/') return 'Math.floor(' + left + '/' + right + ')' 
+			if(n.op == '%/') return 'Math.floor(' + left + '/' + right + ')'
 			// pow
-			if(n.op == '**') return 'Math.pow(' + left + ',' + right + ')' 
+			if(n.op == '**') return 'Math.pow(' + left + ',' + right + ')'
 
 			// normal binop
-			if(left_t == 'Assign' || left_t == 'List' || left_t == 'Condition' || 
-				(left_t == 'Binary' || left_t == 'Logic') && n.left.prio < n.prio) 
+			if(left_t == 'Assign' || left_t == 'List' || left_t == 'Condition' ||
+				(left_t == 'Binary' || left_t == 'Logic') && n.left.prio < n.prio)
 				left = '(' + left + ')'
 
-			if(right_t == 'Assign' || right_t == 'List' || right_t == 'Condition' || 
-				(right_t == 'Binary' || right_t == 'Logic') &&  n.right.prio < n.prio) 
+			if(right_t == 'Assign' || right_t == 'List' || right_t == 'Condition' ||
+				(right_t == 'Binary' || right_t == 'Logic') &&  n.right.prio < n.prio)
 				right = '(' + right + ')'
 
 			return left + this.space + n.op + this.space + right
@@ -1508,12 +1509,12 @@ ONE.GenJS_ = function(modules, parserCache){
 			var left_t = n.left.type
 			var right_t = n.right.type
 
-			if(left_t == 'Assign' || left_t == 'List' || left_t == 'Condition' || 
-				(left_t == 'Binary' || left_t == 'Logic') && n.left.prio < n.prio) 
+			if(left_t == 'Assign' || left_t == 'List' || left_t == 'Condition' ||
+				(left_t == 'Binary' || left_t == 'Logic') && n.left.prio < n.prio)
 				left = '(' + left + ')'
 
-			if(right_t == 'Assign' || right_t == 'List' || right_t == 'Condition' || 
-				(right_t == 'Binary' || right_t == 'Logic') &&  n.right.prio < n.prio) 
+			if(right_t == 'Assign' || right_t == 'List' || right_t == 'Condition' ||
+				(right_t == 'Binary' || right_t == 'Logic') &&  n.right.prio < n.prio)
 				right = '(' + right + ')'
 
 			if(n.op == '?|'){
@@ -1521,7 +1522,7 @@ ONE.GenJS_ = function(modules, parserCache){
 
 				var tmp = this.alloc_tempvar(n)
 				return '((' + tmp + '=' + left + ')!==undefined?' + tmp + ':' + right + ')'
-			} 
+			}
 			return left + this.space + n.op + this.space + right
 		}
 
@@ -1544,8 +1545,8 @@ ONE.GenJS_ = function(modules, parserCache){
 		this.New = function( n ){
 			var fn = this.expand(n.fn, n)
 			var fn_t = n.fn.type
-			if(fn_t == 'Assign' || fn_t == 'Logic' || fn_t == 'Condition') 
-				fn = '(' + fn + ')'				
+			if(fn_t == 'Assign' || fn_t == 'Logic' || fn_t == 'Condition')
+				fn = '(' + fn + ')'
 
 			if(this.globals[fn]){
 				var arg = this.list(n.args, n)
@@ -1566,7 +1567,7 @@ ONE.GenJS_ = function(modules, parserCache){
 			if(fn.object.type !='Id') throw new Error('only 1 deep method calls for now')
 			// so first we are going to compile the function
 			var mname = fn.key.name
-			
+
 			var method = type.methods[mname]
 			while(method){
 				//!TODO add type checking here
@@ -1599,7 +1600,7 @@ ONE.GenJS_ = function(modules, parserCache){
 			ret += gen+'.call(this'
 			if(isstatic){
 				ret += ',{o:0,'+type.arr+':new ' + type.view + 'Array(' + type.slots + ')}'
-			} 
+			}
 			else ret += ', ' + root.name
 
 			// set up the call and argument list
@@ -1637,7 +1638,7 @@ ONE.GenJS_ = function(modules, parserCache){
 			else{
 				// store the type on our module for quick reference
 				this.module[type.name] = type
-				ret = '('+output+'= {o:0,t:module.'+type.name+','+type.arr+':new '+type.view+'Array(' 
+				ret = '('+output+'= {o:0,t:module.'+type.name+','+type.arr+':new '+type.view+'Array('
 				if(dims) ret += '(' + this.expand(dims, n) + ')*' + nslots + ')}'
 				else ret += nslots + ')}'
 			}
@@ -1676,7 +1677,7 @@ ONE.GenJS_ = function(modules, parserCache){
 							ret += (slot++) +']'+op
 						}
 						ret += val
-					} 
+					}
 					else {
 						throw new Error('compound error thing')
 					}
@@ -1687,12 +1688,12 @@ ONE.GenJS_ = function(modules, parserCache){
 			}
 			if(slot%nslots) throw new Error('Incorrect number of fields used in '+name+'() constructor, got '+slot+' expected (multiple of) '+nslots)
 			func.type_nesting--
-			
+
 			ret += ','+output+')'
-			
+
 			n.infer = type
 
-			return ret				
+			return ret
 		}
 
 		this.macro_call = function( n, name, args ){
@@ -1806,7 +1807,7 @@ ONE.GenJS_ = function(modules, parserCache){
 			if(outer.IsExpr[n.parent.type] && argl[0].type == 'Logic'){
 				return arg + ' || ' + body
 			}
-			return '(('+arg+') || '+body+')'				
+			return '(('+arg+') || '+body+')'
 		}
 
 		this.Call = function( n ){//, extra, pre, isnew ){
@@ -1858,13 +1859,13 @@ ONE.GenJS_ = function(modules, parserCache){
 
 			// new or extend
 			if(fn.type == 'Key'){
-				// check if we are a property access on a 
+				// check if we are a property access on a
 				// what we need to trace is the root object
 				var root = fn.isKeyChain()
 				if(root && root.name){
 					var isstatic
 					var type = this.scope[root.name] || (isstatic = this.find_type(root.name))
-					if(typeof type == 'object' && type.__class__ !== 'AST'){ 
+					if(typeof type == 'object' && type.__class__ !== 'AST'){
 						return this.struct_method(n, fn, args, root, type, isstatic)
 					}
 				}
@@ -1878,10 +1879,10 @@ ONE.GenJS_ = function(modules, parserCache){
 						}
 						else args = ['this']
 					}
-					// else dont mess with it 
+					// else dont mess with it
 					else if(name == 'call' || name == 'apply' || name == 'bind'){
 						return this.expand(n.fn, n) + '(' + this.list(n.args, n) + ')'
-					} 
+					}
 				}
 			}
 
@@ -1940,18 +1941,18 @@ ONE.GenJS_ = function(modules, parserCache){
 							else { // a normal value
 								sarg += ',' + this.space
 							}
-							if(typeof arg == 'string') sarg += arg 
+							if(typeof arg == 'string') sarg += arg
 							else sarg += this.expand(arg, n)
 						}
 					}
 					if(last == 1) sarg += ']'
-					else if(last == 2) sarg += ')'						
+					else if(last == 2) sarg += ')'
 				}
 				else {
 					for(var i = 0; i < arglen; i++){
 						if(i) sarg += ',' + this.space
 						var arg = args[i]
-						if(typeof arg == 'string') sarg += arg 
+						if(typeof arg == 'string') sarg += arg
 						else sarg += this.expand(arg, n)
 					}
 				}
@@ -1999,24 +2000,24 @@ ONE.GenJS_ = function(modules, parserCache){
 					cthis = 'this'
 					call = this.expand(n.fn, n)
 					var ftype = n.fn.type
-					if(ftype == 'Assign' || ftype == 'Logic' || ftype == 'Condition') 
+					if(ftype == 'Assign' || ftype == 'Logic' || ftype == 'Condition')
 						call = '(' + call + ')'
 				}
 			}
 			if(n.isnew){
 				cthis = call
-				call += '.new'	
+				call += '.new'
 			}
 
 			if(isapply) return call +'.apply(' + cthis + (sarg?','+this.space+sarg:'') + ')'
 			//fastpath Math
-			if(fastpath) return call+'('+sarg+')'
-			return call +'.call(' + cthis + (sarg?','+this.space+sarg:'') + ')'
+			if(fastpath) return call + '(' + sarg + ')'
+			return call +'.call(' + cthis + (sarg?',' + this.space + sarg:'') + ')'
 		}
 
 		this.Create = function( n ){
 			var fn = n.fn
-			
+
 			if(fn.type == 'Id'){
 				// animation new
 				if(fn.flag == 64 && fn.name === undefined){
@@ -2026,7 +2027,7 @@ ONE.GenJS_ = function(modules, parserCache){
 				if( fn.name == 'signal'){
 					return 'this.Signal.try(' + this.Function( n, null, ['end','fail'] ) +'.bind(this))'
 				}
-			} 
+			}
 			// alright, in general calling Bla{ } instances it.
 			return this.expand(n.fn, n) + '.create(this, ' + this.Function( n ) + ')'
 		}
@@ -2070,7 +2071,7 @@ ONE.GenJS_ = function(modules, parserCache){
 					fn:call,
 					args:[]
 				}
-			} 
+			}
 			else call.parent = n
 			if(n.kind == 'do'){
 				call.last_args = args
