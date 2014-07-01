@@ -1599,7 +1599,8 @@ ONE.GenJS_ = function(modules, parserCache){
 			var ret = ''
 			ret += gen+'.call(this'
 			if(isstatic){
-				ret += ',{o:0,'+type.arr+':new ' + type.view + 'Array(' + type.slots + ')}'
+				this.module[type.name] = type
+				ret += ',{o:0,t:module.'+type.name+','+type.arr+':new ' + type.view + 'Array(' + type.slots + ')}'
 			}
 			else ret += ', ' + root.name
 

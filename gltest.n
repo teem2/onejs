@@ -4,11 +4,13 @@ import dom
 
 class MyGL extends GLNode{
 
-	mesh = webgl.vec3Rect(-1,-1,2,2)
-
-	vertex: mesh[]
+	mesh = webgl.vec3Rect(-1,-1,2,2,10)
 	
-	slide: 0.1
+	viewmtx = mat4.perspective( radians(90), 1, 0.1, 100)
+
+	vertex: mesh[] * viewmtx
+	
+	slide = 0.1
 	
 	touchdown(v){
 		start = slide
@@ -16,8 +18,6 @@ class MyGL extends GLNode{
 			slide = start + v.x
 		}
 	}
-	
-	vx: vertex.x
 	
 	pixel: mix(#447, #black) do
 			//step(slide + 0.1) do

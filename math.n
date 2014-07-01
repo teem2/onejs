@@ -16,12 +16,14 @@ define ln(x)     Math.log(x)
 define loge(x)   Math.log(x)
 define log10(x)  (Math.log(x) / LN10)
 define log2(x)   (Math.log(x) / LN2)
-
+define radians(deg) (deg/PI180) 
+define degrees(rad) (rad*PI180)
 define max(x)    Math.max(x)
 define min(x)    Math.min(x)
 define random()  Math.random()
 define log(x) 	 console.log(x)
 define mod(x, y) (x%y+y)%y
+define PI180     57.29577951308232
 define PI        3.141592653589793
 define E         2.718281828459045
 define LN2       0.6931471805599453
@@ -894,7 +896,7 @@ struct mat4 extends mat{
 	}
 	
 	// Create matrix from left/right/bottom/top/near/far
-	frustrum( float L, float R, float B, float T, float N, float F, float O ){
+	frustrum( float L, float R, float B, float T, float N, float F ){
 		var rl = 1 / (R - L), tb = 1 / (T - B), nf = 1 / (N - F)
 		m00 = (N * 2) * rl, m01 = 0,            m02 = 0,                m03 = 0
 		m10 = 0,            m11 = (N * 2) * tb, m12 = 0,                m13 = 0
@@ -903,7 +905,7 @@ struct mat4 extends mat{
 	}
 
 	// Create perspective matrix FovY, Aspect, Near, Far
-	perspective( float FY, float A, float N, float F, float O ){
+	perspective( float FY, float A, float N, float F ){
 		var f = 1.0 / tan(FY / 2), nf = 1 / (N - F)
 		m00 = f / A, m01 = 0,  m02 = 0,                 m03 = 0
 		m10 = 0,     m11 = f,  m12 = 0,                 m13 = 0
@@ -912,7 +914,7 @@ struct mat4 extends mat{
 	}
 
 	// Create orthogonal proj matrix with Left/Right/Bottom/Top/Near/Far
-	ortho( float L, float R, float B, float T, float N, float F, float O ){
+	ortho( float L, float R, float B, float T, float N, float F ){
 		var lr = 1 / (L - R), bt = 1 / (B - T), nf = 1 / (N - F)
 		m00 = -2 * lr,      m01 = 0,            m02 = 0,            m03 = 0 
 		m10 = 0,            m11 = -2 * bt,      m12 = 0,            m13 = 0 

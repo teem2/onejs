@@ -137,7 +137,10 @@ class GLNode{
 			// lets resolve name
 			var prop = context[name]
 			if(prop === undefined) throw new Error('Cannot resolve ' + name)
-			if(typeof prop == 'object'){
+			
+			if(typeof prop == 'object' && prop.bind){
+				// what if we are a normal property with a value?..
+				// we will need to 
 				if(!prop.bind) throw new Error('invalid property ' + name)
 				// we have a bind
 				// check if its a value, or a fully static type constructor
@@ -156,7 +159,16 @@ class GLNode{
 					this[prop.bind.type](prop.bind, n)
 				}
 			}
-			else throw new Error('Add other property types ' + name)
+			else {
+				//TODO turn properties into signals here!
+				if(typeof prop == 'object' && typeof prop.t == 'object'){
+					n.infer = prop.t
+				} 
+				else if(typeof prop == 'number'){
+					n.infer = modules.types.float
+				}
+				else throw new Error('Add other property types ' + name)
+			}
 			if(n.kind){
 				// lets set our 'infer' to this type
 				if(n.kind.name == 'pixel'){
@@ -203,15 +215,15 @@ class GLNode{
 			this[n.object.type](n.object, n)
 			// we have to have an inferred type on object now
 			if(!n.infer) throw new Error('key access without type')
-
+			
 			var fields = n.infer.fields
 			if(!fields) throw new Error('key access on type without fields')
-
+			
 			var type = fields[n.key.name]
 			if(!type) throw new Error('type '+n.infer.name+' has no field '+n.key.name)
-
+			
 			n.infer = type
-
+			
 			return All(n)
 		}
 	}
@@ -351,15 +363,8 @@ class GLNode{
 					return objname + '.' + n.key.name
 				}
 			}
-			// lets do a type inference
-			// our object has a type.
-			// so that means that we can access properties on it
-			// and check their type. huzzah
-			
 			// lets only resolve the object, en just postfix the key
 			return this.expand(n.object, n) + '.' + n.key.name
-			// okay! we have to check if object
-			//return AST.ToCode::Key(n)
 		}
 		
 		Do = AST.ToJS.Do
@@ -422,16 +427,18 @@ class GLNode{
 				
 				GenGLSL.uniforms = vtx_uniforms
 				var code = GenGLSL.expand(vary.node)
-				var merge = vary_merge[code]
+				var typename = vary.node.infer.name
+				var key = typename + code
+				var merge = vary_merge[key]
 				if(?merge){
 					vary_merged += `
 				#define ${vary.name} ${merge}
 					`
 					continue
 				}
-				vary_merge[code] = vary.name
+				vary_merge[key] = vary.name
 				vary_decl +=`
-				varying ${vary.node.infer.name} ${vary.name};
+				varying ${typename} ${vary.name};
 				`
 				vary_assign += `
 					${vary.name} = ${code};
