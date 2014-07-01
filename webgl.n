@@ -37,6 +37,12 @@ vec3Rect( x, y, w, h, z = 0 ){
 	)
 }
 
+vec4Rect( x, y, w, h, z = 0, ww = 1 ){
+	return vec4[6](
+		x,y,z,ww,   x+w,y,z,ww,   x,y+h,z,ww
+		x+w,y,z,ww, x+w,y+h,z,ww, x,y+h,z,ww
+	)
+}
 class GLNode{
 
 	clearAll:( vec3 col ){
@@ -95,10 +101,12 @@ class GLNode{
 	}
 	
 	var glsl_uniform_map = {
-		float:'uniform1f',
-		vec2:'uniform2f',
-		vec3:'uniform3f',
-		vec4:'uniform4f',
+		float:v -> 'uniform1f(' + v + ',false,v)'
+		vec2: v -> 'uniform2fv(' + v + ',false,v)'
+		vec3: v -> 'uniform3fv(' + v + ',false,v)'
+		vec4: v -> 'uniform4fv(' + v + ',false,v)'
+		mat4: v -> 'uniformMatrix4fv(' + v + ',false,v)'
+
 	}
 	
 	class DepTraceGLSL extends AST.Walk{
@@ -161,10 +169,13 @@ class GLNode{
 			}
 			else {
 				//TODO turn properties into signals here!
+				log(prop)
 				if(typeof prop == 'object' && typeof prop.t == 'object'){
+					n.mark = 1
 					n.infer = prop.t
 				} 
 				else if(typeof prop == 'number'){
+					n.mark = 1
 					n.infer = modules.types.float
 				}
 				else throw new Error('Add other property types ' + name)
@@ -249,21 +260,20 @@ class GLNode{
 			
 			var prop = context[name]
 			if(prop === undefined) throw new Error("cannot resolve " + name)
-			// allright we have the type
-			// if athe resolve.bind is a single value, or struct constructor
-			// we will bind to it as a uniform.
 			if(prop.bind){
-				// alright so if bind is a single value
-				// we should replace the signal with this actual
-				// value, not the expression
-				// and wire 
 				return expand(resolve.bind, n)
 			} 
-			else { // its an immediate value, fetch it on this
-				return 'this.' + name +'.valueOf()'
+			
+			if(typeof prop == 'object'){
+				if(typeof prop.t !== 'object') return 'this.' + name +'.valueOf()'
+				// we are accessing a struct
+				return 'this.' + name
+			} 
+			else if(typeof prop == 'number'){
+				// or an immediate value
+				
 			}
-
-			return ''
+			else throw new Error('dont know what to do with '+name)
 		}
 	}
 
@@ -325,11 +335,10 @@ class GLNode{
 			
 			var prop = context[name]
 			if(prop === undefined) throw new Error("cannot resolve " + name)
-			// allright we have the type
-			// if athe resolve.bind is a single value, or struct constructor
-			// we will bind to it as a uniform.
+			
 			if(prop.bind) return expand(prop.bind, n)
-			//if(typeof prop.t != 'object') throw new Error('dont know what to do with resolve target')
+			
+			throw new Error('Dont know what to do with '+name)
 			
 			return ''
 		}
@@ -369,7 +378,7 @@ class GLNode{
 		
 		Do = AST.ToJS.Do
 	}
-
+	
 	class GenDrawJS extends AST.ToJS{
 		
 		_compile_draw( n ){
@@ -395,7 +404,7 @@ class GLNode{
 			// the run the code generator
 			GenGLSL.uniform_id = 0
 			GenGLSL.varying_id = 0
-
+			
 			var pix_uniforms = GenGLSL.uniforms = []
 			var varyings = GenGLSL.varyings = []
 			var pix_expr = GenGLSL.expand(pix.bind)
@@ -451,7 +460,7 @@ class GLNode{
 				uniform ${uni.node.infer.name} ${uni.name};
 				`
 			}
-
+			
 			// generate vertex uniform
 			for(var uni from vtx_uniforms){
 				vtx_uni_decl += `
@@ -471,7 +480,7 @@ class GLNode{
 				precision highp float;
 				${vtx_uni_decl}${attr_decl}${vary_decl}
 				void main(){
-					gl_Position = vec4(${vtx_expr},1.0);
+					gl_Position = ${vtx_expr};//vec4(${vtx_expr},1.0);
 					${vary_assign}
 				}
 			`
@@ -490,13 +499,21 @@ class GLNode{
 					var pix_shader = gl.createShader(${gl.FRAGMENT_SHADER})
 					gl.shaderSource(pix_shader, "${pix_shader.replace(/\n\t/g,'\\n\\\n\t\t\t')}")
 					gl.compileShader(pix_shader)
-					if (!gl.getShaderParameter(pix_shader, ${gl.COMPILE_STATUS})) throw new Error(gl.getShaderInfoLog(pix_shader))
+					if (!gl.getShaderParameter(pix_shader, ${gl.COMPILE_STATUS})){
+						var err = gl.getShaderInfoLog(pix_shader)
+						console.log(err.toString())
+						throw new Error(err)
+					}
 					
 					var vtx_shader = gl.createShader(${gl.VERTEX_SHADER})
 					gl.shaderSource(vtx_shader, "${vtx_shader.replace(/\n\t/g,'\\n\\\n\t\t\t')}")
 					gl.compileShader(vtx_shader)
-					if (!gl.getShaderParameter(vtx_shader, ${gl.COMPILE_STATUS})) throw new Error(gl.getShaderInfoLog(vtx_shader))
-					
+					if (!gl.getShaderParameter(vtx_shader, ${gl.COMPILE_STATUS})){
+						var err = gl.getShaderInfoLog(pix_shader)
+						console.log(err.toString())
+						throw new Error(err)
+					}
+
 					shader = gl.createProgram()
 					gl.attachShader(shader, vtx_shader)
 					gl.attachShader(shader, pix_shader)
@@ -507,11 +524,10 @@ class GLNode{
 			
 			for(var uni from pix_uniforms) ret += `
 					this.${uid}_ul_${uni.name} = gl.getUniformLocation(shader, "${uni.name}");`
-
+				
 			for(var uni from vtx_uniforms) ret += `
 					this.${uid}_ul_${uni.name} = gl.getUniformLocation(shader, "${uni.name}");`
-
-					
+			
 			for(var name in attribs)ret += `
 					this.${uid}_vb_${name} = gl.createBuffer()
 					this.${uid}_al_${name} = gl.getAttribLocation(shader, "${name}");`
@@ -525,8 +541,8 @@ class GLNode{
 				var attr = attribs[name]
 				
 				var abname = `${uid}_ab_${name}`
-				len = attr.f4.buffer.byteLength / attr.t.size
-				context[abname] = attr.f4.buffer
+				len = attr.buffer.byteLength / attr.t.size
+				context[abname] = attr.buffer
 				
 				ret += `
 				gl.bindBuffer(${gl.ARRAY_BUFFER}, this.${uid}_vb_${name})
@@ -549,15 +565,16 @@ class GLNode{
 				var js = GenUniformJS.expand(uni.node)
 				
 				var map = glsl_uniform_map[uni.node.infer.name]
-				if(!map) throw new Error('unsupported uniform type' + uni.type.name)
+				if(!map) throw new Error('unsupported uniform type ' + uni.node.infer.name)
 				ret +=`
 				var v = ${js}
 				if(this.${uid}_uv_${uni.name} !== v){
-					gl.${map}(this.${uid}_ul_${uni.name}, this.${uid}_uv_${uni.name} = v)
+					this.${uid}_uv_${uni.name} = v
+					gl.${map(`this.${uid}_ul_${uni.name}`)}
 				}
 				`
 			}
-
+			
 			// drawing function
 			ret += `
 				gl.drawArrays(gl.TRIANGLES, 0, ${len})

@@ -1046,7 +1046,7 @@ ONE.ast_ = function(){
 			this.Do = function( n ){
 				var ret = ''
 				ret += this.expand(n.call, n) 
-				var verb = this.kind + ' '
+				var verb = n.kind + ' '
 				if(ret[ret.length - 1] == '\n') ret += this.depth + ' ' + verb
 				else ret += ' ' + verb
 				ret += this.expand(n.arg, n)
@@ -1354,6 +1354,7 @@ ONE.ast_ = function(){
 	this.color = function( col ) {
 		var c = this.color_wikipedia[col] // color LUT
 		var a = new Float32Array(3)
+		a.t = this.AST.typeMap.vec3
 		if( c === undefined ){
 			// lets parse the color
 			var len = col.length
@@ -1391,13 +1392,13 @@ ONE.ast_ = function(){
 				a[0] = ((c&0xf00)>>8|(c&0xf00)>>4) /255
 				a[1] = ((c&0xf0)|(c&0xf0)>>4) /255
 				a[2] = ((c&0xf)|(c&0xf)<<4) /255 
-				return {f4:a, o:0}
+				return a
 			}
 		}
 		a[0] = ((c >> 16)&0xff) /255
 		a[1] = ((c >> 8)&0xff) /255
 		a[2] = (c&0xff) /255
-		return {f4:a, o:0}
+		return a
 	}
 
 	return this

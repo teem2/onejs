@@ -161,6 +161,9 @@ Language(){
 	assert(rt[1].p[1].y == 7)
 
 	rt[1].p[1] += vec_t(3,4)
+	
+	log(rt[1].p[1])
+	
 	assert(rt[1].p[1].y == 11)
 
 	// array splats

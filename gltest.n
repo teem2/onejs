@@ -4,11 +4,15 @@ import dom
 
 class MyGL extends GLNode{
 
-	mesh = webgl.vec3Rect(-1,-1,2,2,10)
+	mesh = webgl.vec4Rect(-1,-1,2,2,0.1)
 	
-	viewmtx = mat4.perspective( radians(90), 1, 0.1, 100)
-
-	vertex: mesh[] * viewmtx
+	
+	viewmtx = mat4.perspective( radians(80), 1, -10, 100)
+	rotmtx = mat4.rotateY(mat4.identity(), radians(1))
+	
+	//viewmtx = mat4.identity()
+	
+	vertex: mesh[] * rotmtx * viewmtx
 	
 	slide = 0.1
 	
@@ -22,7 +26,7 @@ class MyGL extends GLNode{
 	pixel: mix(#447, #black) do
 			//step(slide + 0.1) do
 			sin on 8. * pixel mesh[].x
-			* pixel vertex.y
+			* pixel mesh[].y
 			//(sin on 8. * mesh[].x)
 			//* (cos on 8. * mesh[].y)
 		
