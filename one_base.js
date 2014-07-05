@@ -1,5 +1,7 @@
 "use strict"
 // Base class
+if(typeof window !== 'undefined') window.ONE = {}
+else ONE = {}
 
 ONE.base_ = function(){
 
@@ -587,238 +589,6 @@ ONE.base_ = function(){
 		Object.defineProperty( this, key, def )
 	}
 
-	// the Signal class
-	// the union of a computed propery, an event, a promise and 
-	// an Observable and quite possibly a constraint.
-
-	function signal_(){
-
-		this.__class__ = 'Signal'
-		this.__signal__ = 1
-		
-		// create a new signal
-		this.new = function( owner ){
-			this.owner = owner
-		}
-
-		this.apply = function( sthis, args ){
-
-		}
-
-		this.call = function( sthis, value ){
-
-		}
-
-		// signal wrapper
-		this.wrap = function( wrap ){
-			var obj = Object.create(this)
-			wrap(obj)
-			return obj
-		}
-
-		// bind to a property
-		this.prop = function( owner, key, setter ){
-			var obj = Object.create( this )
-			
-			obj.owner = owner
-			obj.key = key
-			obj.setter = setter
-
-			return obj
-		}
-
-		// fork a signal
-		this.fork = function( owner ){
-			var sig = Object.create( this )
-			sig.owner = owner
-			return sig
-		}
-
-		// valueOf aliases signals to values
-		this.valueOf = function(){
-			return this.value
-		}
-
-		// listen to set
-		this.on = function( cb, pthis ){
-			if(pthis && pthis.owner) cb = cb.bind( pthis )
-
-			if(!this.hasOwnProperty('onSet')) this.onSet = cb
-			else if(!Array.isArray(this.onSet)) this.onSet = [this.onSet, cb]
-			else this.onSet.push( cb )
-
-			if(this.monitor) this.monitor.call( this.owner, cb )
-		}
-
-		this.off = function( cb ){
-			var i
-			if( this.onSet && (i = this.onSet.indexOf(cb)) !== -1){
-				this.onSet.splice(i, 1)
-			}
-		}
-
-		// listen to the end  / error
-		this.then = function( onEnd, onError ){
-			if(this.ended){
-				if(this.error) window.setTimeout(function(){
-						onError.call(this, this.exception)	
-					}.bind(this), 0)
-				else {
-					window.setTimeout(function(){
-						onEnd.call(this, this.value)	
-					}.bind(this), 0)
-				}
-				return
-			}
-
-			if(onEnd){
-				if(!this.hasOwnProperty('onEnd')) this.onEnd = onEnd
-				else if(!Array.isArray(this.onEnd)) this.onEnd = [this.onEnd, onEnd]
-				else this.onEnd.push( onEnd )
-			}
-
-			if(onError){
-				if(!this.hasOwnProperty('onError')) this.onError = onError
-				else if(!Array.isArray(this.onError)) this.onError = [this.onError, onError]
-				else this.onError.push( onError )
-			}
-		}
-		
-		// called by bound objects to set the value of the signal
-		// without replacing themselves
-		this.bypass = function( value ){
-			this.value = value
-
-			// call all our listeners
-			var proto = this 
-			var owner = this.owner
-			var s
-
-			if(this.setter) this.setter.call( owner, value, this )
-
- 			while(proto && (s = proto.onSet)){
- 				if(proto.hasOwnProperty('onSet')){
-					if(!Array.isArray(s)) s.call( owner, value, this )
-					else for(var i = 0, l = s.length; i < l; i++){
-						s[i].call( owner, value, this )
-					}
-				}
-				proto = Object.getPrototypeOf(proto)
-			}
-		}
-
-		// set the signal value
-		this.set = function( value ){
-			if(this.ended) throw new Error('Cant set an ended signal')
-
-			if(typeof value == 'function'){
-				return this.on( value )
-			}
-
-			var owner = this.owner
-
-			// if someone assigns something bindable we bind that
-			var old_bind
-			if( old_bind = this.bound ){
-				old_bind.unbind_signal( this )
-				this.bound = undefined
-			}
-
-			if( value && value.bind_signal ){
-				// lets check if we are bound to an instance
-				this.bind = value
-				if(!this.owner || this.owner.owner){
-					this.bound = value.bind_signal( owner, this, old_bind )
-				}
-				// delay the signal bind by pushing it on a stack
-				else this.owner.bind_signals
-				return
-			}
-
-			this.value = value
-
-			// call all our listeners
-			var proto = this 
-			var s
-
-			if(this.setter) this.setter.call( owner, value, this )
-
- 			while(proto && (s = proto.onSet)){
- 				if(proto.hasOwnProperty('onSet')){
-					if(!Array.isArray(s)) s.call( owner, value, this )
-					else for(var i = 0, l = s.length; i < l; i++){
-						s[i].call( owner, value, this )
-					}
-				}
-				proto = Object.getPrototypeOf(proto)
-			}
-		}
-
-		// end the signal
-		this.end = function(value){
-			this.set( value )
-			this.ended = true
-			// call end
-			var proto = this 
-			var owner = this.owner
-			var s
-			while(proto && (s = proto.onEnd)){
- 				if(proto.hasOwnProperty('onEnd')){
-					if(!Array.isArray(s)) s.call(owner, value, this)
-					else for(var i = 0, l = s.length; i < l; i++){
-						s[i].call(owner, value, this)
-					}
-				}
-				proto = Object.getPrototypeOf(proto)
-			}
-		}
-		
-		// default allows a throw to be transformed to a value
-		this.default = function(onDefault){
-			if(onDefault in this) throw new Error('Cannot overload defaults')
-			this.onDefault = onDefault
-			return this
-		}
-
-		// default allows a throw to be transformed
-		this.catch = function(onError){
-			if(onError){
-				if(!this.hasOwnProperty('onError')) this.onError = onError
-				else if(!Array.isArray(this.onError)) this.onError = [this.onError, onError]
-				else this.onError.push( onError )
-			}
-			return this
-		}
-
-		// throw and exception in the signal
-		this.throw = function(error, next){
-
-			if(this.ended) throw new Error('Cant throw on an ended signal')
-			if(this.onDefault) return this.end( this.onDefault(error) )
-
-			this.ended = true
-			this.error = error
-			// call error
-			var proto = this 
-			var owner = this.owner
-			var s
-			var handled
-			while(proto && (s = proto.onError)){
- 				if(proto.hasOwnProperty('onError')){
- 					handled = true
-					if(!Array.isArray(s)) s.call(owner, error, next, this)
-					else for(var i = 0, l = s.length; i < l; i++){
-						s[i].call(owner, error, next, this)
-					}
-				}
-				proto = Object.getPrototypeOf(proto)
-			}			
-			return handled
-		}
-	}
-
-	signal_.call( this.Signal = {} )
-
 	this.signal = function( key, value, setter ){
 		var signalStore = '__' + key
 		var fastStore = '__$' + key
@@ -882,103 +652,384 @@ ONE.base_ = function(){
 	this.error = function(){ ONE.logwrite(0, arguments) }
 }
 
-ONE._await = function( generator, bound, _catch ){
-	var ret = function(){
-		var iter = generator.apply(this, arguments)
-		return ONE.Signal.wrap(function(sig){
-			function error(e){
-				// throw forward
-				sig.throw(e)
-				// lets not throw in the iterator for now
-				//if(!ret) iter.throw(e)
-			}
-			function next( value ){
-				var iterval = iter.next( value )
-				if(iterval.done === false){ // we have a promise
-					iterval.value.then( next, error )
+ONE.init_ = function(){	
+	
+	// make self a class
+	this.base_()
+	
+	this.__class__ = 'ONE'
+	// create base class
+	this.base_.apply(this.Base = {})
+	this.Base.Base = this.Base
+	// add ast support to the Base class
+	this.ast_.apply(this.Base)
+	this.signal_.call(this.Base.Signal = {})
+
+	// make ONE the new root scope
+	this.Base.$ = this.$ = Object.create(this)
+	this.Base.out = this.out
+	this.Base.error = this.error
+	this.Base.warn = this.warn
+	this.Base.trace = this.trace
+
+	// hide all the props
+	this.Base.enumfalse.apply(ONE.Base, Object.keys( ONE.Base ) )
+
+	this._await = function( generator, bound, _catch ){
+		var ret = function(){
+			var iter = generator.apply(this, arguments)
+			return ONE.Signal.wrap(function(sig){
+				function error(e){
+					// throw forward
+					sig.throw(e)
+					// lets not throw in the iterator for now
+					//if(!ret) iter.throw(e)
 				}
-				else{
-					sig.end( iterval.value )
+				function next( value ){
+					var iterval = iter.next( value )
+					if(iterval.done === false){ // we have a promise
+						iterval.value.then( next, error )
+					}
+					else{
+						sig.end( iterval.value )
+					}
 				}
-			}
-			next()
-		})
-	}
-	if(bound) return ret.bind(bound)
-	return ret
-}
-
-ONE.iterator = function( what ){
-	// check what it is.
-	if(what === null || what === undefined) return
-	if(typeof what.next == 'function') return what
-	if(typeof what != 'object') throw new Error('Cannot iterate over object')
-
-	if(!Array.isArray(what)){
-		var obj = what
-		what = []
-		for( var k in obj ) what.push( obj[ k ] )
+				next()
+			})
+		}
+		if(bound) return ret.bind(bound)
+		return ret
 	}
 
-	var len = what.length
-	if(!len) return
-	return {
-		next:function(){
-			this.index++
-			if(this.index >= this.length - 1) this.done = true
-			this.value = what[this.index]
-			return this
+	this.iterator = function( what ){
+		// check what it is.
+		if(what === null || what === undefined) return
+		if(typeof what.next == 'function') return what
+		if(typeof what != 'object') throw new Error('Cannot iterate over object')
+	
+		if(!Array.isArray(what)){
+			var obj = what
+			what = []
+			for( var k in obj ) what.push( obj[ k ] )
+		}
+	
+		var len = what.length
+		if(!len) return
+		return {
+			next:function(){
+				this.index++
+				if(this.index >= this.length - 1) this.done = true
+				this.value = what[this.index]
+				return this
+			},
+			done: false,
+			index: -1,
+			length: len
+		}
+	}
+
+	var Assert_ =  function(txt, why, value){
+		this.toString = function(){
+			var msg = "Assert failed: " + txt + 
+				(why?"  why: "+why:'')+
+				(value!==undefined?"  got value: "+value:"")
+			return msg
+		}
+	}
+	if(typeof window !== 'undefined') window.Assert = Assert_
+	else Assert = Assert_
+	
+	// make all constructors compatible with the ONEJS way
+	Function.prototype.new = function(){
+		var obj = Object.create(this.prototype)
+		this.apply(obj, Array.prototype.slice.call(arguments, 1))
+		return obj
+	}
+	
+	// all X instanceOf Y is rewritten as Y prototypeOf X
+	// to map the simplified ONE class model to JS
+	Function.prototype.prototypeOf = function( other ){
+		return other instanceof this
+	}
+	
+	Object.defineProperty( Array.prototype, 'last', {
+		configurable:false,
+		enumerable:false,
+		get:function(){
+			return this[this.length - 1]
 		},
-		done: false,
-		index: -1,
-		length: len
+		set:function(value){
+			this[this.length - 1] = value
+		}
+	})
+	
+	Object.defineProperty( Array.prototype, 'first', {
+		configurable:false,
+		enumerable:false,
+		get:function(){
+			return this[0]
+		},
+		set:function(value){
+			this[0] = value
+		}
+	})
+	
+	Math._mod = function( x, y ){
+		return (x%y+y)%y
 	}
 }
 
-function Assert(txt, why, value){
-	this.toString = function(){
-		var msg = "Assert failed: " + txt + 
-			(why?"  why: "+why:'')+
-			(value!==undefined?"  got value: "+value:"")
-		return msg
+// the Signal class
+// the union of a computed propery, an event, a promise and 
+// an Observable and quite possibly a constraint.
+ONE.signal_ = function(){
+
+	this.__class__ = 'Signal'
+	this.__signal__ = 1
+	
+	// create a new signal
+	this.new = function( owner ){
+		this.owner = owner
 	}
-}
 
-// make all constructors compatible with the ONEJS way
-Function.prototype.new = function(){
-	var obj = Object.create(this.prototype)
-	this.apply(obj, Array.prototype.slice.call(arguments, 1))
-	return obj
-}
+	this.apply = function( sthis, args ){
 
-// all X instanceOf Y is rewritten as Y prototypeOf X
-// to map the simplified ONE class model to JS
-Function.prototype.prototypeOf = function( other ){
-	return other instanceof this
-}
-
-Object.defineProperty( Array.prototype, 'last', {
-	configurable:false,
-	enumerable:false,
-	get:function(){
-		return this[this.length - 1]
-	},
-	set:function(value){
-		this[this.length - 1] = value
 	}
-})
 
-Object.defineProperty( Array.prototype, 'first', {
-	configurable:false,
-	enumerable:false,
-	get:function(){
-		return this[0]
-	},
-	set:function(value){
-		this[0] = value
+	this.call = function( sthis, value ){
+
 	}
-})
 
-Math._mod = function( x, y ){
-	return (x%y+y)%y
+	// signal wrapper
+	this.wrap = function( wrap ){
+		var obj = Object.create(this)
+		wrap(obj)
+		return obj
+	}
+	
+	this.all = function(array){
+		var obj = Object.create(this)
+		if(!array || !array.length){
+			obj.end()
+			return obj
+		}
+		var deps = array.length
+		var res = []
+		for(var i = 0, l = deps; i < l; i++){
+			array[i].then(function(value){
+				if(obj){
+					res[this] = value
+					if(!--deps){
+						obj.end(res)
+						obj = null
+					}
+				}
+			}.bind(i),
+			function(err){
+				if(obj) obj.throw(err)
+				obj = null
+			})
+		}
+		return obj
+	}
+
+	// bind to a property
+	this.prop = function( owner, key, setter ){
+		var obj = Object.create( this )
+		
+		obj.owner = owner
+		obj.key = key
+		obj.setter = setter
+
+		return obj
+	}
+
+	// fork a signal
+	this.fork = function( owner ){
+		var sig = Object.create( this )
+		sig.owner = owner
+		return sig
+	}
+
+	// valueOf aliases signals to values
+	this.valueOf = function(){
+		return this.value
+	}
+
+	// listen to set
+	this.on = function( cb, pthis ){
+		if(pthis && pthis.owner) cb = cb.bind( pthis )
+
+		if(!this.hasOwnProperty('onSet')) this.onSet = cb
+		else if(!Array.isArray(this.onSet)) this.onSet = [this.onSet, cb]
+		else this.onSet.push( cb )
+
+		if(this.monitor) this.monitor.call( this.owner, cb )
+	}
+
+	this.off = function( cb ){
+		var i
+		if( this.onSet && (i = this.onSet.indexOf(cb)) !== -1){
+			this.onSet.splice(i, 1)
+		}
+	}
+
+	// listen to the end  / error
+	this.then = function( onEnd, onError ){
+		if(this.ended){
+			if(this.error) window.setTimeout(function(){
+					onError.call(this, this.exception)	
+				}.bind(this), 0)
+			else {
+				window.setTimeout(function(){
+					onEnd.call(this, this.value)	
+				}.bind(this), 0)
+			}
+			return
+		}
+
+		if(onEnd){
+			if(!this.hasOwnProperty('onEnd')) this.onEnd = onEnd
+			else if(!Array.isArray(this.onEnd)) this.onEnd = [this.onEnd, onEnd]
+			else this.onEnd.push( onEnd )
+		}
+
+		if(onError){
+			if(!this.hasOwnProperty('onError')) this.onError = onError
+			else if(!Array.isArray(this.onError)) this.onError = [this.onError, onError]
+			else this.onError.push( onError )
+		}
+	}
+	
+	// called by bound objects to set the value of the signal
+	// without replacing themselves
+	this.bypass = function( value ){
+		this.value = value
+
+		// call all our listeners
+		var proto = this 
+		var owner = this.owner
+		var s
+
+		if(this.setter) this.setter.call( owner, value, this )
+
+ 		while(proto && (s = proto.onSet)){
+ 			if(proto.hasOwnProperty('onSet')){
+				if(!Array.isArray(s)) s.call( owner, value, this )
+				else for(var i = 0, l = s.length; i < l; i++){
+					s[i].call( owner, value, this )
+				}
+			}
+			proto = Object.getPrototypeOf(proto)
+		}
+	}
+	
+	// set the signal value
+	this.set = function(value){
+		if(this.ended) throw new Error('Cant set an ended signal')
+		
+		if(typeof value == 'function'){
+			return this.on( value )
+		}
+		
+		var owner = this.owner
+		
+		// if someone assigns something bindable we bind that
+		var old_bind
+		if(old_bind = this.bound){
+			old_bind.unbind_signal( this )
+			this.bound = undefined
+		}
+		
+		if(value && value.bind_signal){
+			// lets check if we are bound to an instance
+			this.bind = value
+			if(!this.owner || this.owner.owner){
+				this.bound = value.bind_signal( owner, this, old_bind )
+			}
+			// delay the signal bind by pushing it on a stack
+			else this.owner.bind_signals
+			return
+		}
+		
+		this.value = value
+		
+		// call all our listeners
+		var proto = this 
+		var s
+		
+		if(this.setter) this.setter.call( owner, value, this )
+		
+		while(proto && (s = proto.onSet)){
+			if(proto.hasOwnProperty('onSet')){
+				if(!Array.isArray(s)) s.call( owner, value, this )
+				else for(var i = 0, l = s.length; i < l; i++){
+					s[i].call( owner, value, this )
+				}
+			}
+			proto = Object.getPrototypeOf(proto)
+		}
+	}
+	
+	// end the signal
+	this.end = function(value){
+		this.set( value )
+		this.ended = true
+		// call end
+		var proto = this 
+		var owner = this.owner
+		var s
+		while(proto && (s = proto.onEnd)){
+			if(proto.hasOwnProperty('onEnd')){
+				if(!Array.isArray(s)) s.call(owner, value, this)
+				else for(var i = 0, l = s.length; i < l; i++){
+					s[i].call(owner, value, this)
+				}
+			}
+			proto = Object.getPrototypeOf(proto)
+		}
+	}
+	
+	// default allows a throw to be transformed to a value
+	this.default = function(onDefault){
+		if(onDefault in this) throw new Error('Cannot overload defaults')
+		this.onDefault = onDefault
+		return this
+	}
+	
+	// default allows a throw to be transformed
+	this.catch = function(onError){
+		if(onError){
+			if(!this.hasOwnProperty('onError')) this.onError = onError
+			else if(!Array.isArray(this.onError)) this.onError = [this.onError, onError]
+			else this.onError.push( onError )
+		}
+		return this
+	}
+	
+	// throw and exception in the signal
+	this.throw = function(error, next){
+		
+		if(this.ended) throw new Error('Cant throw on an ended signal')
+		if(this.onDefault) return this.end( this.onDefault(error) )
+		
+		this.ended = true
+		this.error = error
+		// call error
+		var proto = this 
+		var owner = this.owner
+		var s
+		var handled
+		while(proto && (s = proto.onError)){
+			if(proto.hasOwnProperty('onError')){
+				handled = true
+				if(!Array.isArray(s)) s.call(owner, error, next, this)
+				else for(var i = 0, l = s.length; i < l; i++){
+					s[i].call(owner, error, next, this)
+				}
+			}
+			proto = Object.getPrototypeOf(proto)
+		}			
+		return handled
+	}
 }

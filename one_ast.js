@@ -17,7 +17,7 @@ ONE.ast_ = function(){
 	// internal parse api used by compiler
 	this._parse = function( source, module, locals, template, filename, noclone ){
 		parser.sourceFile = filename || ''
-
+        
 		var node = parserCache[source]
 		if(! node ){
 			node = parser.parse_strict( source )
@@ -26,7 +26,7 @@ ONE.ast_ = function(){
 			}
 			parserCache[source] = node
 		}
-
+        
 		if(!noclone){
 			if( template ){
 				var template_nodes = []
@@ -40,7 +40,7 @@ ONE.ast_ = function(){
 		node.source = source
 		node.pthis = this
 		node.module = module
-
+        
 		// we now need to process our template-replaces
 		if( template ){
 			var nodes = template_nodes
@@ -51,7 +51,7 @@ ONE.ast_ = function(){
 				var tgt = nodes[i]
 				var src = template[ tgt.arg.name ]
 				if(!src) throw new Error("Template variable not found: " + tgt.arg.name)
-
+                
 				// clean ret the node
 				tgt.prefix = undefined
 				tgt.op = undefined
@@ -84,16 +84,16 @@ ONE.ast_ = function(){
 		}
 		// alright we have to compile us some code!
 		var js = this.AST.ToJS
-
+        
 		// set up new compile state
 		js.new_state()
 		modules[filename] = js.module
-
+        
 		// if passing a function we return that
 		if(ast.type == 'Function'){
 			ast.root = true
 			var flags = js.pull_flags(ast)
-
+            
 			if(flags){
 				if(flags.indexOf('ast')!= -1) ONE.log( ast.toDump() )
 				if(flags.indexOf('code')!=-1){
@@ -105,37 +105,37 @@ ONE.ast_ = function(){
 			var nametag
 			if(filename) nametag = 'file__'+filename.replace(/[\.\/]/g,'_')
 			var code = 'return ' + js.Function( ast, nametag )
-
+            
 			// prepend type methods
 			for(var k in js.typemethods){
 				code = js.typemethods[k] + code
 			}
 			if(flags && flags.indexOf('js')!=-1) ONE.log( code )
-
+            
 			try{
 				if( typeof process !== 'undefined'){
 					var fn = Function.call(null, 'module', 'require', '__dirname', code)(js.module, require, __dirname)
 				}
 				else{
 					var prof = flags && flags.indexOf('profile') != -1 && Date.now()
-
+                    
 					var fn = Function.call(null, 'module', code)(js.module)
-
+                    
 					if(prof) console.log('Profile ' +filename + ' '+ (Date.now()-prof)+'ms')
 				}
-
+            
 			} 
 			catch(e){
 				console.log("ERROR",e,code)
 			}
 			return fn
 		}
-
+        
 		var code = (ast.isExpr()?'return ':'') + js.expand( ast )
 		for(var k in js.typemethods){
 			code = js.typemethods[k] + code
 		}
-
+        
 		var run = Function(code)
 		return run.call(this)
 	}
@@ -162,28 +162,28 @@ ONE.ast_ = function(){
 
 		// AST nodes can be bound to signals as expressions
 		this.bind_signal = function( owner, sig, old ){
-
+            
 			var deps = this.ToSignalExpr.deps = []
 			var code = 'return ' + this.ToSignalExpr.expand( this ) 
-
+            
 			// it gets executed on the this of the object
 			var recalc = new Function( code )
-
+            
 			function onSig(){
 				sig.bypass( recalc.call( owner ) )
 			}
 			sig.recalc = onSig
 			sig.deps = []
-
+            
 			for(var i = 0, l = deps.length; i < l; i+= 2){
 				var obj = deps[i]
 				var key = deps[i+1]
-
+                
 				if(obj !== null){
 					obj = owner.resolve( obj )
 				} 
 				else obj = owner
-
+                
 				var dep = obj[ key ]
 				if(sig.deps.indexOf( dep ) === -1){
 					sig.deps.push( dep )
@@ -194,7 +194,7 @@ ONE.ast_ = function(){
 			}
 			// set value
 			sig.bypass( recalc.call( owner ) )
-
+            
 			return this
 		}
 		
@@ -297,7 +297,7 @@ ONE.ast_ = function(){
 			var ret = ''
 			for( var type in ast ){
 				var tag = ast[ type ]
-				var walk = '\tn.parent = p\n'
+				var walk = '\tn.parent = p\nif(this.Pre)this.Pre(n)\n'
 
 				var copy = '\tc.type = n.type\n'+
 							'\tif(n.store) c.store = n.store\n'+
@@ -374,7 +374,7 @@ ONE.ast_ = function(){
 					}
 					v++
 				}
-				ret += '\n_walk.'+type+'=function(n, p){\n' + walk + '\n\tif(this.All && this.All(n))return 1\n}\n' 
+				ret += '\n_walk.'+type+'=function(n, p){\n' + walk + '\n\tif(this.Post && this.Post(n))return 1\n}\n' 
 				ret += '\n_clone.'+type+'=function(n){\n' + clone + '\treturn c\n}\n' 
 				ret += '\n_copy.'+type+'=function(n, c){\n'+ copy +'\treturn\n}\n'
 			}
@@ -1160,7 +1160,7 @@ ONE.ast_ = function(){
 			}
 			return ret
 		}
-		ONE.GenJS_.call(this, modules, parserCache)
+		ONE.genjs_.call(this, modules, parserCache)
 
 	}, "AST")
 	

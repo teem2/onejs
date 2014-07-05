@@ -11,11 +11,11 @@ class GLView{
 			alpha: false,
 			depth: true,
 			stencil: false,
-			antialias: false,
+			antialias: true,
 			premultipliedAlpha: false,
 			preserveDrawingBuffer: true
 		})
-		
+		gl._shadercache = {}
 		var _gl = gl
 		window.onresize = =>{
 			var w = parent.offsetWidth
@@ -101,12 +101,11 @@ class GLNode{
 	}
 	
 	var glsl_uniform_map = {
-		float:v -> 'uniform1f(' + v + ',false,v)'
-		vec2: v -> 'uniform2fv(' + v + ',false,v)'
-		vec3: v -> 'uniform3fv(' + v + ',false,v)'
-		vec4: v -> 'uniform4fv(' + v + ',false,v)'
-		mat4: v -> 'uniformMatrix4fv(' + v + ',false,v)'
-
+		float:a -> 'uniform1f(' + a + ',false,v)'
+		vec2: a -> 'uniform2fv(' + a + ',false,v)'
+		vec3: a -> 'uniform3fv(' + a + ',false,v)'
+		vec4: a -> 'uniform4fv(' + a + ',false,v)'
+		mat4: a -> 'uniformMatrix4fv(' + a + ',false,v)'
 	}
 	
 	class DepTraceGLSL extends AST.Walk{
@@ -114,21 +113,28 @@ class GLNode{
 		// uniform has mark 1
 		// attribute has mark 2
 		// pixel has mark 3
-		All( n, omark ){
+		Pre( n ){
+			n.infer = undefined
+			n.mark = undefined
+		}
+		
+		Post( n, omark ){
 			// lets propagate up our mark to our parent
 			var parent = n.parent
 			var nmark = omark || n.mark
-			if(!nmark || !parent) return
-			var pmark = parent.mark
-			if(!pmark) parent.mark = nmark
-			else if(pmark < nmark) parent.mark = nmark
-			// lets keep it simple and copy our 'infer' up
-			// any deviations from this are custom overloaded
-			if(!parent.infer) parent.infer = n.infer
+			if(parent){
+				if(nmark){
+					var pmark = parent.mark
+					if(!pmark) parent.mark = nmark
+					else if(pmark < nmark) parent.mark = nmark
+				}
+				if(!parent.infer) parent.infer = n.infer
+			}
 		}
 		
 		Do( n, parent ){
 			n.parent = parent
+			Pre(n)
 			AST.Walk::Do(n, parent)
 			// fuse mark properly
 			if(n.arg.mark > n.call.mark) n.call.mark = n.arg.mark
@@ -136,12 +142,20 @@ class GLNode{
 		
 		Id( n, parent ){
 			n.parent = parent
+			Pre(n)
 			var name = n.name
 			if(n.flag == 35) return // is color
 			if(name in glsl_functions || name in glsl_variables){
 				if(name == 'gl_FragCoord') n.mark = 3
 				return
 			}
+			// check if we are a macro?
+			var def = this.find_define(name)
+			if(def){
+				this[def.type](def, n)
+				return
+			}
+
 			// lets resolve name
 			var prop = context[name]
 			if(prop === undefined) throw new Error('Cannot resolve ' + name)
@@ -169,14 +183,14 @@ class GLNode{
 			}
 			else {
 				//TODO turn properties into signals here!
-				log(prop)
+				//log(prop)
 				if(typeof prop == 'object' && typeof prop.t == 'object'){
 					n.mark = 1
 					n.infer = prop.t
 				} 
 				else if(typeof prop == 'number'){
 					n.mark = 1
-					n.infer = modules.types.float
+					n.infer = module.types.float
 				}
 				else throw new Error('Add other property types ' + name)
 			}
@@ -191,11 +205,12 @@ class GLNode{
 					if(!n.infer) throw new Error('cannot find type ' + n.kind.name)
 				}
 			}
-			All(n)
+			Post(n)
 		}
 		
 		Index( n, parent ){
 			n.parent = parent
+			Pre(n)
 			if(!n.index){
 				var nmark = n.mark = 2 // mark as attribute
 				if(n.object.kind && n.object.kind.name == 'pixel')
@@ -204,13 +219,15 @@ class GLNode{
 				var attrib = context[n.object.name]
 				if(!attrib) throw new Error('cannot fetch attribute '+n.object.name)
 				n.infer = attrib.t
-				return All(n, nmark)
+				return Post(n, nmark)
 			}
 			return AST.Walk::Index(n)
 		}
 		
 		Key( n, parent ){
 			n.parent = parent
+			Pre(n)
+			
 			// we are a *.key
 			// what we dont want to do is resolve the key.
 			// we only want to walk the object.
@@ -219,7 +236,14 @@ class GLNode{
 				
 				if(objname in glsl_variables){
 					if(objname == 'gl_FragCoord') n.mark = 3
-					return All(n)
+					return Post(n)
+				}
+
+				// static type method or property?
+				var type = find_type(objname)
+				if(type){
+					n.infer = type
+					return Post(n)
 				}
 			}
 			// only try to walk/resolve the object
@@ -229,27 +253,24 @@ class GLNode{
 			
 			var fields = n.infer.fields
 			if(!fields) throw new Error('key access on type without fields')
-			
+
 			var type = fields[n.key.name]
 			if(!type) throw new Error('type '+n.infer.name+' has no field '+n.key.name)
 			
 			n.infer = type
 			
-			return All(n)
+			return Post(n)
 		}
+		find_define = AST.ToJS.find_define
+		find_type = AST.ToJS.find_type
 	}
 
 	// generate the uniform computation JS
 	class GenUniformJS extends AST.ToJS{
-		// ok so, we have to expand into proper JS
-		// depending on type oc.
-		// what code do we generate?
-		// what if a reference is a typed array type
-		//
-		// okay! we need to
+		skip = 1
 		Id( n ){
 			var name = n.name
-			// if we are # bla lets resolve the color and inline.
+			
 			if(n.flag == 35){ // is a color
 				return 'this.color("' + name + '")'
 			}
@@ -259,19 +280,23 @@ class GLNode{
 			}
 			
 			var prop = context[name]
-			if(prop === undefined) throw new Error("cannot resolve " + name)
+			
+			if(prop === undefined || this.scope[name]) return this.resolve(n.name, n)
+			
 			if(prop.bind){
-				return expand(resolve.bind, n)
-			} 
+				return expand(prop.bind, n)
+			}
 			
 			if(typeof prop == 'object'){
 				if(typeof prop.t !== 'object') return 'this.' + name +'.valueOf()'
 				// we are accessing a struct
+				//!TODO convert to signal
 				return 'this.' + name
 			} 
 			else if(typeof prop == 'number'){
 				// or an immediate value
-				
+				//!TODO convert to signal
+				return 'this.' + name
 			}
 			else throw new Error('dont know what to do with '+name)
 		}
@@ -292,24 +317,17 @@ class GLNode{
 				// okay so, we are a uniform. we splice in
 				// a temp uniform, and we define it
 				var uni = {
-					name: 'uni' + (uniform_id++)
+					name: (pixel?'pix_':'vtx_') + n.infer.name + '_' + (uniform_id++)
 					node: n
 				}
 				uniforms.push(uni)
 				return uni.name
-				// and call GenUniformJS on us.
-				// now what does that do in this case?
-				// if GenUniform finds an id reference
 			}
 			// output vertex varying
 			if(pixel && n.mark == 2){
-				// ok so, what if we already have a varying
-				// with the exact same 'node'
-				
-				
 				// alright we need to output a vertex varying
 				var vary = {
-					name: 'var' + (varying_id++)
+					name: 'var_'+n.infer.name+'_' + (varying_id++)
 					node: n
 				}
 				varyings.push(vary)
@@ -355,7 +373,7 @@ class GLNode{
 				if(!obj) throw new Error('Cannot find vertex attribute[] ' + name)
 				
 				var attr = attribs[name]
-				if(attr && attr !== obj) throw new Error('Cannot redefine vertex attribute[] '+name)
+				if(attr && attr !== obj) throw new Error('Cannot redefine vertex attribute[] ' + name)
 				
 				attribs[name] = obj
 				
@@ -382,7 +400,7 @@ class GLNode{
 	class GenDrawJS extends AST.ToJS{
 		
 		_compile_draw( n ){
-			
+		
 			var uid = 'd' + this.uid++
 			
 			// setup module/context
@@ -395,13 +413,13 @@ class GLNode{
 			var pix = context.pixel
 			if(!pix.bind) throw new Error('Unexpected pixel type')
 			
-			// call the dependency trace on our expression
+			// deptrace the pixelshader
 			GenGLSL.pixel = DepTraceGLSL.pixel = 1
 			DepTraceGLSL.module = module
 			DepTraceGLSL[pix.bind.type](pix.bind)
 			//log(pix.bind.toDump())
 			
-			// the run the code generator
+			// codegen the pixelshader
 			GenGLSL.uniform_id = 0
 			GenGLSL.varying_id = 0
 			
@@ -409,14 +427,14 @@ class GLNode{
 			var varyings = GenGLSL.varyings = []
 			var pix_expr = GenGLSL.expand(pix.bind)
 			
-			// compile vertex shader
+			// pull the vertex property from our context
 			var vtx = context.vertex
 			if(!vtx.bind) throw new Error('Unexpected vertex type')
 			
-			// dependency trace vertex shader shader
+			// dependency trace vertex shader
 			GenGLSL.pixel = DepTraceGLSL.pixel = 0
 			DepTraceGLSL[vtx.bind.type](vtx.bind)
-			
+			//log(vtx.bind.toDump())
 			// compile vertex shader
 			var vtx_uniforms = GenGLSL.uniforms = []
 			var vtx_expr = GenGLSL.expand(vtx.bind)
@@ -480,7 +498,7 @@ class GLNode{
 				precision highp float;
 				${vtx_uni_decl}${attr_decl}${vary_decl}
 				void main(){
-					gl_Position = ${vtx_expr};//vec4(${vtx_expr},1.0);
+					gl_Position = ${vtx_expr};
 					${vary_assign}
 				}
 			`
@@ -496,29 +514,36 @@ class GLNode{
 			ret += `
 				var shader = this.${uid}_shader
 				if(!shader){
-					var pix_shader = gl.createShader(${gl.FRAGMENT_SHADER})
-					gl.shaderSource(pix_shader, "${pix_shader.replace(/\n\t/g,'\\n\\\n\t\t\t')}")
-					gl.compileShader(pix_shader)
-					if (!gl.getShaderParameter(pix_shader, ${gl.COMPILE_STATUS})){
-						var err = gl.getShaderInfoLog(pix_shader)
-						console.log(err.toString())
-						throw new Error(err)
+					var pix_source = "${pix_shader.replace(/\n\t/g,'\\n\\\n\t\t\t')}"
+					var vtx_source = "${vtx_shader.replace(/\n\t/g,'\\n\\\n\t\t\t')}"
+					var cache_key = pix_source + vtx_source
+					shader = gl._shadercache[cache_key]
+					if(!shader){
+						var pix_shader = gl.createShader(${gl.FRAGMENT_SHADER})
+						
+						gl.shaderSource(pix_shader, pix_source)
+						gl.compileShader(pix_shader)
+						if (!gl.getShaderParameter(pix_shader, ${gl.COMPILE_STATUS})){
+							var err = gl.getShaderInfoLog(pix_shader)
+							console.log(err.toString())
+							throw new Error(err)
+						}
+						
+						var vtx_shader = gl.createShader(${gl.VERTEX_SHADER})
+						gl.shaderSource(vtx_shader, vtx_source)
+						gl.compileShader(vtx_shader)
+						if (!gl.getShaderParameter(vtx_shader, ${gl.COMPILE_STATUS})){
+							var err = gl.getShaderInfoLog(pix_shader)
+							console.log(err.toString())
+							throw new Error(err)
+						}
+						
+						shader = gl.createProgram()
+						gl.attachShader(shader, vtx_shader)
+						gl.attachShader(shader, pix_shader)
+						gl.linkProgram(shader)
+						gl._shadercache[cache_key] = shader
 					}
-					
-					var vtx_shader = gl.createShader(${gl.VERTEX_SHADER})
-					gl.shaderSource(vtx_shader, "${vtx_shader.replace(/\n\t/g,'\\n\\\n\t\t\t')}")
-					gl.compileShader(vtx_shader)
-					if (!gl.getShaderParameter(vtx_shader, ${gl.COMPILE_STATUS})){
-						var err = gl.getShaderInfoLog(pix_shader)
-						console.log(err.toString())
-						throw new Error(err)
-					}
-
-					shader = gl.createProgram()
-					gl.attachShader(shader, vtx_shader)
-					gl.attachShader(shader, pix_shader)
-					gl.linkProgram(shader)
-					
 					this.${uid}_shader = shader
 			`
 			
@@ -558,11 +583,11 @@ class GLNode{
 			}
 			
 			// generate uniform setting
+			GenUniformJS.typemethods = typemethods
 			for(var uni from pix_uniforms.concat(vtx_uniforms)){
-				
 				GenUniformJS.module = module
 				GenUniformJS.context = context
-				var js = GenUniformJS.expand(uni.node)
+				var js = GenUniformJS.expand(uni.node, n)
 				
 				var map = glsl_uniform_map[uni.node.infer.name]
 				if(!map) throw new Error('unsupported uniform type ' + uni.node.infer.name)
@@ -580,16 +605,17 @@ class GLNode{
 				gl.drawArrays(gl.TRIANGLES, 0, ${len})
 			`
 			// correctly indent the code
-			ret = ret.replace(/\n\t\t\t\t/g, '\n'+this.indent)
+			//ret = ret.replace(/\n\t\t\t\t/g, '\n'+this.indent)
 			return ret
 		}
 	}
 
 	init(){
+		//profile(1) do(){
 		// we have to compile the draw signal
 		// alright lets stringify draw
 		// so lets stringify it.
-		var js = GenDrawJS
+		js = GenDrawJS
 		var ast = draw.bind
 		// make a fresh scope and signals store
 		js.new_state()
@@ -601,15 +627,16 @@ class GLNode{
 		if(ast.type != 'Function') throw new Error('GL Draw not a function')
 		
 		var flags = js.pull_flags(ast)
-		var code = js.Function(ast, undefined, ['gl'])
+		code = 'return ' + js.Function(ast, undefined, ['gl'])
 		if(flags.indexOf('js') != -1) out(code)
 		
-		// lets eval it in our current space
-		log(code)
+		// prepend static typemethods
+		for(var k in js.typemethods){
+			code = js.typemethods[k] + code
+		}
 		
-		_draw = Function('module','return ' + code)(js.module)
-		
-		// just run it immediately, once.
+		_draw = Function('module', code)(js.module)
+
 		_draw(owner.gl)
 	}
 }

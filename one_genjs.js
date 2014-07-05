@@ -1,4 +1,4 @@
-ONE.GenJS_ = function(modules, parserCache){
+ONE.genjs_ = function(modules, parserCache){
 
 	this.typeMap = Object.create(null)
 	this.typeMap.bool    = { size:1, slots:1, view:'Int32', arr:'i4', name:'bool', prim:1 }
@@ -422,8 +422,9 @@ ONE.GenJS_ = function(modules, parserCache){
 								if(!field.size) throw new Error('cannot index 0 size field')
 								
 								// so if we have dim, we want index calcs.
-								if(field.dim) idx += '('+this.expand(node.index, n) + ')*' + (field.size / outer.viewSize[type.view]) + '+'
-								else idx += '('+this.expand(node.index, n) + ')+'
+								if(idx!=='') idx += '+'
+								if(field.dim) idx += '('+this.expand(node.index, n) + ')*' + (field.size / outer.viewSize[type.view]) 
+								else idx += '('+this.expand(node.index, n) + ')'
 							}
 							else {
 								field = field.fields[node.key && node.key.name || node.name]
@@ -437,11 +438,14 @@ ONE.GenJS_ = function(modules, parserCache){
 							node = node.parent
 						}
 						// alright so what we can do is actually take the pointer and assign to it
-						// what if its not
-						// check if we terminated at a value field or a compound field
-						
-						//var voff = base+'.o+' +idx+ (off / outer.viewSize[type.view])
-						var voff = idx+ (off / outer.viewSize[type.view])
+						// minimize the offset
+						var dt =  (off / outer.viewSize[type.view])
+						var voff = idx
+						if(dt){
+							if(voff!=='') voff += '+' + dt
+							else voff = dt
+						}
+						else if(voff == '') voff = '0'
 						
 						if((!node.index || field.dim) && !field.prim){
 							n.infer = field
@@ -454,7 +458,6 @@ ONE.GenJS_ = function(modules, parserCache){
 						}
 						//return base + '.'+type.arr+'[' + voff+ ']'
 						return base + '[' + voff+ ']'
-
 					}
 				}
 				if(node.type != 'Key' && node.type != 'Index') break
@@ -1099,7 +1102,7 @@ ONE.GenJS_ = function(modules, parserCache){
 		}
 		
 		this.Function = function( n, nametag, extparams, typemethod ){
-			if( n.id ) this.scope[ n.id.name ] = 1
+			if(n.id) this.scope[n.id.name] = 1
 			// make a new scope
 			var scope = this.scope
 			this.scope = Object.create( scope )
@@ -1118,7 +1121,7 @@ ONE.GenJS_ = function(modules, parserCache){
 			var params = n.params
 			var plen = params ? params.length : 0
 			// do rest parameters
-			if( n.rest ){
+			if(n.rest){
 				if( n.rest.id.type !== 'Id' ) throw new Error('Unknown id type')
 				var name = n.rest.id.name
 				this.scope[name] = 1
@@ -1133,7 +1136,7 @@ ONE.GenJS_ = function(modules, parserCache){
 				str_param += '_'
 			}
 			// do init
-			if( plen ){
+			if(plen){
 				var split = ',' + this.space
 				for(var i = 0;i<plen;i++){
 					var param = params[i]
@@ -1182,11 +1185,10 @@ ONE.GenJS_ = function(modules, parserCache){
 							}
 							else this.scope[name] =  1
 						}
-						
 					}
 				}
 			}
-			if( extparams ){
+			if(extparams){
 				var split = ','+this.space
 				var exlen = extparams.length
 				for(var i = 0;i<exlen;i++){
@@ -1198,7 +1200,7 @@ ONE.GenJS_ = function(modules, parserCache){
 			}
 			
 			// expand the function
-			if( n.body.type == 'Block' ){
+			if(n.body.type == 'Block'){
 				var steps = n.body.steps
 				n.body.parent = n
 				// we can do a simple wait transform
@@ -1319,6 +1321,7 @@ ONE.GenJS_ = function(modules, parserCache){
 				if(p.type == 'Create') return p
 				if(p.type == 'Class') return p
 				if(p.type == 'Function') return p
+				if(p.root) console.log(p)
 				p = p.parent
 			}
 		}
@@ -1453,7 +1456,7 @@ ONE.GenJS_ = function(modules, parserCache){
 							//	n.op + tmp_r + '.' + arr + '[' + tmp_r +'.o+'+ i + ']'
 							ret += ',' + tmp_l + '[' + i + ']'+
 								n.op + tmp_r + '[' + i + ']'
-
+							
 						}
 						func.type_nesting -=2
 						ret += ','+tmp_r+')'
@@ -1474,7 +1477,11 @@ ONE.GenJS_ = function(modules, parserCache){
 			}
 			return ret
 		}
-		
+
+		this.bin_op_table = {
+			'*':'mul'
+		}
+
 		this.Binary = function( n ){
 			var ret
 			var leftstr
@@ -1482,10 +1489,17 @@ ONE.GenJS_ = function(modules, parserCache){
 			// lets check types
 			if(n.left.infer && n.left.infer.slots > 1 || 
 			   n.right.infer && n.right.infer.slots > 1){
-				// lets check compoundness
-				throw new Error('operator not defined for type')
+			   	// alright so, we have
+				var left_t = n.left.infer
+				var right_t = n.right.infer
+				var left_name = left_t.name
+				var right_name = right_t.name
+				var name = this.bin_op_table[n.op]
+				var type = this.find_type(left_name)
+				if(!name) throw new Error('operator '+n.op+' not supported for type '+left_name)
+				// operators are static struct calls
+				return this.struct_method(n, type, left_name +'_'+ name + '_' + right_name, [n.left, n.right])
 			}
-			
 			var left = this.expand(n.left, n)
 			var right = this.expand(n.right, n)
 			var left_t = n.left.type
@@ -1575,28 +1589,24 @@ ONE.GenJS_ = function(modules, parserCache){
 		}
 		
 		// struct method call
-		this.struct_method = function(n, fn, args, root, type, isstatic){
-			// alright we are a method call.
-			if(fn.object.type !='Id') throw new Error('only 1 deep method calls for now')
-			// so first we are going to compile the function
-			var mname = fn.key.name
-			
-			var method = type.methods[mname]
+		this.struct_method = function(n, type, method_name, args, sthis){
+
+			var method = type.methods[method_name]
 			while(method){
 				//!TODO add type checking here
 				if(method.params.length == args.length) break
-				mname = mname + '_'
-				method = type.methods[mname]
+				method_name = method_name + '_'
+				method = type.methods[method_name]
 			}
-			if(!method) throw new Error('No overload found for '+mname)
+			if(!method) throw new Error('No overload found for '+method_name)
 			
 			// lets make a name from our argument types
 			for(var i = 0, l = method.params.length; i < l; i++){
 				var kind = method.params[i].id.kind
-				mname += '_'+(kind && kind.name || 'var')
+				method_name += '_'+(kind && kind.name || 'var')
 			}
 			
-			var gen = type.name + '_' + mname
+			var gen = type.name + '_' + method_name
 			
 			// make a typemethod
 			if(!this.typemethods[gen]){
@@ -1611,7 +1621,7 @@ ONE.GenJS_ = function(modules, parserCache){
 			
 			var ret = ''
 			ret += gen+'.call(this'
-			if(isstatic){
+			if(!sthis){
 				// lets allocate a tempvar
 				this.find_function(n).call_var = 1
 				this.module[type.name] = type
@@ -1619,7 +1629,7 @@ ONE.GenJS_ = function(modules, parserCache){
 					this.call_tmpvar + '.t=module.' + type.name + ',' + this.call_tmpvar + ')'
 				//ret += ',{o:0,t:module.'+type.name+','+type.arr+':new ' + type.view + 'Array(' + type.slots + ')}'
 			}
-			else ret += ', ' + root.name
+			else ret += ', ' + sthis.name
 			
 			// set up the call and argument list
 			for(var i = 0, l = args.length; i < l; i++){
@@ -1886,12 +1896,17 @@ ONE.GenJS_ = function(modules, parserCache){
 			if(fn.type == 'Key'){
 				// check if we are a property access on a
 				// what we need to trace is the root object
-				var root = fn.isKeyChain()
-				if(root && root.name){
+				var sthis = fn.isKeyChain()
+				if(sthis && sthis.name){
 					var isstatic
-					var type = this.scope[root.name] || (isstatic = this.find_type(root.name))
+					var type = this.scope[sthis.name] || (isstatic = this.find_type(sthis.name))
 					if(typeof type == 'object' && type.__class__ !== 'AST'){
-						return this.struct_method(n, fn, args, root, type, isstatic)
+						// alright we are a method call.
+						if(fn.object.type !='Id') throw new Error('only 1 deep method calls for now')
+						// so first we are going to compile the function
+						var method = fn.key.name
+						
+						return this.struct_method(n, type, method, args, isstatic?undefined:sthis)
 					}
 				}
 				
@@ -2105,6 +2120,6 @@ ONE.GenJS_ = function(modules, parserCache){
 			call.first_args = args
 			return this.expand(call, n)//Call(call, undefined, args)
 		}
-
+		
 	})
 }

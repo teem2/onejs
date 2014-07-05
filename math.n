@@ -16,14 +16,13 @@ define ln(x)     Math.log(x)
 define loge(x)   Math.log(x)
 define log10(x)  (Math.log(x) / LN10)
 define log2(x)   (Math.log(x) / LN2)
-define radians(deg) (deg/PI180) 
-define degrees(rad) (rad*PI180)
 define max(x)    Math.max(x)
 define min(x)    Math.min(x)
 define random()  Math.random()
 define log(x) 	 console.log(x)
 define mod(x, y) (x%y+y)%y
-define PI180     57.29577951308232
+define rad 	     1
+define deg       0.017453292519943295
 define PI        3.141592653589793
 define E         2.718281828459045
 define LN2       0.6931471805599453
@@ -605,7 +604,126 @@ struct mat4 extends mat{
 		m20 = 0, m21 = 0, m22 = 1, m23 = 0,
 		m30 = 0, m31 = 0, m32 = 0, m33 = 1
 	}
+	
+	T(vec3 t){
+		m00 = 1, m01 = 0, m02 = 0, m03 = t.x,
+		m10 = 0, m11 = 1, m12 = 0, m13 = t.y,
+		m20 = 0, m21 = 0, m22 = 1, m23 = t.z,
+		m30 = 0, m31 = 0, m32 = 0, m33 = 1
+	}
 
+	T(float tx, float ty, float tz){
+		m00 = 1, m01 = 0, m02 = 0, m03 = tx,
+		m10 = 0, m11 = 1, m12 = 0, m13 = ty,
+		m20 = 0, m21 = 0, m22 = 1, m23 = tz,
+		m30 = 0, m31 = 0, m32 = 0, m33 = 1
+	}
+	
+	RT(vec3 r, vec3 t){
+		float cx = cos(r.x), cy = cos(r.y), cz = cos(r.z)
+		float sx = sin(r.x), sy = sin(r.y), sz = sin(r.z)
+		m00 = cy *cz,                  m01 = -sz * cy,                m02 = sy,       m03 = t.x
+		m10 = cz * sx * sy + sz * cx,  m11 = -sx * sy * sz + cx * cz, m12 = -sx * cy, m13 = t.y
+		m20 = -cx * sy * cz + sx * sz, m21 = cx * sy * sz + cz * sx,  m22 = cx* cy,   m23 = t.z
+		m31 = 0,                       m31 = 0,                       m32 = cx * cy,  m33 = 1
+	}
+
+	RT(float rx, float ry, float rz, float tx, float ty, float tz){
+		float cx = cos(rx), cy = cos(ry), cz = cos(rz)
+		float sx = sin(rx), sy = sin(ry), sz = sin(rz)
+		m00 = cy *cz,                  m01 = -sz * cy,                m02 = sy,       m03 = tx
+		m10 = cz * sx * sy + sz * cx,  m11 = -sx * sy * sz + cx * cz, m12 = -sx * cy, m13 = ty
+		m20 = -cx * sy * cz + sx * sz, m21 = cx * sy * sz + cz * sx,  m22 = cx* cy,   m23 = tz
+		m31 = 0,                       m31 = 0,                       m32 = cx * cy,  m33 = 1
+	}
+	
+	S(vec3 s){
+		m00 = s.x, m01 = 0,   m02 = 0,   m03 = 0,
+		m10 = 0,   m11 = s.y, m12 = 0,   m13 = 0,
+		m20 = 0,   m21 = 0,   m22 = s.z, m23 = 0,
+		m30 = 0,   m31 = 0,   m32 = 0,   m33 = 1
+	}
+
+	S(float sx, float sy, float sz){
+		m00 = sx,  m01 = 0,   m02 = 0,   m03 = 0,
+		m10 = 0,   m11 = sy,  m12 = 0,   m13 = 0,
+		m20 = 0,   m21 = 0,   m22 = sz,  m23 = 0,
+		m30 = 0,   m31 = 0,   m32 = 0,   m33 = 1
+	}
+
+	ST(vec3 s, vec3 t){
+		m00 = s.x, m01 = 0,   m02 = 0,   m03 = t.x,
+		m10 = 0,   m11 = s.y, m12 = 0,   m13 = t.y,
+		m20 = 0,   m21 = 0,   m22 = s.z, m23 = t.z,
+		m30 = 0,   m31 = 0,   m32 = 0,   m33 = 1
+	}
+
+	ST(float sx, float sy, float sz, float tx, float ty, float tz){
+		m00 = sx, m01 = 0,   m02 = 0,   m03 = tx,
+		m10 = 0,   m11 = sy, m12 = 0,   m13 = ty,
+		m20 = 0,   m21 = 0,   m22 = sz, m23 = tz,
+		m30 = 0,   m31 = 0,   m32 = 0,   m33 = 1
+	}
+
+	TS(vec3 t, vec3 s){
+		m00 = s.x, m01 = 0,   m02 = 0,   m03 = t.x*s.x,
+		m10 = 0,   m11 = s.y, m12 = 0,   m13 = t.y*s.y,
+		m20 = 0,   m21 = 0,   m22 = s.z, m23 = t.z*s.z,
+		m30 = 0,   m31 = 0,   m32 = 0,   m33 = 1
+	}
+
+	TS(float tx, float ty, float tz, float sx, float sy, float sz){
+		m00 = sx, m01 = 0,   m02 = 0,   m03 = tx*sx,
+		m10 = 0,   m11 = sy, m12 = 0,   m13 = ty*sy,
+		m20 = 0,   m21 = 0,   m22 = sz, m23 = tz*sz,
+		m30 = 0,   m31 = 0,   m32 = 0,   m33 = 1
+	}
+
+	R(vec3 r){
+		float cx = cos(r.x), cy = cos(r.y), cz = cos(r.z)
+		float sx = sin(r.x), sy = sin(r.y), sz = sin(r.z)
+		m00 = cy *cz,                  m01 = -sz * cy,                m02 = sy,       m03 = 0
+		m10 = cz * sx * sy + sz * cx,  m11 = -sx * sy * sz + cx * cz, m12 = -sx * cy, m13 = 0
+		m20 = -cx * sy * cz + sx * sz, m21 = cx * sy * sz + cz * sx,  m22 = cx* cy,   m23 = 0
+		m31 = 0,                       m31 = 0,                       m32 = 0,        m33 = 1
+	}
+
+	RZXY(vec3 r){
+		float cx = cos(r.x), cy = cos(r.y), cz = cos(r.z)
+		float sx = sin(r.x), sy = sin(r.y), sz = sin(r.z)
+		m00 = cy * cz + sx * sy * sz,  m01 = -sz*cy+cz*sx*sy,  m02 = sy*cx,     m03 = 0
+		m10 = sz * cx,                 m11 = cx*cz,            m12 = -sx,       m13 = 0
+		m20 = -sy * cz + cy * sx * sz, m21 = sy*sz+cy*sx*cz,   m22 = cx * cy,   m23 = 0
+		m31 = 0,                       m31 = 0,                m32 = 0,         m33 = 1
+	}
+
+	RZXY(float rz, float rx, float ry){
+		float cx = cos(rx), cy = cos(ry), cz = cos(rz)
+		float sx = sin(rx), sy = sin(ry), sz = sin(rz)
+		m00 = cy * cz + sx * sy * sz,  m01 = -sz*cy+cz*sx*sy,  m02 = sy*cx,     m03 = 0
+		m10 = sz * cx,                 m11 = cx*cz,            m12 = -sx,       m13 = 0
+		m20 = -sy * cz + cy * sx * sz, m21 = sy*sz+cy*sx*cz,   m22 = cx * cy,   m23 = 0
+		m31 = 0,                       m31 = 0,                m32 = 0,         m33 = 1
+	}
+
+	RTZXY(vec3 r, vec3 t){
+		float cx = cos(r.x), cy = cos(r.y), cz = cos(r.z)
+		float sx = sin(r.x), sy = sin(r.y), sz = sin(r.z)
+		m00 = cy * cz + sx * sy * sz,  m01 = -sz*cy+cz*sx*sy,  m02 = sy*cx,     m03 = t.x
+		m10 = sz * cx,                 m11 = cx*cz,            m12 = -sx,       m13 = t.y
+		m20 = -sy * cz + cy * sx * sz, m21 = sy*sz+cy*sx*cz,   m22 = cx * cy,   m23 = t.z
+		m31 = 0,                       m31 = 0,                m32 = 0,         m33 = 1
+	}
+
+	RTZXY(float rz, float rx, float ry, float tx, float ty, float tz){
+		float cx = cos(rx), cy = cos(ry), cz = cos(rz)
+		float sx = sin(rx), sy = sin(ry), sz = sin(rz)
+		m00 = cy * cz + sx * sy * sz,  m01 = -sz*cy+cz*sx*sy,  m02 = sy*cx,     m03 = tx
+		m10 = sz * cx,                 m11 = cx*cz,            m12 = -sx,       m13 = ty
+		m20 = -sy * cz + cy * sx * sz, m21 = sy*sz+cy*sx*cz,   m22 = cx * cy,   m23 = tz
+		m31 = 0,                       m31 = 0,                m32 = 0,         m33 = 1
+	}
+	
 	transpose( mat4 a ){
 		if (a === _) {
 			var a01 = a[1], a02 = a[2], a03 = a[3], a12 = a[6], a13 = a[7], a23 = a[11]
@@ -684,7 +802,6 @@ struct mat4 extends mat{
 
 	// multiply matrix a with vector or matrix V
 	mat4_mul_mat4( mat4 a, mat4 b ){
-		if(!O) O = new Array(16)
 		var a00 = a[0], a01 = a[1], a02 = a[2], a03 = a[3],
 			a10 = a[4], a11 = a[5], a12 = a[6], a13 = a[7],
 			a20 = a[8], a21 = a[9], a22 = a[10],a23 = a[11],

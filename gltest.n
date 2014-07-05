@@ -4,17 +4,14 @@ import dom
 
 class MyGL extends GLNode{
 
-	mesh = webgl.vec4Rect(-1,-1,2,2,0.1)
+	mesh = webgl.vec4Rect(-1, -1, 2, 2, 0)
 	
+	viewmtx = mat4.perspective(70deg, 3, -1, 1)
+	objmtx: mat4.RT(30deg, 10deg,0, 0,0,3)
+
+	vertex: mesh[] * (objmtx * viewmtx)
 	
-	viewmtx = mat4.perspective( radians(80), 1, -10, 100)
-	rotmtx = mat4.rotateY(mat4.identity(), radians(1))
-	
-	//viewmtx = mat4.identity()
-	
-	vertex: mesh[] * rotmtx * viewmtx
-	
-	slide = 0.1
+	slide = 1
 	
 	touchdown(v){
 		start = slide
@@ -23,13 +20,16 @@ class MyGL extends GLNode{
 		}
 	}
 	
-	pixel: mix(#447, #black) do
-			//step(slide + 0.1) do
+	click(){
+		bgcolor: #blue
+	}
+	
+	bgcolor: #red
+	
+	pixel: mix(bgcolor, #black) do
 			sin on 8. * pixel mesh[].x
-			* pixel mesh[].y
-			//(sin on 8. * mesh[].x)
-			//* (cos on 8. * mesh[].y)
-		
+			* sin on 2.* pixel mesh[].y
+
 	draw: (){
 		clearAll(#aero)
 		draw(this)
@@ -39,7 +39,5 @@ class MyGL extends GLNode{
 // build the simplest of scenegraphcs
 GLView{
 	init(document.body)
-	MyGL{
-		
-	}
+	MyGL{}
 }
