@@ -180,6 +180,9 @@ ONE.browser_boot_ = function(){
 	}
 	
 	var type = "main"
+	var m = location.hostname.match(/(.*?)\.onejs\.io/)
+	if(m) type = m[1]
+	
 	var root
 	if(location.hash){
 		reloader()
