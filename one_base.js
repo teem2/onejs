@@ -663,8 +663,8 @@ ONE.init_ = function(){
 	this.Base.Base = this.Base
 	// add ast support to the Base class
 	this.ast_.call(this.Base)
-	this.signal_.call(this.Base.Signal = {})
-	this.proxy_.call(this.Base)
+	this.signal_.call(this.Base.Signal = this.Signal = {})
+	if(this.proxy_) this.proxy_.call(this.Base)
 	// make ONE the new root scope
 	this.Base.$ = this.$ = Object.create(this)
 	this.Base.out = this.out
@@ -737,6 +737,7 @@ ONE.init_ = function(){
 		}
 	}
 	if(typeof window !== 'undefined') window.Assert = Assert_
+	else if(typeof global !== 'undefined') global.Assert = Assert_
 	else Assert = Assert_
 	
 	// make all constructors compatible with the ONEJS way

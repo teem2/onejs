@@ -28,23 +28,6 @@ ONE.worker_boot_ = function(root){
 	ONE.root = ONE.Base.create(ONE,function(){ this.__class__='Root'})
 }
 
-ONE._createWorker = function(root){
-	var source =
-		'\nONE = {}' +
-		'\nvar Assert'+
-		'\nONE.init_ = ' + ONE.init_.toString() +
-		'\nONE.base_ = ' + ONE.base_.toString() +
-		'\nONE.signal_ = ' + ONE.signal_.toString() +
-		'\nONE.proxy_ = ' + ONE.proxy_.toString() +
-		'\nONE.ast_ = ' + ONE.ast_.toString() +
-		'\nONE.genjs_ = ' + ONE.genjs_.toString() +
-		'\nONE.parser_strict_ = ' + ONE.parser_strict_.toString() +
-		'\nONE.worker_boot_ = ' + ONE.worker_boot_.toString() +
-		'\nONE.worker_boot_("'+root+'")'
-	var blob = new Blob([source], { type: "text/javascript" })
-	this._worker_url = URL.createObjectURL(blob)
-	return new Worker(this._worker_url)
-}
 
 ONE.proxy_ = function(){
 	this.Base.Proxy = this.Base.extend(function(){
@@ -98,6 +81,24 @@ ONE.proxy_ = function(){
 			signal._compiler_ = compiler || this.proxy_compiler
 		}
 	})
+}
+
+ONE._createWorker = function(root){
+	var source =
+		'\nONE = {}' +
+		'\nvar Assert'+
+		'\nONE.init_ = ' + ONE.init_.toString() +
+		'\nONE.base_ = ' + ONE.base_.toString() +
+		'\nONE.signal_ = ' + ONE.signal_.toString() +
+		'\nONE.proxy_ = ' + ONE.proxy_.toString() +
+		'\nONE.ast_ = ' + ONE.ast_.toString() +
+		'\nONE.genjs_ = ' + ONE.genjs_.toString() +
+		'\nONE.parser_strict_ = ' + ONE.parser_strict_.toString() +
+		'\nONE.worker_boot_ = ' + ONE.worker_boot_.toString() +
+		'\nONE.worker_boot_("'+root+'")'
+	var blob = new Blob([source], { type: "text/javascript" })
+	this._worker_url = URL.createObjectURL(blob)
+	return new Worker(this._worker_url)
 }
 
 // Bootstrap code for the browser, started at the bottom of the file

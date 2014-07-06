@@ -12,21 +12,7 @@ ONE.nodejs_boot_ = function(){
 	require('./one_genjs.js')
 	require('./one_ast.js')
 
-	// make self a class
-	ONE.base_.apply( ONE )
-
-	ONE.__onename__ = 'ONE'
-	// create base class
-	ONE.base_.apply( ONE.Base = {} )
-	ONE.Base.Base = ONE.Base
-	// add ast support to the Base class
-	ONE.ast_.apply( ONE.Base )
-	
-	// make ONE the new root scope
-	ONE.Base.$ = ONE.$ = Object.create( ONE )
-
-	// hide all the props
-	ONE.Base.enumfalse.apply(ONE.Base, Object.keys( ONE.Base ) )
+	ONE.init_()
 
 	// load our first argument, parse dependencies and fire up
 	var args = process.argv.slice()
