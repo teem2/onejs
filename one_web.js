@@ -161,7 +161,9 @@ ONE.browser_boot_ = function(){
 		return ONE.Signal.wrap(function(sig){
 			var elem = document.getElementById(module)
 			if(elem){
-				return sig.end(elem.innerHTML)
+				var value = elem.innerHTML
+				worker.postMessage({_id:'parse', module:module, value:value})
+				return sig.end(value)
 			}
 			// do some XMLHTTP
 			var pthis = this
