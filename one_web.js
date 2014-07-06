@@ -113,7 +113,6 @@ ONE.browser_boot_ = function(){
 		if(msg._id == 'create'){
 			var obj = Object.create(ONE.Base)
 			ONE._proxy_uids[msg._uid] = obj
-			console.log(msg)
 			// lets look up properties in our cache
 			var keys = Object.keys(msg)
 			for(var i = 0, l = keys.length;i<l;i++){
@@ -136,8 +135,7 @@ ONE.browser_boot_ = function(){
 					}
 				}
 			}
-			if(obj._init) obj._init()
-			else if(obj.init) obj.init()
+			if(obj.init) obj.init()
 		}
 	}
 
@@ -158,8 +156,12 @@ ONE.browser_boot_ = function(){
 		x.send()
 	}
 
-	function http_get( url, module ){
+	function module_get( url, module ){
 		return ONE.Signal.wrap(function(sig){
+			var elem = document.getElementById(module)
+			if(elem){
+				return sig.end(elem.innerHTML)
+			}
 			// do some XMLHTTP
 			var pthis = this
 			var req = new XMLHttpRequest()
@@ -196,7 +198,7 @@ ONE.browser_boot_ = function(){
 			var first = false
 			if(!data_sig){
 				first = true
-				data_sig = loader[module] = http_get(url, module)
+				data_sig = loader[module] = module_get(url, module)
 			}
 			// otherwise we only resolve sig
 			data_sig.then(function(value){
