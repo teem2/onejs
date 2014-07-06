@@ -160,6 +160,7 @@ ONE.browser_boot_ = function(){
 	function module_get( url, module ){
 		return ONE.Signal.wrap(function(sig){
 			var elem = document.getElementById(module)
+			console.log('get elem by id', module, elem)
 			if(elem){
 				var value = elem.innerHTML
 				worker.postMessage({_id:'parse', module:module, value:value})
