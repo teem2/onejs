@@ -183,9 +183,6 @@ ONE.browser_boot_ = function(){
 	}
 	
 	var type = "main"
-	//var m = location.hostname.match(/(.*?)\.onejs\.io/)
-	//if(m) type = m[1]
-	
 	var root
 	if(location.hash){
 		reloader()
@@ -195,48 +192,55 @@ ONE.browser_boot_ = function(){
 	}
 	else root = type
 	
-	var loader = {}
-	// when do we resolve a module? when all its deps have been loaded.
-	function load_dep( module ){
-		// lets load a module
-		return ONE.Signal.wrap(function(sig){
-			var url = module + '.n'
-			var data_sig = loader[module]
-			var first = false
-			if(!data_sig){
-				first = true
-				data_sig = loader[module] = module_get(url, module)
-			}
-			// otherwise we only resolve sig
-			data_sig.then(function(value){
-				// okay lets scan for our dependencies
-				var all = []
-				value.replace(/import\s+(\w+)/g, function(m, mod){
-					all.push(load_dep(mod))
-				})
-				ONE.Signal.all(all).then(function(){
-					if(first) worker.postMessage({_id:'eval', module:module})
-					sig.end()
+	function init(){
+
+		var loader = {}
+		// when do we resolve a module? when all its deps have been loaded.
+		function load_dep( module ){
+			// lets load a module
+			return ONE.Signal.wrap(function(sig){
+				var url = module + '.n'
+				var data_sig = loader[module]
+				var first = false
+				if(!data_sig){
+					first = true
+					data_sig = loader[module] = module_get(url, module)
+				}
+				// otherwise we only resolve sig
+				data_sig.then(function(value){
+					// okay lets scan for our dependencies
+					var all = []
+					value.replace(/import\s+(\w+)/g, function(m, mod){
+						all.push(load_dep(mod))
+					})
+					ONE.Signal.all(all).then(function(){
+						if(first) worker.postMessage({_id:'eval', module:module})
+						sig.end()
+					}, 
+					function(err){
+						sig.throw(err)
+					})
 				}, 
 				function(err){
-					sig.throw(err)
+					sig.throw(err)	
 				})
-			}, 
-			function(err){
-				sig.throw(err)	
 			})
+		}
+		
+		load_dep(root).then(function(){
+			worker.postMessage({_id:'run', module:root})	
 		})
 	}
-	
-	load_dep(root).then(function(){
-		worker.postMessage({_id:'run', module:root})	
-	})
+	if(location.hostname.match(/(.*?)\.onejs\.io/)){
+		// we are packed, wait 
+		window.addEventListener("load", init)
+	}
+	else {
+		init()
+	}
 	
 	// initialize ONEJS also on the main thread	
 	ONE.init_()
-
-	window.addEventListener("load", function(){
-	})
 
 	window.onerror = function(msg, url, line) {
 		var name = url.match(/[^\/]*$/)[0]
