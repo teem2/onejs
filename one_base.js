@@ -659,12 +659,12 @@ ONE.init_ = function(){
 	
 	this.__class__ = 'ONE'
 	// create base class
-	this.base_.apply(this.Base = {})
+	this.base_.call(this.Base = {})
 	this.Base.Base = this.Base
 	// add ast support to the Base class
-	this.ast_.apply(this.Base)
+	this.ast_.call(this.Base)
 	this.signal_.call(this.Base.Signal = {})
-
+	this.proxy_.call(this.Base)
 	// make ONE the new root scope
 	this.Base.$ = this.$ = Object.create(this)
 	this.Base.out = this.out
