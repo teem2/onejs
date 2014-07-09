@@ -652,7 +652,7 @@ ONE.base_ = function(){
 	this.error = function(){ ONE.logwrite(0, arguments) }
 }
 
-ONE.init_ = function(){	
+ONE.init_ = function(){
 	
 	// make self a class
 	this.base_()
@@ -663,6 +663,8 @@ ONE.init_ = function(){
 	this.Base.Base = this.Base
 	// add ast support to the Base class
 	this.ast_.call(this.Base)
+	this.color_()
+	
 	this.signal_.call(this.Base.Signal = this.Signal = {})
 	if(this.proxy_) this.proxy_.call(this.Base)
 	// make ONE the new root scope
@@ -786,7 +788,7 @@ ONE.init_ = function(){
 ONE.signal_ = function(){
 
 	this.__class__ = 'Signal'
-	this.__signal__ = 1
+	this._signal_ = 1
 	
 	// create a new signal
 	this.new = function( owner ){

@@ -119,14 +119,14 @@ ONE.ast_ = function(){
 				else{
 					var prof = flags && flags.indexOf('profile') != -1 && Date.now()
                     
-					var fn = Function.call(null, 'module', code)(js.module)
+                    var fn = Function.call(null, 'module', code)(js.module)
                     
 					if(prof) console.log('Profile ' +filename + ' '+ (Date.now()-prof)+'ms')
 				}
             
 			} 
 			catch(e){
-				console.log("ERROR",e,code)
+				console.log("Eval error " + e + code)
 			}
 			return fn
 		}
@@ -1164,6 +1164,11 @@ ONE.ast_ = function(){
 
 	}, "AST")
 	
+	return this
+}
+
+ONE.color_ = function(){
+
 	this.color_wikipedia = {
 		acidgreen:0xB0BF1A,aero:0x7CB9E8,aeroblue:0xC9FFE5,africanviolet:0xB284BE,airforceblueraf:0x5D8AA8,airforceblueusaf:0x00308F,
 		airsuperiorityblue:0x72A0C1,alabamacrimson:0xAF002A,aliceblue:0xF0F8FF,alizarincrimson:0xE32636,alloyorange:0xC46210,
@@ -1354,7 +1359,7 @@ ONE.ast_ = function(){
 	this.color = function( col ) {
 		var c = this.color_wikipedia[col] // color LUT
 		var a = new Float32Array(3)
-		a.t = this.AST.typeMap.vec3
+		a.t = this.Base.AST.typeMap.vec3
 		if( c === undefined ){
 			// lets parse the color
 			var len = col.length
@@ -1400,6 +1405,4 @@ ONE.ast_ = function(){
 		a[2] = (c&0xff) /255
 		return a
 	}
-
-	return this
 }

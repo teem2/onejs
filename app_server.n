@@ -10,7 +10,7 @@
 import node
 import htmlscraper
 
-var live = 1
+var live = 0
 if(live){
 	var addr = "0.0.0.0"
 	var port = 80

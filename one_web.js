@@ -2,8 +2,8 @@
 // ONEJS Runtime
 // Copyright (C) 2014 ONEJS 
 
-ONE.worker_boot_ = function(root){
-	self.onmessage = function(event){
+ONE.worker_boot_ = function(host){
+	host.onmessage = function(event){
 		var msg = event.data
 		if(msg._id == 'eval'){ // lets parse and eval a module
 			var ast = ONE.root.$['_' + msg.module]
@@ -22,8 +22,15 @@ ONE.worker_boot_ = function(root){
 			return
 		}
 	}
-	ONE._proxy_uid = 1
-	ONE._proxy_free = []
+	ONE.proxy_flush = function(){
+		host.postMessage(ONE.proxy_queue)
+		ONE.proxy_start = Date.now()
+		ONE.proxy_queue = []
+	}
+	ONE.proxy_start = Date.now()
+	ONE.proxy_queue = []
+	ONE.proxy_uid = 1
+	ONE.proxy_free = []
 	ONE.init_()
 	ONE.root = ONE.Base.create(ONE,function(){ this.__class__='Root'})
 }
@@ -32,39 +39,59 @@ ONE.worker_boot_ = function(root){
 ONE.proxy_ = function(){
 	this.Base.Proxy = this.Base.extend(function(){
 		this._init = function(){
+			if(typeof this.init == 'function') this.init()
 			// we have to send our object over to the other side
 			var uid
-			if(!ONE._proxy_free.length) uid = ONE._proxy_uid++
-			else uid = ONE._proxy_free.pop()
+			if(!ONE.proxy_free.length) uid = ONE.proxy_uid++
+			else uid = ONE.proxy_free.pop()
 
-			var msg = {_id:'create', _uid: uid}
+			var msg = {_uid_: uid}
+			this._uid_ = uid
 
-			this._uid = uid
-			var proto = this
-			var proxy = this.Base.Proxy
-			while(proto != proxy){
-				var keys = Object.keys(proto)
-				for(var i = 0, l = keys.length;i < l;i++){
-					var k = keys[i]
-					if(k.charAt(0)!='_'){
-						var value = proto[k]
-						if(value._uid){ // we are an object ref
-							msg[k] = value._uid
-						}
-						else if(value._compiler_){
-							msg[k] = value._compiler_.call(this, value, k)
-						}
-						else if(value.t){
-							msg[k] = value
-						}
-					}
+			var src = this.proxy()
+
+			msg._init_ = src
+			// these are all the properties we are going to transfer
+			var props = this._props_
+			if(props){
+				for(var i = 0, l = props.length; i<l; i++){
+					var k = props[i]
+					var v = this[k]
+					if(v._signal_) msg[k] = v.value
+					else msg[k] = v
 				}
-				proto = Object.getPrototypeOf(proto)
 			}
-			self.postMessage(msg)
+
+			// and these are all the references we need to store
+			var refs = this._refs_
+			if(refs){
+				for(var i = 0, l = refs.length; i<l; i++){
+					var k = refs[i]
+					msg[k] = this[k]._uid_
+				}
+			}
+
+			// push the message in the queue
+			var queue = ONE.proxy_queue
+			var start = ONE.proxy_start
+			var now = Date.now()
+			if(now - start < 50){ // make sure we chunk every 50ms
+				if(queue.push(msg) == 1){
+					setTimeout(ONE.proxy_flush, 0)
+				}
+			}
+			else{
+				queue.push(msg)
+				ONE.proxy_flush()
+			}
 		}
 		
-		this.proxy_compiler = function( value, name ){
+		this.proxy = function( value, name ){
+			value = value || this.init
+			name = name || 'init'
+			var code = value._remote_
+			if(code) return code
+
 			// lets compile the value.bind
 			if(!value || !value.bind) throw new Error('cannot compile '+name)
 			var ast = value.bind
@@ -72,18 +99,26 @@ ONE.proxy_ = function(){
 			js.new_state()
 			// plug the module of the ast node
 			js.module = ast.module
-			var code = 'return ' + js.expand(ast)
+
+			code = 'this.' + name + ' = ' + js.expand(ast) + '\n'
+
+			var refs = this._refs_
+			if(refs){
+				for(var i = 0, l = refs.length; i<l; i++){
+					var k = refs[i]
+					code += 'this.' + k + ' = ONE.proxy_obj[this.' + k + ']\n'
+				}
+			}
+
+			value._remote_ = code
+
 			return code
-		}
-		
-		// mark signal with a compiler function
-		this.compile = function( signal, compiler ){
-			signal._compiler_ = compiler || this.proxy_compiler
 		}
 	})
 }
 
-ONE._createWorker = function(root){
+ONE._createWorker = function(){
+	var dt = Date.now()
 	var source =
 		'\nONE = {}' +
 		'\nvar Assert'+
@@ -93,50 +128,61 @@ ONE._createWorker = function(root){
 		'\nONE.proxy_ = ' + ONE.proxy_.toString() +
 		'\nONE.ast_ = ' + ONE.ast_.toString() +
 		'\nONE.genjs_ = ' + ONE.genjs_.toString() +
+		'\nONE.color_ = ' + ONE.color_.toString() +
 		'\nONE.parser_strict_ = ' + ONE.parser_strict_.toString() +
 		'\nONE.worker_boot_ = ' + ONE.worker_boot_.toString() +
-		'\nONE.worker_boot_("'+root+'")'
+		'\nONE.worker_boot_(self)'
+
 	var blob = new Blob([source], { type: "text/javascript" })
 	this._worker_url = URL.createObjectURL(blob)
-	return new Worker(this._worker_url)
+	var worker = new Worker(this._worker_url)
+	return worker
 }
 
 // Bootstrap code for the browser, started at the bottom of the file
 ONE.browser_boot_ = function(){
-	//maximize time parallelism to start a worker
-	var worker = ONE._createWorker()
-	ONE._proxy_cache = {}
-	ONE._proxy_uids = {}
 
+	var fake_worker = false
+	var worker
+	
+	// fake worker for debugging
+	if(fake_worker){
+		worker = {
+			postMessage: function(msg){
+				host.onmessage({data:msg})
+			},
+			onmessage:function(){}
+		}
+		var host = {
+			postMessage: function(msg){
+				worker.onmessage({data:msg})
+			},
+			onmessage: function(){}
+		}
+		ONE.worker_boot_(host)
+	}
+	else worker = ONE._createWorker()
+
+	ONE.proxy_code = {}
+	ONE.proxy_obj = {}
+	var dt = 0
 	worker.onmessage = function(event){
 		var msg = event.data
 		// we have to create an object
-		if(msg._id == 'create'){
-			var obj = Object.create(ONE.Base)
-			ONE._proxy_uids[msg._uid] = obj
-			// lets look up properties in our cache
-			var keys = Object.keys(msg)
-			for(var i = 0, l = keys.length;i<l;i++){
-				var k = keys[i]
-				var v = msg[k]
-				if(k.charAt(0) != '_'){
-					if(typeof v == 'string'){
-						var fn = ONE._proxy_cache[v]
-						if(!fn){
-							ONE._proxy_cache[v] = fn = 
-								Function('module', v)({})
-						}
-						obj[k] = fn
-					}
-					else if(typeof v == 'number'){
-						obj[k] = ONE._proxy_uids[v]
-					}
-					else{
-						obj[k] = v
-					}
+		if(Array.isArray(msg)){
+
+			for(var i = 0, l = msg.length;i < l;i++){
+				var obj = msg[i]
+				ONE.proxy_obj[obj._uid_] = obj
+				var code = obj._init_
+				var init = ONE.proxy_code[code]
+				if(!init){
+					init = ONE.proxy_code[code] = Function('module', code)
 				}
+				// initialize object
+				init.call(obj, {})
+				if(obj.init) obj.init()
 			}
-			if(obj.init) obj.init()
 		}
 	}
 
@@ -160,7 +206,6 @@ ONE.browser_boot_ = function(){
 	function module_get( url, module ){
 		return ONE.Signal.wrap(function(sig){
 			var elem = document.getElementById(module)
-			console.log('get elem by id', module, elem)
 			if(elem){
 				var value = elem.innerHTML
 				worker.postMessage({_id:'parse', module:module, value:value})
@@ -238,9 +283,9 @@ ONE.browser_boot_ = function(){
 	else {
 		init()
 	}
-	
+
 	// initialize ONEJS also on the main thread	
-	ONE.init_()
+	if(!fake_worker) ONE.init_()
 
 	window.onerror = function(msg, url, line) {
 		var name = url.match(/[^\/]*$/)[0]

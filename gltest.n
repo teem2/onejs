@@ -6,7 +6,7 @@ class MyGL extends GLNode{
 	mesh = webgl.vec4Rect(-1, -1, 2, 2, 0)
 	
 	viewmtx = mat4.perspective(70deg, 3, -1, 1)
-	objmtx: mat4.RT(30deg, 10deg,0, 0,0,3)
+	objmtx: mat4.RT(30deg,  30deg,0, 0,0,3)
 
 	vertex: mesh[] * (objmtx * viewmtx)
 	

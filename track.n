@@ -1,18 +1,10 @@
-
 // ONEJS Track, Time and animation
-
-Track extends Base{
-
-	make = role ->{
-		load( role )
-		// tracks call init from new
-		emit('init')
-	}
+class Track extends Proxy{
 
 	chain = 1
 
 	// called by the signal when cleaning up
-	$_sigunbind = ( pthis, key )->{
+	$_sigunbind( pthis, key )->{
 		if(time){
 			time.unbind( this )
 			time = undefined
@@ -20,7 +12,7 @@ Track extends Base{
 	}
 	
 	// called by the signal on assign
-	$_sigbind = ( pthis, key, valkey, old )->{
+	$_sigbind( pthis, key, valkey, old ){
 		// if we have an old track we have to chain
 		if( old && old.chainTrack ){
 			// we have to re-hook the playing track
@@ -91,7 +83,7 @@ Track extends Base{
 
 	ease = 'linear'
 
-	chainTrack = newtrk->{
+	chainTrack(newtrk){
 		// we are already terminated
 		if( !this.prev && !this.time ){ 
 			if( this.pthis ) newtrk.$_sigbind( this.pthis, this.key, this.first )
@@ -113,7 +105,7 @@ Track extends Base{
 	}
 
 	// calculate current value, called by Time
-	calculate = secs->{
+	calculate(secs){
 		this.oncecalculated = true
 		// we have a speed, a loop and a total
 		if( this.start < 0 ) this.start = secs + (this.delta || 0)
@@ -240,23 +232,18 @@ Track extends Base{
 
 	// hide our api
 	this.enumfalse.apply(this, Object.keys( this ) )
-})
+}
 
-Time extends Base{
+class Time extends Proxy{
 	// The Time object manages the playback of your tracks.
-	this.learn(this.$.animframe_)
+	sec:0
 
-	// define seconds signal
-	sec~ = 0
+	// we need to hook the renderers frameloop
+	init:(){
 
-	// watch when sec gets hooked
-	monitorHooks('sec') do ->{
-		handle.request()
 	}
 
-	__onename__ = 'Time'
-
-	make = function( ){
+	init2(){
 		tracks = []
 		swap = []
 		slaves = []
@@ -264,7 +251,7 @@ Time extends Base{
 	}
 
 	// set or slave the time tracker object
-	hookScope = function( where ){
+	hookScope( where ){
 		if( where.$.time ){ // slave ourselves to the higher up tracker
 			if(where.$.hasOwnProperty('time')) throw new Error("When making new trackers, please do it on a new scope")
 			this.owner = where.$.time
@@ -279,7 +266,7 @@ Time extends Base{
 	}
 	
 	// run all tracks at a timestamp (in msec)
-	execute = function( msec ){
+	execute( msec ){
 		if( this.start < 0 ) this.start = msec
 
 		var sec = this.sec = ( msec - this.start ) / 1000
@@ -310,14 +297,14 @@ Time extends Base{
 	}
 	
 	// called by track.bind
-	bind = function( track ){
+	dobind( track ){
 		this.tracks.push( track )
 		// make sure we run
 		if( this.handle ) this.handle.request()
 	}
 	
 	// called by track.unbind
-	unbind = function( track ){
+	unbind( track ){
 		var tracks = this.tracks
 		var idx = tracks.indexOf( track )
 		if( idx == -1 ) throw new Error("Cannot unregister track")
@@ -325,37 +312,36 @@ Time extends Base{
 	}
 }
 	
-
 // Build Easing tables
-Easing extends Base{
-	linear =     t -> t
-	inQuad =     t -> t*t
-	outQuad =    t -> -t*(t-2) 
-	inOutQuad =  t -> (t/=0.5) < 1 ? 0.5*t*t : -0.5 * ((--t)*(t-2) - 1) 
-	inCubic =    t -> t*t*t 
-	outCubic =   t -> ((t=t-1)*t*t + 1) 
-	inOutCubic = t -> (t/=0.5) < 1 ? 0.5*t*t*t : 1 /2*((t-=2)*t*t + 2) 
-	inQuart =    t -> t*t*t*t 
-	outQuart =   t -> -((t=t-1)*t*t*t - 1) 
-	inOutQuart = t -> (t/=0.5) < 1 ? 0.5*t*t*t*t : -0.5 * ((t-=2)*t*t*t - 2) 
-	inQuint =    t -> t*t*t*t*t 
-	outQuint =   t -> ((t=t-1)*t*t*t*t + 1) 
-	inOutQuint = t -> (t/=0.5) < 1 ? 0.5*t*t*t*t*t : 0.5*((t-=2)*t*t*t*t + 2) 
-	inSine =     t -> - Math.cos(t * (Math.PI/2)) + 1 
-	outSine =    t -> Math.sin(t * (Math.PI/2)) 
-	inOutSine =  t -> -0.5 * (Math.cos(Math.PI*t) - 1) 
-	inExpo =     t -> (t==0) ? 0  =  Math.pow(2, 10 * (t - 1)) 
-	outExpo =    t -> (t==1) ? 1  =  (-Math.pow(2, -10 * t) + 1) 
-	inCirc =     t -> - (Math.sqrt(1 - t*t) - 1) 
-	outCirc =    t -> Math.sqrt(1 - (t=t-1)*t) 
-	inOutCirc =  t -> (t/=0.5) < 1 ? -0.5 * (Math.sqrt(1 - t*t) - 1)   = 0.5 * (Math.sqrt(1 - (t-=2)*t) + 1) 
-	inOutExpo =  t ->{
+class Easing{
+	linear(t) -> t
+	inQuad(t) -> t*t
+	outQuad(t) -> -t*(t-2) 
+	inOutQuad(t) -> (t/=0.5) < 1 ? 0.5*t*t : -0.5 * ((--t)*(t-2) - 1) 
+	inCubic(t) -> t*t*t 
+	outCubic(t) -> ((t=t-1)*t*t + 1) 
+	inOutCubic(t) -> (t/=0.5) < 1 ? 0.5*t*t*t : 1 /2*((t-=2)*t*t + 2) 
+	inQuart(t) -> t*t*t*t 
+	outQuart(t) -> -((t=t-1)*t*t*t - 1) 
+	inOutQuart(t) -> (t/=0.5) < 1 ? 0.5*t*t*t*t : -0.5 * ((t-=2)*t*t*t - 2) 
+	inQuint(t) -> t*t*t*t*t 
+	outQuint(t) -> ((t=t-1)*t*t*t*t + 1) 
+	inOutQuint(t) -> (t/=0.5) < 1 ? 0.5*t*t*t*t*t : 0.5*((t-=2)*t*t*t*t + 2) 
+	inSine(t) -> - Math.cos(t * (Math.PI/2)) + 1 
+	outSine(t) -> Math.sin(t * (Math.PI/2)) 
+	inOutSine(t) -> -0.5 * (Math.cos(Math.PI*t) - 1) 
+	inExpo(t) -> (t==0)? 0: Math.pow(2, 10 * (t - 1)) 
+	outExpo(t) -> (t==1)? 1: (-Math.pow(2, -10 * t) + 1) 
+	inCirc(t) -> - (Math.sqrt(1 - t*t) - 1) 
+	outCirc(t) -> Math.sqrt(1 - (t=t-1)*t) 
+	inOutCirc(t) -> (t/=0.5) < 1? -0.5 * (Math.sqrt(1 - t*t) - 1): 0.5 * (Math.sqrt(1 - (t-=2)*t) + 1) 
+	inOutExpo(t) ->{
 		if (t==0) return 0
 		if (t==1) return 1
 		if ((t/=0.5) < 1) return 0.5 * Math.pow(2, 10 * (t - 1)) 
 		return 0.5 * (-Math.pow(2, -10 * --t) + 2) 
 	}
-	inElastic =  t->{
+	inElastic(t)->{
 		var s=1.70158, p=0, a=1;
 		if (t==0) return 0
 		if (t==1) return 1
@@ -364,7 +350,7 @@ Easing extends Base{
 		else var s = p/(2*Math.PI) * Math.asin (1/a)
 		return -(a*Math.pow(2,10*(t-=1)) * Math.sin( (t*1-s)*(2*Math.PI)/p )) 
 	}
-	outElastic = t->{
+	outElastic(t)->{
 		var s=1.70158, p=0, a=1
 		if (t==0) return 0
 		if (t==1) return 1
@@ -373,7 +359,7 @@ Easing extends Base{
 		else var s = p/(2*Math.PI) * Math.asin (1/a)
 		return a*Math.pow(2,-10*t) * Math.sin( (t*1-s)*(2*Math.PI)/p ) + 1 
 	}
-	inOutElastic = t->{
+	inOutElastic(t)->{
 		var s=1.70158, p=0, a=1
 		if (t==0) return 0
 		if ((t/=0.5)==2) return 1
@@ -383,27 +369,27 @@ Easing extends Base{
 		if (t < 1) return -.5*(a*Math.pow(2,10*(t-=1)) * Math.sin( (t*1-s)*(2*Math.PI)/p )) 
 		return a*Math.pow(2,-10*(t-=1)) * Math.sin( (t*1-s)*(2*Math.PI)/p )*0.5 + 1 
 	}
-	inBack = (t, s)->{
+	inBack(t, s)->{
 		if (s == undefined) s = 1.70158
 		return (t/=1)*t*((s+1)*t - s) 
 	}
-	outBack = (t, s)->{
+	outBack(t, s)->{
 		if (s == undefined) s = 1.70158
 		return ((t=t/1-1)*t*((s+1)*t + s) + 1) 
 	}
-	inOutBack = (t, s)->{
+	inOutBack(t, s)->{
 		if (s == undefined) s = 1.70158
 		if ((t/=0.5) < 1) return 0.5*(t*t*(((s*=(1.525))+1)*t - s)) 
 		return 0.5*((t-=2)*t*(((s*=(1.525))+1)*t + s) + 2) 
 	}
-	inBounce = t=> return 1 - outBounce (1-t) 
-	outBounce = t->{
+	inBounce(t) => 1 - outBounce (1-t) 
+	outBounce(t)->{
 		if (t < (1/2.75)) return (7.5625*t*t) 
 		else if (t < (2/2.75)) return (7.5625*(t-=(1.5/2.75))*t + 0.75) 
 		else if (t < (2.5/2.75)) return (7.5625*(t-=(2.25/2.75))*t + 0.9375) 
 		return (7.5625*(t-=(2.625/2.75))*t + .984375) 
 	}
-	inOutBounce = t=>{
+	inOutBounce(t)=>{
 		if (t < 0.5) return inBounce (t*2) * 0.5 
 		return outBounce (t*2-1) * 0.5 + 0.5 
 	}

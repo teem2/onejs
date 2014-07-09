@@ -1,7 +1,7 @@
 import math
+import track
 
 class GLView extends Proxy{
-
 	init:(parent){
 		child = []
 		if(!parent) parent = document.body
@@ -30,10 +30,7 @@ class GLView extends Proxy{
 		}
 		window.onresize()
 		// lets render our children
-
 	}
-	
-	Proxy.compile(init)
 }
 
 vec3Rect( x, y, w, h, z = 0 ){
@@ -51,6 +48,9 @@ vec4Rect( x, y, w, h, z = 0, ww = 1 ){
 }
 
 class GLNode extends Proxy{
+
+	// make a singleton copy of Time
+	this.Time = Time{}
 
 	clearAll:( vec3 col ){
 		gl.clearColor(col[0], col[1], col[2], 1.0)
@@ -294,7 +294,7 @@ class GLNode extends Proxy{
 				if(prop.bind.type == 'Value'){
 					if(prop.bind.kind != 'num') throw new Error('invalid type in DepTraceGLSL ' + prop.bind.kind)
 					n.mark = prop.bind.mark = 1
-					n.infer = prop.bind.infer = module.types.float
+					n.infer = prop.bind.infer = float
 					// lets replace the property with the actual value.
 					prop.value = prop.bind.value
 					// unbind the expression
@@ -315,7 +315,7 @@ class GLNode extends Proxy{
 				} 
 				else if(typeof prop == 'number'){
 					n.mark = 1
-					n.infer = module.types.float
+					n.infer = float
 				}
 				else throw new Error('Add other property types ' + name)
 			}
@@ -370,6 +370,19 @@ class GLNode extends Proxy{
 					n.infer = type
 					return Post(n)
 				}
+
+				// check if we are a different object
+				var obj = context[objname]
+				if(!obj.t && typeof obj == 'object'){
+					// we are depending on another object
+					if(!obj._uid_) throw new Error('dont know what to do with '+objname)
+					var prop = obj[n.key.name]
+					// mark signal in our proxy table
+					n.infer = prop._typed_ || float
+					n.mark = 1 // uniform
+					return
+				}
+
 			}
 			// only try to walk/resolve the object
 			this[n.object.type](n.object, n)
@@ -413,7 +426,9 @@ class GLNode extends Proxy{
 			}
 			
 			if(typeof prop == 'object'){
-				if(typeof prop.t !== 'object') return 'this.' + name +'.valueOf()'
+				// lets store this signal as our dep
+				props.push(name)
+				if(prop._signal_) return 'this.' + name +'.valueOf()'
 				// we are accessing a struct
 				//!TODO convert to signal
 				return 'this.' + name
@@ -424,6 +439,15 @@ class GLNode extends Proxy{
 				return 'this.' + name
 			}
 			else throw new Error('dont know what to do with '+name)
+		}
+
+		// what if we are a Key and its another objects' signal we need to depend on?
+		// we need to send over a dependency list
+		Key( n ){
+			if(n.object.type == 'Id'){ 
+				var objname = n.object.name
+			}
+			return AST.ToJS::Key(n)
 		}
 	}
 
@@ -468,7 +492,7 @@ class GLNode extends Proxy{
 			var name = n.name
 			// if we are # bla lets resolve the color and inline.
 			if(n.flag == 35){ // is a color
-				vec4 col = context.color(name)
+				vec4 col = ONE.color(name)
 				return 'vec4(' + col.x + ',' + col.y + ',' + col.z + ',1.0)'
 			}
 			
@@ -550,6 +574,7 @@ class GLNode extends Proxy{
 			
 			var pix_uniforms = GenGLSL.uniforms = []
 			var varyings = GenGLSL.varyings = []
+			var signal_deps = GenGLSL.sigdeps = []
 			var pix_expr = GenGLSL.expand(pix.bind)
 			
 			// pull the vertex property from our context
@@ -690,7 +715,7 @@ class GLNode extends Proxy{
 				var attr = attribs[name]
 				
 				len = attr.buffer.byteLength / attr.t.size
-				
+				props.push(name)
 				ret += `
 				gl.bindBuffer(${glc.ARRAY_BUFFER}, this.${uid}_vb_${name})
 				var arr_buf = this.${name}.buffer
@@ -709,6 +734,7 @@ class GLNode extends Proxy{
 			for(var uni from pix_uniforms.concat(vtx_uniforms)){
 				GenUniformJS.module = module
 				GenUniformJS.context = context
+				GenUniformJS.props = props
 				var js = GenUniformJS.expand(uni.node, n)
 				
 				var map = glsl_uniform_map[uni.node.infer.name]
@@ -731,7 +757,7 @@ class GLNode extends Proxy{
 			return ret
 		}
 	}
-	
+
 	// default draw	
 	draw:(){
 		draw(this)
@@ -741,35 +767,39 @@ class GLNode extends Proxy{
 		draw(owner.gl)
 	}
 
-	Proxy.compile(init)
-	// register proxy compiler for draw
-	Proxy.compile(draw) do ->{
-		//profile(1) do(){
-		// we have to compile the draw signal
-		// alright lets stringify draw
+	// the proxy code generator
+	proxy(){
 		// so lets stringify it.
-		js = GenDrawJS
+		var code = draw._remote_
+
+		if(code) return Proxy::proxy() + code
+
 		var ast = draw.bind
 		// make a fresh scope and signals store
+		var js = GenDrawJS
 		js.new_state()
 		// plug the module of the ast node
 		js.module = ast.module
 		js.context = this
+		js.props = _props_ = []
+		_refs_ = ['owner']
 		//js.gl = owner.gl // use the gl context to inline gl constants
 		js.uid = 0
 		if(ast.type != 'Function') throw new Error('GL Draw not a function')
 		
 		var flags = js.pull_flags(ast)
-		code = 'return ' + js.Function(ast, undefined, ['gl'])
+
+		code += '\nthis.draw = ' + js.Function(ast, undefined, ['gl'])
+
 		if(flags.indexOf('js') != -1) out(code)
 		
 		// prepend static typemethods
 		for(var k in js.typemethods){
 			code = js.typemethods[k] + code
 		}
-		return code
-		// return the code
-		//_draw = Function('module', code)(js.module)
-		//_draw(owner.gl)
+
+		draw._remote_ = code
+
+		return Proxy::proxy() + code
 	}
 }

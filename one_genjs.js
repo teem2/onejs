@@ -120,6 +120,8 @@ ONE.genjs_ = function(modules, parserCache){
 		globals.Buffer = 1
 		globals.require = 1
 		globals.__dirname = 1
+		globals.ONE = 1
+		globals.self = 1
 		
 		this.find_type = function( name ){
 			var type = this.module.types[name]
@@ -285,6 +287,8 @@ ONE.genjs_ = function(modules, parserCache){
 		}
 		
 		this.resolve = function( name, n ){
+			// TODO make this resolve order explicit
+
 			if(name in this.macroarg){
 				return this.expand(this.macroarg[name], n)
 			}
@@ -304,6 +308,13 @@ ONE.genjs_ = function(modules, parserCache){
 			
 			if( name in this.globals ) return name
 			
+			var type = this.find_type(name)
+			if(type){
+				// lets make this type av on module
+				this.module[type.name] = type
+				return 'module.'+type.name
+			}
+
 			var def = this.find_define(name)
 			
 			if(def){
@@ -365,7 +376,7 @@ ONE.genjs_ = function(modules, parserCache){
 						this.template_marked = true
 						return this.template_marker
 					}
-					return 'this.color("'+n.name+'")'
+					return 'ONE.color("'+n.name+'")'
 				}
 				if(flag === 64){
 					if(n.name == undefined) return 'this'
