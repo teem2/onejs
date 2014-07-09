@@ -1356,10 +1356,10 @@ ONE.color_ = function(){
 		zinnwalditebrown:0x2C1608,zomp:0x39A78E
 	}	
 
-	this.color = function( col ) {
+	this.color = function( col, type ) {
 		var c = this.color_wikipedia[col] // color LUT
 		var a = new Float32Array(3)
-		a.t = this.Base.AST.typeMap.vec3
+		a.t = type
 		if( c === undefined ){
 			// lets parse the color
 			var len = col.length

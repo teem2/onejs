@@ -3,6 +3,7 @@
 // Copyright (C) 2014 ONEJS 
 
 ONE.worker_boot_ = function(host){
+
 	host.onmessage = function(event){
 		var msg = event.data
 		if(msg._id == 'eval'){ // lets parse and eval a module
@@ -22,37 +23,52 @@ ONE.worker_boot_ = function(host){
 			return
 		}
 	}
+
 	ONE.proxy_flush = function(){
 		host.postMessage(ONE.proxy_queue)
 		ONE.proxy_start = Date.now()
 		ONE.proxy_queue = []
 	}
+
+	ONE.proxy_init = function(){
+		var inits = ONE.proxy_inits
+		for(var i = 0, l = inits.length; i<l; i++){
+			inits[i].proxy_init()
+		}
+		ONE.proxy_inits = []
+	}
+
+	ONE.proxy_inits = []
 	ONE.proxy_start = Date.now()
 	ONE.proxy_queue = []
 	ONE.proxy_uid = 1
 	ONE.proxy_free = []
 	ONE.init_()
+
 	ONE.root = ONE.Base.create(ONE,function(){ this.__class__='Root'})
 }
-
 
 ONE.proxy_ = function(){
 	this.Base.Proxy = this.Base.extend(function(){
 		this._init = function(){
-			if(typeof this.init == 'function') this.init()
-			// we have to send our object over to the other side
-			var uid
-			if(!ONE.proxy_free.length) uid = ONE.proxy_uid++
-			else uid = ONE.proxy_free.pop()
+			if(!ONE.proxy_free.length) this.proxy_uid = ONE.proxy_uid++
+			else this.proxy_uid = ONE.proxy_free.pop()
 
-			var msg = {_uid_: uid}
-			this._uid_ = uid
+			if(typeof this.init == 'function') this.init()
+			// queue our object up for sending it over to the other side
+			if(ONE.proxy_inits.push(this) == 1){
+				setTimeout(ONE.proxy_init, 0)
+			}
+		}
+
+		this.proxy_init = function(){
+			var msg = {proxy_uid: this.proxy_uid}
 
 			var src = this.proxy()
 
-			msg._init_ = src
-			// these are all the properties we are going to transfer
-			var props = this._props_
+			msg.proxy_code = src
+			// transfer proxied properties
+			var props = this.proxy_props
 			if(props){
 				for(var i = 0, l = props.length; i<l; i++){
 					var k = props[i]
@@ -62,12 +78,12 @@ ONE.proxy_ = function(){
 				}
 			}
 
-			// and these are all the references we need to store
-			var refs = this._refs_
+			// transfer proxied references
+			var refs = this.proxy_refs
 			if(refs){
 				for(var i = 0, l = refs.length; i<l; i++){
 					var k = refs[i]
-					msg[k] = this[k]._uid_
+					msg[k] = this[k].proxy_uid
 				}
 			}
 
@@ -75,7 +91,7 @@ ONE.proxy_ = function(){
 			var queue = ONE.proxy_queue
 			var start = ONE.proxy_start
 			var now = Date.now()
-			if(now - start < 50){ // make sure we chunk every 50ms
+			if(now - start < 50){ // make sure we chunk every 50ms for parallelisation
 				if(queue.push(msg) == 1){
 					setTimeout(ONE.proxy_flush, 0)
 				}
@@ -88,12 +104,13 @@ ONE.proxy_ = function(){
 		
 		this.proxy = function( value, name ){
 			value = value || this.init
+			if(!value) return ''
 			name = name || 'init'
-			var code = value._remote_
+			var code = value.proxy_remote
 			if(code) return code
 
 			// lets compile the value.bind
-			if(!value || !value.bind) throw new Error('cannot compile '+name)
+			if(!value || !value.bind) throw new Error('cannot compile ' + name)
 			var ast = value.bind
 			var js = this.AST.ToJS
 			js.new_state()
@@ -102,7 +119,7 @@ ONE.proxy_ = function(){
 
 			code = 'this.' + name + ' = ' + js.expand(ast) + '\n'
 
-			var refs = this._refs_
+			var refs = this.proxy_refs
 			if(refs){
 				for(var i = 0, l = refs.length; i<l; i++){
 					var k = refs[i]
@@ -142,7 +159,7 @@ ONE._createWorker = function(){
 // Bootstrap code for the browser, started at the bottom of the file
 ONE.browser_boot_ = function(){
 
-	var fake_worker = false
+	var fake_worker = true
 	var worker
 	
 	// fake worker for debugging
@@ -173,8 +190,8 @@ ONE.browser_boot_ = function(){
 
 			for(var i = 0, l = msg.length;i < l;i++){
 				var obj = msg[i]
-				ONE.proxy_obj[obj._uid_] = obj
-				var code = obj._init_
+				ONE.proxy_obj[obj.proxy_uid] = obj
+				var code = obj.proxy_code
 				var init = ONE.proxy_code[code]
 				if(!init){
 					init = ONE.proxy_code[code] = Function('module', code)
@@ -182,6 +199,7 @@ ONE.browser_boot_ = function(){
 				// initialize object
 				init.call(obj, {})
 				if(obj.init) obj.init()
+				//console.log(obj)
 			}
 		}
 	}

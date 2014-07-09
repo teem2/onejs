@@ -376,7 +376,8 @@ ONE.genjs_ = function(modules, parserCache){
 						this.template_marked = true
 						return this.template_marker
 					}
-					return 'ONE.color("'+n.name+'")'
+					this.module.vec3 = this.find_type('vec3')
+					return 'ONE.color("'+n.name+'", module.vec3)'
 				}
 				if(flag === 64){
 					if(n.name == undefined) return 'this'

@@ -29,7 +29,13 @@ class GLView extends Proxy{
 			_gl.viewport(0,0,w * pixelRatio, h * pixelRatio)
 		}
 		window.onresize()
-		// lets render our children
+		// lets request an init
+		draw()=>{
+			for(var c from child){
+				c.draw(gl)
+			}
+		}
+		window.requestAnimationFrame(draw)
 	}
 }
 
@@ -226,10 +232,10 @@ class GLNode extends Proxy{
 	}
 	
 	var glsl_uniform_map = {
-		float:a -> 'uniform1f(' + a + ',false,v)'
-		vec2: a -> 'uniform2fv(' + a + ',false,v)'
-		vec3: a -> 'uniform3fv(' + a + ',false,v)'
-		vec4: a -> 'uniform4fv(' + a + ',false,v)'
+		float:a -> 'uniform1f(' + a + ',v)'
+		vec2: a -> 'uniform2fv(' + a + ',v)'
+		vec3: a -> 'uniform3fv(' + a + ',v)'
+		vec4: a -> 'uniform4fv(' + a + ',v)'
 		mat4: a -> 'uniformMatrix4fv(' + a + ',false,v)'
 	}
 	
@@ -428,7 +434,7 @@ class GLNode extends Proxy{
 			if(typeof prop == 'object'){
 				// lets store this signal as our dep
 				props.push(name)
-				if(prop._signal_) return 'this.' + name +'.valueOf()'
+				//if(prop._signal_) return 'this.' + name
 				// we are accessing a struct
 				//!TODO convert to signal
 				return 'this.' + name
@@ -493,7 +499,7 @@ class GLNode extends Proxy{
 			// if we are # bla lets resolve the color and inline.
 			if(n.flag == 35){ // is a color
 				vec4 col = ONE.color(name)
-				return 'vec4(' + col.x + ',' + col.y + ',' + col.z + ',1.0)'
+				return 'vec3(' + col.x + ',' + col.y + ',' + col.z + ')'
 			}
 			
 			if(name in glsl_functions || name in glsl_variables){
@@ -656,7 +662,7 @@ class GLNode extends Proxy{
 				precision highp float;
 				${pix_uni_decl}${vary_decl}${vary_merged}
 				void main(){
-					gl_FragColor = ${pix_expr};
+					gl_FragColor = vec4(${pix_expr}, 1.);
 				}
 			`
 			// we have to get a unique draw ID
@@ -719,9 +725,9 @@ class GLNode extends Proxy{
 				ret += `
 				gl.bindBuffer(${glc.ARRAY_BUFFER}, this.${uid}_vb_${name})
 				var arr_buf = this.${name}.buffer
-				if(!arr_buf.clean){
+				if(!this.${uid}_vb_${name}.clean || !arr_buf.clean){
 					gl.bufferData(${glc.ARRAY_BUFFER}, arr_buf, ${glc.STATIC_DRAW})
-					arr_buf.clean = true
+					arr_buf.clean = this.${uid}_vb_${name}.clean = true
 				}
 				var al = this.${uid}_al_${name}
 				gl.enableVertexAttribArray(al)
@@ -764,13 +770,13 @@ class GLNode extends Proxy{
 	}
 
 	init:(){
-		draw(owner.gl)
+		owner.child.push(this)
 	}
 
 	// the proxy code generator
 	proxy(){
 		// so lets stringify it.
-		var code = draw._remote_
+		var code = draw.proxy_remote
 
 		if(code) return Proxy::proxy() + code
 
@@ -781,8 +787,8 @@ class GLNode extends Proxy{
 		// plug the module of the ast node
 		js.module = ast.module
 		js.context = this
-		js.props = _props_ = []
-		_refs_ = ['owner']
+		js.props = proxy_props = []
+		proxy_refs = ['owner']
 		//js.gl = owner.gl // use the gl context to inline gl constants
 		js.uid = 0
 		if(ast.type != 'Function') throw new Error('GL Draw not a function')
@@ -798,7 +804,7 @@ class GLNode extends Proxy{
 			code = js.typemethods[k] + code
 		}
 
-		draw._remote_ = code
+		draw.proxy_remote = code
 
 		return Proxy::proxy() + code
 	}
