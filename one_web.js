@@ -31,6 +31,7 @@ ONE.worker_boot_ = function(host){
 	}
 
 	ONE.proxy_init = function(){
+		var dt = Date.now()
 		var inits = ONE.proxy_inits
 		for(var i = 0, l = inits.length; i<l; i++){
 			inits[i].proxy_init()
@@ -70,8 +71,7 @@ ONE.proxy_ = function(){
 			// transfer proxied properties
 			var props = this.proxy_props
 			if(props){
-				for(var i = 0, l = props.length; i<l; i++){
-					var k = props[i]
+				for(var k in props){
 					var v = this[k]
 					if(v._signal_) msg[k] = v.value
 					else msg[k] = v
@@ -81,11 +81,12 @@ ONE.proxy_ = function(){
 			// transfer proxied references
 			var refs = this.proxy_refs
 			if(refs){
-				for(var i = 0, l = refs.length; i<l; i++){
-					var k = refs[i]
+				for(var k in refs){
 					msg[k] = this[k].proxy_uid
 				}
 			}
+
+			if(this.proxy_dump) msg.proxy_dump = 1
 
 			// push the message in the queue
 			var queue = ONE.proxy_queue
@@ -102,33 +103,37 @@ ONE.proxy_ = function(){
 			}
 		}
 		
-		this.proxy = function( value, name ){
-			value = value || this.init
-			if(!value) return ''
-			name = name || 'init'
-			var code = value.proxy_remote
-			if(code) return code
+		this.proxy = function( ){
+			var arg = arguments
+			var len = arguments.length
+			if(!len) arg = [this.init], len = 1
+			var code = ''
+			for(var i = 0; i < len; i++){
+				var signal = arg[i]
+				if(!signal) continue
+				
+				var name = signal.name
+				var proxy_code = signal.proxy_code
+				if(proxy_code){
+					code += proxy_code
+					continue
+				}
 
-			// lets compile the value.bind
-			if(!value || !value.bind) throw new Error('cannot compile ' + name)
-			var ast = value.bind
-			var js = this.AST.ToJS
-			js.new_state()
-			// plug the module of the ast node
-			js.module = ast.module
+				var ast = signal.value
+				if(!ast._ast_) throw new Error('invalid signal type')
+				var js = this.AST.ToJS
+				js.new_state()
+				js.module = ast.module
+				code += 'this.' + name + ' = ' + js.expand(ast) + '\n'
 
-			code = 'this.' + name + ' = ' + js.expand(ast) + '\n'
-
+				signal.proxy_code = code
+			}
 			var refs = this.proxy_refs
 			if(refs){
-				for(var i = 0, l = refs.length; i<l; i++){
-					var k = refs[i]
+				for(var k in refs){
 					code += 'this.' + k + ' = ONE.proxy_obj[this.' + k + ']\n'
 				}
 			}
-
-			value._remote_ = code
-
 			return code
 		}
 	})
@@ -191,10 +196,16 @@ ONE.browser_boot_ = function(){
 			for(var i = 0, l = msg.length;i < l;i++){
 				var obj = msg[i]
 				ONE.proxy_obj[obj.proxy_uid] = obj
+				if(obj.proxy_dump) console.log(obj)
 				var code = obj.proxy_code
 				var init = ONE.proxy_code[code]
 				if(!init){
-					init = ONE.proxy_code[code] = Function('module', code)
+					try{
+						init = ONE.proxy_code[code] = Function('module', code)
+					}
+					catch(e){
+						console.log("Error in proxy_code ", code)
+					}
 				}
 				// initialize object
 				init.call(obj, {})

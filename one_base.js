@@ -589,6 +589,20 @@ ONE.base_ = function(){
 		Object.defineProperty( this, key, def )
 	}
 
+	this.proxy_hook = function(obj){
+	}
+
+	this.proxy_unhook = function(){
+	}
+
+	this.proxy_signal = function(pthis){
+		for(var i = 1, l = arguments.length;i<l;i++){
+			var sig = arguments[i]
+			pthis[sig + '_hook'] = this.proxy_hook
+			pthis[sig + '_unhook'] = this.proxy_unhook
+		}
+	}
+
 	this.signal = function( key, value, setter ){
 		var signalStore = '__' + key
 		var fastStore = '__$' + key
@@ -628,28 +642,16 @@ ONE.base_ = function(){
 				}
 			})
 		}
+		else{ // we might need to create a new signal copy
+			if( sig.owner != this ){
+				sig = this[ signalStore ] = sig.fork( this )
+				if( fastStore in this ) sig.value = this[fastStore]
+			}
+		}
 		if( value !== undefined ) sig.set( value )
 	}
 
-	// debug logging
-	this.__out = []
-	this.logwrite = function( level, args ){
-		if(this.$ && this.$._logwrite){
-			if(this.__out){
-				var o = this.__out
-				for(var i = 0;i<o.length;i+=2) this.$._logwrite.call( this.$, o[i], o[i+1] )
-				this.__out = undefined
-			}
-			return this.$._logwrite.call( this.$, level, args )
-		}
-		this.__out.push(level, args)
-		console.log.apply( console, args )
-	}
-
-	this.trace = function(){ ONE.logwrite(3, arguments); return arguments[0];}
-	this.log = function(){ ONE.logwrite(2, arguments); return arguments[0];}
-	this.warn = function(){ ONE.logwrite(1, arguments) }
-	this.error = function(){ ONE.logwrite(0, arguments) }
+	this.trace = function(){ console.log.apply(console, arguments); return arguments[0];}
 }
 
 ONE.init_ = function(){
@@ -664,7 +666,7 @@ ONE.init_ = function(){
 	// add ast support to the Base class
 	this.ast_.call(this.Base)
 	this.color_()
-	
+
 	this.signal_.call(this.Base.Signal = this.Signal = {})
 	if(this.proxy_) this.proxy_.call(this.Base)
 	// make ONE the new root scope
@@ -837,11 +839,11 @@ ONE.signal_ = function(){
 	}
 
 	// bind to a property
-	this.prop = function( owner, key, setter ){
+	this.prop = function( owner, name, setter ){
 		var obj = Object.create( this )
 		
 		obj.owner = owner
-		obj.key = key
+		obj.name = name
 		obj.setter = setter
 
 		return obj
@@ -934,16 +936,14 @@ ONE.signal_ = function(){
 		if(typeof value == 'function'){
 			return this.on( value )
 		}
-		
+		/*
 		var owner = this.owner
-		
 		// if someone assigns something bindable we bind that
 		var old_bind
 		if(old_bind = this.bound){
 			old_bind.unbind_signal( this )
 			this.bound = undefined
 		}
-		
 		if(value && value.bind_signal){
 			// lets check if we are bound to an instance
 			this.bind = value
@@ -954,7 +954,7 @@ ONE.signal_ = function(){
 			else this.owner.bind_signals
 			return
 		}
-		
+		*/
 		this.value = value
 		
 		// call all our listeners

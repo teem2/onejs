@@ -5,8 +5,8 @@ class MyGL extends GLNode{
 
 	mesh = webgl.vec4Rect(-1, -1, 2, 2, 0)
 	
-	viewmtx = mat4.perspective(70deg, 1, -1, 1)
-	objmtx: mat4.RT(30deg, 30deg,0, 0,0,3)
+	viewmtx: mat4.perspective(70deg, 1, -1, 1)
+	objmtx: mat4.RT(30deg, Time.sec * 30deg,0, 0,0,3)
 
 	vertex: mesh[] * (objmtx * viewmtx)
 	
@@ -24,17 +24,18 @@ class MyGL extends GLNode{
 	}
 
 	pixel: mix(bgcolor, #black) do
-			sin on 8. * pixel mesh[].x
-			* sin on 2.* pixel mesh[].y
+			sin on 8*pixel mesh[].x
+			* sin on 2.5*pixel mesh[].y
 }
 
 // build the simplest of scenegraphcs
 GLView{
+	fill = #aero
 	MyGL{
-		bgcolor = #orange 
+		bgcolor = #orange
 	}
 	MyGL{
-		bgcolor = #red
-		viewmtx = mat4.perspective(90deg, 1, -1, 1)
+		bgcolor = #air
+		objmtx: mat4.RT(Time.sec *30deg, 0,0, 0,0,3)
 	}
 }

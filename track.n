@@ -1,3 +1,4 @@
+import math
 // ONEJS Track, Time and animation
 class Track extends Proxy{
 
@@ -236,11 +237,37 @@ class Track extends Proxy{
 
 class Time extends Proxy{
 	// The Time object manages the playback of your tracks.
-	sec:0
+	sec := 0
 
-	// we need to hook the renderers frameloop
 	init:(){
+		sec_anim(time)=>{
+			sec = time
+		}
 
+		// register someone hooking our signal
+		sec_hook(obj){
+			list_sec ?= []
+			if(list_sec.push(obj) == 1){
+				var o = obj.owner
+				while(o){
+					if(o.anim_hook){
+						sec_hooked = o
+						o.anim_hook(sec_anim)
+						break
+					}
+					o = o.owner
+				}
+			}
+		}
+
+		// unhook register
+		sec_unhook(obj){
+			if(!list_sec) throw new Error('undefined unhook')
+			list_sec.splice(list_sec.indexOf(obj), 1)
+			if(!list_sec.length){
+				sec_hooked.anim_unhook(sec_anim)
+			}
+		}
 	}
 
 	init2(){

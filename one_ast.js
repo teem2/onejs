@@ -160,6 +160,8 @@ ONE.ast_ = function(){
 	// AST node
 	parser.Node = this.AST = this.Base.extend(function(outer){
 
+		this._ast_ = 1
+
 		// AST nodes can be bound to signals as expressions
 		this.bind_signal = function( owner, sig, old ){
             
@@ -874,7 +876,7 @@ ONE.ast_ = function(){
 				if(n.arrow){
 					var arrow = n.arrow
 					// if an arrow has just one Id as arg leave off ( )
-					if( !n.rest && n.params && n.params.length == 1 && !n.params[0].init && n.params[0].id.type == 'Id' ){
+					if( !n.name && !n.rest && n.params && n.params.length == 1 && !n.params[0].init && n.params[0].id.type == 'Id' ){
 						return this.expand(n.params[0].id, n) + arrow + this.expand(n.body, n)
 					}
 					var ret = ''
@@ -887,7 +889,9 @@ ONE.ast_ = function(){
 					this.cignore = 1
 					return ret
 				}
-				var ret = 'function'
+				var ret 
+				if(n.name) ret = this.expand(n.name)
+				else ret = 'function'
 				if( n.gen ) ret += '*'
 				if( n.id ) ret += ' '+this.expand(n.id, n)
 				ret += '('+this.list(n.params, n)

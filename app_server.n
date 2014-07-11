@@ -9,6 +9,7 @@
  */
 import node
 import htmlscraper
+import math
 
 var live = 0
 if(live){

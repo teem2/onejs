@@ -281,7 +281,7 @@ ONE.genjs_ = function(modules, parserCache){
 			}
 			if(n.store & 2) throw new Error("Postfix ! not implemented")
 			if(n.store & 4){
-				ret = 'this.out(' + ret + ')'
+				ret = 'ONE.trace(' + ret + ')'
 			}
 			return ret
 		}
@@ -321,6 +321,8 @@ ONE.genjs_ = function(modules, parserCache){
 				return this.expand(def, n)
 			}
 			if(n) n.onthis = 1
+
+			if(this.context_resolve) return this.context_resolve( n )
 			return 'this.'+name
 		}
 		
@@ -380,7 +382,7 @@ ONE.genjs_ = function(modules, parserCache){
 					return 'ONE.color("'+n.name+'", module.vec3)'
 				}
 				if(flag === 64){
-					if(n.name == undefined) return 'this'
+					if(n.name === '') return 'console.log("trace")'
 					return 'this.' + n.name
 				}
 			}
@@ -1365,7 +1367,7 @@ ONE.genjs_ = function(modules, parserCache){
 			else {
 				if( n.op === '!') throw new Error("Postfix ! not implemented")
 				if(n.op ==='~'){
-					ret = 'this.out('+this.expand(n.arg, n) + ')'
+					ret = 'ONE.trace('+this.expand(n.arg, n) + ')'
 				}
 				else ret = this.expand (n.arg, n) + n.op
 			}
@@ -1637,7 +1639,12 @@ ONE.genjs_ = function(modules, parserCache){
 				// lets allocate a tempvar
 				this.find_function(n).call_var = 1
 				this.module[type.name] = type
-				ret +=',(' + this.call_tmpvar+'= new ' + type.view + 'Array(' + type.slots + '),' +
+				var alloc = 'new ' + type.view + 'Array(' + type.slots + ')'
+				if(this.store_tempid){
+					var store = 'this.struct_' + (this.store_tempid++)
+					alloc = store + '||(' + store + '=' + alloc + ')'
+				}
+				ret +=',(' + this.call_tmpvar+'= '+alloc+',' +
 					this.call_tmpvar + '.t=module.' + type.name + ',' + this.call_tmpvar + ')'
 				//ret += ',{o:0,t:module.'+type.name+','+type.arr+':new ' + type.view + 'Array(' + type.slots + ')}'
 			}
@@ -1748,7 +1755,7 @@ ONE.genjs_ = function(modules, parserCache){
 			var macro
 			if(this.context){
 				var obj = this.context[name]
-				if(obj && obj.bind && obj.bind.__class__ == 'AST') macro = obj.bind
+				if(obj && obj.value && obj.value._ast_) macro = obj.value
 			}
 			if(!macro){
 				var nm = name
@@ -2071,6 +2078,9 @@ ONE.genjs_ = function(modules, parserCache){
 			var fn = n.fn
 			
 			if(fn.type == 'Id'){
+				if(fn.flag == 35){ // function as a block comment
+					return ''
+				}
 				// animation new
 				if(fn.flag == 64 && fn.name === undefined){
 					return 'this.$.Track.new(this,' + this.Function( n ) +')'
