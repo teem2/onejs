@@ -1,9 +1,14 @@
 // OneJS math types
 
 define abs(x)    Math.abs(x)
+define abs(vec2 x) vec2.abs(x)
+define abs(vec3 x) vec3.abs(x)
+define abs(vec4 x) vec4.abs(x)
+
 define acos(x)   Math.acos(x)
 define asin(x)   Math.asin(x)
 define atan(x)   Math.atan(x)
+define atan(x, y) Math.atan2(x, y)
 define sin(x)    Math.sin(x)
 define cos(x)    Math.cos(x)
 define tan(x)    Math.tan(x)
@@ -32,7 +37,8 @@ define LOG10E    0.4342944819032518
 define SQRT_1_2  0.7071067811865476
 define SQRT2     1.4142135623730951
 
-// abstract base vector
+define mix(vec3 a, vec3 b, float v) vec3.mix(a, b, v)
+
 struct vec{
 
 	zero(){
@@ -66,6 +72,10 @@ struct vec{
 	greater( vec v ){
 		if( _[#] < v[#] ) return false
 		return true
+	}
+
+	abs( vec v ){
+		_[#] = abs(v[#])
 	}
 
 	sin( vec v ){

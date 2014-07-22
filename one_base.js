@@ -598,8 +598,8 @@ ONE.base_ = function(){
 	this.proxy_signal = function(pthis){
 		for(var i = 1, l = arguments.length;i<l;i++){
 			var sig = arguments[i]
-			pthis[sig + '_hook'] = this.proxy_hook
-			pthis[sig + '_unhook'] = this.proxy_unhook
+			//pthis[sig + '_hook'] = this.proxy_hook
+			//pthis[sig + '_unhook'] = this.proxy_unhook
 		}
 	}
 

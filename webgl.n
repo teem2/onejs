@@ -57,7 +57,6 @@ class GLNode extends Proxy{
 		js.proxy_refs = proxy_refs = {'owner':1}
 		var proxy_bind = js.proxy_bind = {}
 
-		//js.gl = owner.gl // use the gl context to inline gl constants
 		js.uid = 0
 		if(ast.type != 'Function') throw new Error('GL Draw not a function')
 		
@@ -118,7 +117,7 @@ class GLNode extends Proxy{
 	enum glsl_functions{
 		sizeof, radians, degrees
 		sin, cos, tan
-		asin, acos, atan
+		asin, acos, atan, 
 		pow, exp, log, exp2, log2
 		sqrt, inversesqrt
 		abs, sign, floor, ceil, fract
@@ -289,7 +288,8 @@ class GLNode extends Proxy{
 				if(!parent.infer) parent.infer = n.infer
 			}
 		}
-		
+
+		// i must dry implement Do
 		Do( n, parent ){
 			n.parent = parent
 			Pre(n)
@@ -302,7 +302,10 @@ class GLNode extends Proxy{
 			n.parent = parent
 			Pre(n)
 			var name = n.name
-			if(n.flag == 35) return // is color
+			if(n.flag == 35){
+				n.infer = vec3
+				return Post(n)// is color
+			}
 			if(name in glsl_functions || name in glsl_variables){
 				if(name == 'gl_FragCoord') n.mark = 3
 				return
@@ -318,7 +321,7 @@ class GLNode extends Proxy{
 			var prop = context[name]
 			if(prop === undefined) throw new Error('Cannot resolve ' + name)
 			
-			if(typeof prop == 'object' && prop.value){
+			if(prop._signal_){
 				// what if we are a normal property with a value?..
 				// we will need to 
 				if(!prop.value._ast_) throw new Error('invalid property ' + name)
@@ -334,8 +337,11 @@ class GLNode extends Proxy{
 					//prop.value = undefined
 				}
 				else {
-					//!TODO check type constructor
-					// otherwise we forward into the property
+					// if we reference a property more than once
+					// we need to store it in a temp variable
+					if(this.refcount[name]) this.refcount[name]++
+					else this.refcount[name] = 1
+
 					this[prop.value.type](prop.value, n)
 				}
 			}
@@ -366,6 +372,51 @@ class GLNode extends Proxy{
 			Post(n)
 		}
 		
+		// type inference calls		
+		Call( n, parent ){
+			n.parent = parent
+			Pre(n)
+
+			// alright. lets check if we have a type Id
+			if(n.fn.type == 'Id'){
+				// check 
+				var name = n.fn.name
+				var type = find_type(name)
+				// type infer the args
+				for(var arg from n.args) this[arg.type](arg, n)
+				if(type){
+					n.infer = type
+					// lets do the args
+					return Post(n)
+				}
+				// lets check if we are calling a macro
+				n.args.expanded = true
+				//console.log(n.args, name)
+				var macro = this.find_macro(n, name, n.args)
+				if(macro){
+					console.log(name, n.args)
+					// we are a macro 
+					if(macro.type == 'Function'){
+
+					}
+					else
+					if(macro.type == 'Call'){
+
+					}
+					else throw new Error('Macro called but not a function '+name)
+					// we have to figure out a return-type trace on our macro
+					return Post(n)
+				}
+			}
+			// static type methods
+			if(n.fn.type == 'Key'){
+
+			}
+			// otherwise it may be a type method, we need to trace it
+
+			return AST.Walk::Call(n, parent)
+		}
+
 		Index( n, parent ){
 			n.parent = parent
 			Pre(n)
@@ -406,20 +457,32 @@ class GLNode extends Proxy{
 
 				// check if we are a different object
 				var obj = context[objname]
-				if(!obj.t && typeof obj == 'object'){
-					// we are depending on another object
-					if(!obj.proxy_uid) throw new Error('dont know what to do with '+objname)
-					var propname = n.key.name
-					var prop = obj[propname]
-					// mark signal in our proxy table
-					n.infer = prop._typed_ || float
-					n.mark = 1 // uniform
-					proxy_refs[objname] = 1
-					var bind = proxy_bind[objname] || (proxy_bind[objname] = {})
-					bind[propname] = 1
-					return Post(n)
-				}
 
+				// we can be another expression, ifso
+				// we should flag expanding that
+				// expression into a temporary variable.
+				// if we reference an other expression more than
+				// once, we should tempvar it
+				if(!obj.t && typeof obj == 'object'){
+					if(obj.proxy_uid){
+						// we are depending on another object
+						var propname = n.key.name
+						var prop = obj[propname]
+
+						// mark signal in our proxy table
+						n.infer = prop._typed_ || float
+						n.mark = 1 // uniform
+						proxy_refs[objname] = 1
+						var bind = proxy_bind[objname] || (proxy_bind[objname] = {})
+						bind[propname] = 1
+						return Post(n)
+					}
+					else if(obj._signal_){
+						// we might want the other one
+						// okay so. 
+					}
+					else throw new Error('Dont know what to do in key deptrace with  '+objname)
+				}
 			}
 			// only try to walk/resolve the object
 			this[n.object.type](n.object, n)
@@ -438,6 +501,8 @@ class GLNode extends Proxy{
 		}
 		find_define = AST.ToJS.find_define
 		find_type = AST.ToJS.find_type
+		find_macro = AST.ToJS.find_macro
+		macro_match_args = AST.ToJS.macro_match_args
 	}
 
 	// generate the uniform computation JS
@@ -463,21 +528,17 @@ class GLNode extends Proxy{
 			}
 			
 			if(typeof prop == 'object'){
-				// lets store this signal as our dep
-				proxy_props[name] = 1
-				//if(prop._signal_) return 'this.' + name
-				// we are accessing a struct
 				//!TODO convert to signal
+				proxy_props[name] = 1
 				return 'this.' + name
 			} 
 			else if(typeof prop == 'number'){
-				// or an immediate value
 				//!TODO convert to signal
+				proxy_props[name] = 1
 				return 'this.' + name
 			}
-			else throw new Error('dont know what to do with '+name)
+			else throw new Error('Cant generate uniformJS for '+name)
 		}
-
 		// what if we are a Key and its another objects' signal we need to depend on?
 		// we need to send over a dependency list
 		Key( n ){
@@ -539,7 +600,36 @@ class GLNode extends Proxy{
 			var prop = context[name]
 			if(prop === undefined) throw new Error("cannot resolve " + name)
 			
-			if(prop.value && prop.value._ast_) return expand(prop.value, n)
+			// temporary variable generation
+			if(prop._signal_ && prop.value._ast_){
+
+				var node = prop.value
+				var type = node.type
+				if(type == 'Id' || type == 'Value' || 
+					type == 'Key' || (type == 'Index' &&
+						(!node.index || node.index.type == 'Value'))){
+					return expand(prop.value, n)
+				}
+				// use a tempvar
+				var count = this.refcount[name]
+				if(typeof count == 'object'){
+					// we already have it defined
+					this.tmpvars.splice(this.tmpvars.indexOf(count), 1)
+					this.tmpvars.push(count)
+					return count.name
+				}
+				else if(count>1){ // define it
+					var tmp = {
+						name:'tmp_' + n.infer.name + '_' + (uniform_id++),
+						type:n.infer.name,
+						value:expand(prop.value, n)
+					}
+					this.refcount[name] = tmp
+					this.tmpvars.push(tmp)
+					return tmp.name
+				}
+				else return expand(prop.value, n)
+			}
 			
 			throw new Error('Dont know what to do with '+name)
 			
@@ -595,16 +685,40 @@ class GLNode extends Proxy{
 			}
 			return AST.ToCode::Binary(n)
 		}
+
+		// type inference calls		
+		Call( n ){
+			if(n.fn.type == 'Id'){
+				// check 
+				var name = n.fn.name
+
+				var type = find_type(name)
+				// type constructor
+				if(type){
+					var ret = name + '(' 
+					for(var i, arg from n.args){
+						if(i) ret += ','
+						ret += this[arg.type](arg, n)
+					}
+					ret += ')'
+					return ret
+				}
+			}
+
+			return AST.ToCode::Call(n)
+		}
 		
-		Do = AST.ToJS.Do
+		find_define = AST.ToJS.find_define
+		find_type = AST.ToJS.find_type
 	}
-	
+
 	class GenDrawJS extends AST.ToJS{
 		
-		context_resolve( n ){
-			if(context[n] !== 'undefined'){
-				proxy_props[n.name] = 1
-				return 'this.' + n.name
+		context_resolve( name, n ){
+			if(typeof context[name] !== 'undefined'){
+				proxy_props[name] = 1
+				n.infer = context[name].t || float
+				return 'this.' + name
 			}
 		}
 
@@ -627,15 +741,17 @@ class GLNode extends Proxy{
 			DepTraceGLSL.proxy_bind = proxy_bind
 			DepTraceGLSL.proxy_refs = proxy_refs
 			DepTraceGLSL.module = module
+			GenGLSL.refcount = DepTraceGLSL.refcount = {}
 			DepTraceGLSL[pix.value.type](pix.value)
 			//log(pix.bind.toDump())
 			
 			// codegen the pixelshader
 			GenGLSL.uniform_id = 0
 			GenGLSL.varying_id = 0
-			
+			GenGLSL.tmpvar_id = 0
 			var pix_uniforms = GenGLSL.uniforms = []
 			var varyings = GenGLSL.varyings = []
+			var pix_tmpvars = GenGLSL.tmpvars = []
 			var signal_deps = GenGLSL.sigdeps = []
 			var pix_expr = GenGLSL.expand(pix.value)
 			
@@ -644,9 +760,11 @@ class GLNode extends Proxy{
 			if(!vtx.value || !vtx.value._ast_) throw new Error('Unexpected vertex type')
 			// dependency trace vertex shader
 			GenGLSL.pixel = DepTraceGLSL.pixel = 0
+			GenGLSL.refcount = DepTraceGLSL.refcount = {}
 			DepTraceGLSL[vtx.value.type](vtx.value)
 
 			var vtx_uniforms = GenGLSL.uniforms = []
+			var vtx_tmpvars = GenGLSL.tmpvars = []
 			var vtx_expr = GenGLSL.expand(vtx.value)
 			
 			var vary_merged = ''
@@ -703,11 +821,33 @@ class GLNode extends Proxy{
 				attribute ${attr.t.name} ${name};
 				`
 			}
+
+			var pix_tmpcode = ''
+			
+			// generate pixelshader tmpvars
+			for(var i = pix_tmpvars.length - 1; i >=0; i--){
+				var tmp = pix_tmpvars[i]
+				pix_tmpcode += `
+					${tmp.type} ${tmp.name} = ${tmp.value};
+				`
+			}
+
+			var vtx_tmpcode = ''
+
+			// generate pixelshader tmpvars
+			for(var i = vtx_tmpvars.length - 1; i >=0; i--){
+				var tmp = vtx_tmpvars[i]
+				vtx_tmpcode += `
+					${tmp.type} ${tmp.name} = ${tmp.value};
+				`
+			}
+
 			// vertex shader
 			var vtx_shader = `
 				precision highp float;
 				${vtx_uni_decl}${attr_decl}${vary_decl}
 				void main(){
+					${vtx_tmpcode}
 					gl_Position = ${vtx_expr};
 					${vary_assign}
 				}
@@ -717,6 +857,7 @@ class GLNode extends Proxy{
 				precision highp float;
 				${pix_uni_decl}${vary_decl}${vary_merged}
 				void main(){
+					${pix_tmpcode}
 					gl_FragColor = vec4(${pix_expr}, 1.);
 				}
 			`
@@ -797,6 +938,7 @@ class GLNode extends Proxy{
 				GenUniformJS.module = module
 				GenUniformJS.context = context
 				GenUniformJS.proxy_props = proxy_props
+
 				var js = GenUniformJS.expand(uni.node, n)
 				
 				var map = glsl_uniform_map[uni.node.infer.name]
@@ -815,11 +957,11 @@ class GLNode extends Proxy{
 				gl.drawArrays(${glc.TRIANGLES}, 0, ${len})
 			`
 			// correctly indent the code
-			ret = ret.replace(/\n\t\t\t\t/g, '\n'+this.indent)
+			ret = ret.replace(/\n\t\t\t\t/g, '\n' + this.indent)
+			if(context.dump) console.log(ret)
 			return ret
 		}
 	}
-
 }
 
 class GLView extends GLNode{
@@ -830,21 +972,19 @@ class GLView extends GLNode{
 	h := 0
 	aspect := 0
 	ratio := 1
+	frame := 0
 
 	draw:(){
 		clearAll(fill)
 	}
 
 	init:(parent){
-		ONE.proxy_signal('w','h','aspect','ratio')
-
 		child = []
 		if(!parent) parent = document.body
 
-		pixelRatio = window.devicePixelRatio
 		canvas = document.createElement("canvas")
 		parent.appendChild(canvas)
-		gl = canvas.getContext('webgl',{
+		var _gl = gl = canvas.getContext('webgl',{
 			alpha: false,
 			depth: true,
 			stencil: false,
@@ -852,23 +992,28 @@ class GLView extends GLNode{
 			premultipliedAlpha: false,
 			preserveDrawingBuffer: true
 		})
-		gl._shadercache = {}
-		var _gl = gl
+		canvas.webkitRequestFullscreen()
 		window.onresize = =>{
+			var pixelRatio = window.devicePixelRatio
 			var w = parent.offsetWidth
 			var h = parent.offsetHeight
-			canvas.style.width = w
-			canvas.style.height = h
-			canvas.width = w * pixelRatio
-			canvas.height = h * pixelRatio
-			_gl.viewport(0,0,w * pixelRatio, h * pixelRatio)
+			var sw = w * pixelRatio
+			var sh = h * pixelRatio
+			canvas.width = sw
+			canvas.height = sh
+			canvas.style.width = w + 'px'
+			canvas.style.height = h + 'px'
+			if(_gl)_gl.viewport(0,0, sw, sh)
 		}
 		window.onresize()
+		gl._shadercache = {}
 
 		// lets request an init
 		drawloop(time)=>{
+			// call update
 			if(!start) start = time
 			sec = (time - start) / 1000
+
 			draw(gl)
 			for(var a from anim_hooks){
 				a(sec)
@@ -880,7 +1025,8 @@ class GLView extends GLNode{
 			if(anim_hooks.length) window.requestAnimationFrame(drawloop)
 		}
 
-		redraw(node){
+		changed(node){
+
 		}
 
 		anim_hooks = []

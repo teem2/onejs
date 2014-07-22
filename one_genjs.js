@@ -1,18 +1,18 @@
 ONE.genjs_ = function(modules, parserCache){
 
 	this.typeMap = Object.create(null)
-	this.typeMap.bool    = { size:1, slots:1, view:'Int32', arr:'i4', name:'bool', prim:1 }
-	this.typeMap.int8    = { size:1, slots:1, view:'Int8', arr:'i1', name:'int8', prim:1 }
-	this.typeMap.uint8   = { size:2, slots:1, view:'Uint8', arr:'u1', name:'uint8', prim:1 }
-	this.typeMap.int16   = { size:2, slots:1, view:'Int16', arr:'i2', name:'int16', prim:1 }
-	this.typeMap.uint16  = { size:2, slots:1, view:'Uint16', arr:'u2', name:'uint16', prim:1 }
-	this.typeMap.int     = { size:4, slots:1, view:'Int32', arr:'i4', name:'int', prim:1 }
-	this.typeMap.int32   = { size:4, slots:1, view:'Int32', arr:'i4', name:'int32', prim:1 }
-	this.typeMap.uint32  = { size:4, slots:1, view:'Uint32', arr:'u4', name:'uint32', prim:1 }
-	this.typeMap.float   = { size:4, slots:1, view:'Float32', arr:'f4', name:'float', prim:1 }
-	this.typeMap.float32 = { size:4, slots:1, view:'Float32', arr:'f4', name:'float32', prim:1 }
-	this.typeMap.double  = { size:8, slots:1, view:'Float64', arr:'f8', name:'double', prim:1 }
-	this.typeMap.float64 = { size:8, slots:1, view:'Float64', arr:'f8', name:'float64', prim:1 }
+	this.typeMap.bool    = { size:1, slots:1, view:'Int32', name:'bool', prim:1 }
+	this.typeMap.int8    = { size:1, slots:1, view:'Int8', name:'int8', prim:1 }
+	this.typeMap.uint8   = { size:2, slots:1, view:'Uint8', name:'uint8', prim:1 }
+	this.typeMap.int16   = { size:2, slots:1, view:'Int16', name:'int16', prim:1 }
+	this.typeMap.uint16  = { size:2, slots:1, view:'Uint16', name:'uint16', prim:1 }
+	this.typeMap.int     = { size:4, slots:1, view:'Int32', name:'int', prim:1 }
+	this.typeMap.int32   = { size:4, slots:1, view:'Int32', name:'int32', prim:1 }
+	this.typeMap.uint32  = { size:4, slots:1, view:'Uint32', name:'uint32', prim:1 }
+	this.typeMap.float   = { size:4, slots:1, view:'Float32', name:'float', prim:1 }
+	this.typeMap.float32 = { size:4, slots:1, view:'Float32', name:'float32', prim:1 }
+	this.typeMap.double  = { size:8, slots:1, view:'Float64', name:'double', prim:1 }
+	this.typeMap.float64 = { size:8, slots:1, view:'Float64', name:'float64', prim:1 }
 	this.viewSize = {
 		Int8:1,
 		Uint8:1,
@@ -135,13 +135,14 @@ ONE.genjs_ = function(modules, parserCache){
 		
 		this.find_define = function( name ){
 			var def = this.module.defines[name]
-			if(def) return
+			if(def) return def
 			var im = this.module.imports
 			for(var i = 0, l = im.length; i < l; i++){
 				var defines = im[i].defines
 				if(defines && (def = defines[name])) return def
 			}
 		}
+
 		// destructuring helpers
 		this._destrucArrayOrObj = function(v, acc, nest, fn, vars){
 			// alright we must store our object fetch on a ref
@@ -288,9 +289,8 @@ ONE.genjs_ = function(modules, parserCache){
 		
 		this.resolve = function( name, n ){
 			// TODO make this resolve order explicit
-
 			if(name in this.macroarg){
-				return this.expand(this.macroarg[name], n)
+				return this.macroarg[name]//this.expand(this.macroarg[name], n)
 			}
 			var type = this.typemethod, field
 			if(type && (field = type.fields[name])){
@@ -298,7 +298,7 @@ ONE.genjs_ = function(modules, parserCache){
 				return '_['+(field.off / outer.viewSize[type.view])+']'
 			}
 			
-			if( name in this.scope ){
+			if(name in this.scope){
 				var type = this.scope[name]
 				if(n && typeof type == 'object'){
 					n.infer = type
@@ -306,7 +306,7 @@ ONE.genjs_ = function(modules, parserCache){
 				return name
 			}
 			
-			if( name in this.globals ) return name
+			if(name in this.globals) return name
 			
 			var type = this.find_type(name)
 			if(type){
@@ -322,7 +322,11 @@ ONE.genjs_ = function(modules, parserCache){
 			}
 			if(n) n.onthis = 1
 
-			if(this.context_resolve) return this.context_resolve( n )
+			if(this.context_resolve){
+				var ret = this.context_resolve(name, n)
+				if(ret !== undefined) return ret
+			}
+
 			return 'this.'+name
 		}
 		
@@ -1069,7 +1073,7 @@ ONE.genjs_ = function(modules, parserCache){
 						
 						if(type.view === undefined){
 							type.view = field.view
-							type.arr = field.arr
+							//type.arr = field.arr
 						}
 						else if(type.view !== field.view){
 							throw new Error('Dont support mixed type structs yet in JS')
@@ -1145,7 +1149,7 @@ ONE.genjs_ = function(modules, parserCache){
 				else
 					str_body += this.depth + 'var '+name+' = Array.prototype.slice.call(arguments,0)' + this.newline
 			}
-			if(typemethod){
+			if(typeof typemethod == 'object'){
 				this.scope['_'] = typemethod
 				str_param += '_'
 			}
@@ -1224,7 +1228,7 @@ ONE.genjs_ = function(modules, parserCache){
 			
 			// Auto function to this bind detection
 			var bind = false
-			if(n.arrow === '=>' || n.indo && !n.arrow) bind = true
+			if(n.arrow === '=>' || (n.parent && n.parent.extarg && !n.arrow)) bind = true
 			var ret = ''
 			var isvarbind
 			var isgetset
@@ -1238,7 +1242,7 @@ ONE.genjs_ = function(modules, parserCache){
 					if(kind && (kind.name == 'get' || kind.name == 'set')){
 						if(kind.name == 'get') ret += 'this.__defineGetter__("'
 						else ret += 'this.__defineSetter__("'
-						ret += n.name.name+'",'
+						ret += n.name.name + '",'
 						isgetset = true
 					}
 					else if(!typemethod){
@@ -1307,7 +1311,7 @@ ONE.genjs_ = function(modules, parserCache){
 			
 			//if( ret[ret.length - 1] != '\n') ret += this.newline + this.depth
 			
-			if(typemethod){
+			if(typeof typemethod == 'object'){
 				ret += this.depth+this.indent+'return _'+this.newline + this.depth
 			}
 			
@@ -1463,7 +1467,7 @@ ONE.genjs_ = function(modules, parserCache){
 						var tmp_l = this.destruc_prefix + (func.destruc_vars - 2)
 						var tmp_r = this.destruc_prefix + (func.destruc_vars - 1)
 						var nslots = n.left.infer.slots
-						var arr = n.left.infer.arr
+						//var arr = n.left.infer.arr
 						var ret = '(' + tmp_l + '=' + left + ',' + tmp_r + '=' + right
 						for(var i = 0;i<nslots;i++){
 							//ret += ',' + tmp_l + '.' + arr + '[' + tmp_l +'.o+'+ i + ']'+
@@ -1614,13 +1618,12 @@ ONE.genjs_ = function(modules, parserCache){
 			}
 			if(!method) throw new Error('No overload found for '+method_name)
 			
+			var gen = type.name + '_' + method_name
 			// lets make a name from our argument types
 			for(var i = 0, l = method.params.length; i < l; i++){
 				var kind = method.params[i].id.kind
-				method_name += '_'+(kind && kind.name || 'var')
+				gen += '_'+(kind && kind.name || 'var')
 			}
-			
-			var gen = type.name + '_' + method_name
 			
 			// make a typemethod
 			if(!this.typemethods[gen]){
@@ -1749,96 +1752,132 @@ ONE.genjs_ = function(modules, parserCache){
 			
 			return ret
 		}
+
+		this.macro_match_args = function( n, name, body, args ){
+			// now we need to expand the args to do the type inference.
+			if(!args.expanded){
+				var exp = args.expanded = []
+				for(var i = 0, l = args.length; i<l; i++){
+					exp[i] = this.expand(args[i], n)
+				}
+			}
+
+			var params
+			if(body.type == 'Function') params = body.params
+			else if(body.type == 'Call') params = body.args
+			if(!params) return false
+			// match length
+			if(params.length !== args.length) return false
+
+			for(var i = 0, l = params.length; i<l; i++){
+				var param = params[i]
+				var kind
+				if(param.type == 'Def') kind = param.id.kind
+				else kind = param.kind
+				if(kind){
+					var infer = args[i].infer
+					if(!infer){
+						throw new Error('cant infer argument '+i+' to type ' +kind.name+' for '+name)
+					}
+					if(infer.name != kind.name) return false
+				}
+			}
+			return true
+		}
 		
+		// lets pattern match 
+		this.find_macro = function( n, name, args ){
+			var macro
+			var found
+			
+			if(this.context){ // support for context macros
+				var obj = this.context[name]
+				if(obj && obj.value && obj.value._ast_){
+					if(this.macro_match_args(n, name, obj.value, args)) return obj.value
+					found = true
+				}
+			}
+			
+			var nm = name
+			var macros = this.module.macros
+			macro = macros[nm]
+			while(macro){
+				macro.id.parent = macro
+				if(this.macro_match_args(n, name, macro.id, args)) return macro.id
+				found = true
+				nm = nm + '_'
+				macro = macros[nm]
+			}
+
+			var im = this.module.imports
+			for(var i = 0, l = im.length; i < l; i++){
+				var macros = im[i].macros
+				if(macros && (macro = macros[name])){
+					var nm = name
+					while(macro){
+						macro.id.parent = macro
+						if(this.macro_match_args(n, name, macro.id, args)) return macro.id
+						found = true
+						nm = nm + '_'
+						macro = macros[nm]
+					}
+				}
+			}
+			if(found) throw new Error('Macro '+name+' used but not matching any arg types')
+		}
+
 		this.macro_call = function( n, name, args ){
 			
 			var macro
-			if(this.context){
-				var obj = this.context[name]
-				if(obj && obj.value && obj.value._ast_) macro = obj.value
-			}
-			if(!macro){
-				var nm = name
-				var macros = this.module.macros
-				macro = macros[nm]
-				
-				while(macro){
-					//!TODO add a real argument matcher here
-					params = macro.id.args
-					if(args.length == params.length) break
-					nm = nm + '_'
-					macro = macros[nm]
+			args.expanded = undefined
+			if(macro = this.find_macro(n, name, args)){
+				// lets check type
+				if(macro.type == 'Function'){
+					var params = macro.params
+					var gen = 'macro_' + name
+					for(var i = 0, l = params.length; i < l; i++){
+						var kind = params[i].id.kind
+						gen += '_'+(kind && kind.name || 'var')
+					}
+					if(!this.typemethods[gen]){
+						var d = this.depth
+						var s = this.scope
+						var oldarg = this.macroarg
+						this.macroarg = Object.create(null)
+						this.scope = Object.create(null)
+						this.depth = ''
+						this.typemethods[gen] = this.Function(macro, gen, undefined, true)
+						this.depth = d
+						this.scope = s
+						this.macroarg = oldarg
+					}
+					var ret = gen + '.call(this'
+					// set up the call and argument list
+					var exp = args.expanded
+					for(var i = 0, l = exp.length; i < l; i++){
+						ret += ', ' + exp[i]
+					}
+					ret += ')'
+					return ret
 				}
-				if(!macro){
-					var im = this.module.imports
-					for(var i = 0, l = im.length; i < l; i++){
-						var macros = im[i].macros
-						if(macros && (macro = macros[name])){
-							var nm = name
-							while(macro){
-								params = macro.id.args
-								if(args.length == params.length) break
-								nm = nm + '_'
-								macro = macros[nm]
-							}
+				else if(macro.type == 'Call'){
+					// inline macro expansion
+					var oldarg = this.macroarg
+					var marg = this.macroarg = Object.create(this.macroarg)
+					var params = macro.args
+					// build up macro args
+					for(var i = 0; i < params.length; i++){
+						var param = params[i]
+						if(param.type == 'Assign'){
+							throw new Error('implement macro default arg')
 						}
-						if(macro) break
+						this.macroarg[param.name] = args.expanded[i]
 					}
+					var ret = this.expand(macro.parent.value, n)
+					this.macroarg = oldarg
+					return ret
 				}
-				if(!macro) return
-			}
-			if(macro.id && macro.id.type == 'Function') macro = macro.id
-				
-			// macro function TODO make this actually safe
-			if(macro.type == 'Function'){
-				
-				var a = this.macroarg
-				var marg = this.macroarg = Object.create(this.macroarg)
-				var params = macro.params
-				
-				var ret = '{' + this.newline + this.depth + this.indent + 'var '
-				var len = args.length
-				for(var i = 0; i < len; i++){
-					var param = params[i]
-					// check if we have a default arg
-					if(param.init){
-						throw new Error('implement macro default arg')
-					}
-					var tmp = this.alloc_tmpvar(n)
-					if(i) ret += ', '
-					ret += tmp + ' = ' + this.expand(args[i], n)
-					this.macroarg[param.id.name] = {type:'Id',name:tmp}
-					var kind = param.id.kind
-					if(kind){
-						var type = this.find_type(kind.name)
-						if(!type) throw new Error('Cannot find type of macro arg: ' + kind.name)
-						this.scope[tmp] = type
-					}
-					else this.scope[tmp] = 1
-				}
-				var chk = this.expand(macro.body, n)
-				ret += chk.slice(1)
-				this.macroarg = a
-				return ret
-			}
-			// macro expressions
-			else {
-				var len = args.length
-				if(!len) return this.expand(macro.value, n)
-				var a = this.macroarg
-				var marg = this.macroarg = Object.create(this.macroarg)
-				var params = macro.id.args
-				// build up macro args
-				for(var i = 0; i < len; i++){
-					var param = params[i]
-					if(param.type == 'Assign'){
-						throw new Error('implement macro default arg')
-					}
-					this.macroarg[param.name] = args[i]
-				}
-				var ret = this.expand(macro.value, n)
-				this.macroarg = a
-				return ret
+				else throw new Error('Macro call, but wrong type '+name+' '+macro.id.type)
 			}
 		}
 		
@@ -1876,8 +1915,8 @@ ONE.genjs_ = function(modules, parserCache){
 			var args = n.args
 			
 			// add extra args for processing
-			if(n.first_args) args = Array.prototype.concat.apply(n.first_args, args)
-			if(n.last_args) args = Array.prototype.concat.apply(args, n.last_args)
+			//if(n.first_args) args = Array.prototype.concat.apply(n.first_args, args)
+			//if(n.last_args) args = Array.prototype.concat.apply(args, n.last_args)
 			if(n.isnew) args = Array.prototype.concat.apply(['this'], args)
 			
 			var arglen = args.length
@@ -1919,7 +1958,7 @@ ONE.genjs_ = function(modules, parserCache){
 				if(sthis && sthis.name){
 					var isstatic
 					var type = this.scope[sthis.name] || (isstatic = this.find_type(sthis.name))
-					if(typeof type == 'object' && type.__class__ !== 'AST'){
+					if(typeof type == 'object' && !type._ast_){
 						// alright we are a method call.
 						if(fn.object.type !='Id') throw new Error('only 1 deep method calls for now')
 						// so first we are going to compile the function
@@ -2115,33 +2154,5 @@ ONE.genjs_ = function(modules, parserCache){
 		this.Rest = function( n ){
 			throw new Error("dont know what to do with isolated rest object")
 		}
-		
-		this.Do = function( n ){
-			var call = n.call
-			call.parent = n
-			var args = [n.arg]
-			n.arg.indo = 1
-			if(n.catch){
-				args.push( n.catch )
-				n.catch.indo = 1
-			}
-			var then = (n.then ? this.expand(n.then, n) : '')
-			if(call.type !== 'Call'){ // make a fake call node
-				call = {
-					type:'Call',
-					//parent:n,
-					fn:call,
-					args:[]
-				}
-			}
-			else call.parent = n
-			if(n.kind == 'do'){
-				call.last_args = args
-				return this.expand(call, n) + then//, this.Call(call, args) + then
-			}
-			call.first_args = args
-			return this.expand(call, n)//Call(call, undefined, args)
-		}
-		
 	})
 }

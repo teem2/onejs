@@ -204,7 +204,7 @@ ONE.browser_boot_ = function(){
 						init = ONE.proxy_code[code] = Function('module', code)
 					}
 					catch(e){
-						console.log("Error in proxy_code ", code)
+						console.log("Error in proxy_code ",e, code)
 					}
 				}
 				// initialize object

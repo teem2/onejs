@@ -1,7 +1,7 @@
 //var {Root, Rect} = load('dom')
 import math
 import dom
-
+/*
 Dom1(){
 	class MyDiv extends Rect{
 		w = 10
@@ -29,7 +29,7 @@ Signals(){
 		assert( y == 30)
 	}
 }
-
+*/
 Scoping(){
 	class Sub{
 		scoped()
@@ -127,6 +127,23 @@ Roles(){
 }
 
 Language(){
+	// macros
+	define def_value 10
+	assert(def_value == 10)
+
+	// macro function
+	define macro_test(vec2 t){
+		return 1
+	}
+
+	define macro_test(vec3 t){
+		return 2
+	}
+
+	assert(macro_test(vec2(0,0)) == 1)
+
+	assert(macro_test(vec3(0,0,0)) == 2)
+
 	// structs and types
 	struct vec_t{
 		float x
@@ -161,8 +178,6 @@ Language(){
 	assert(rt[1].p[1].y == 7)
 
 	rt[1].p[1] += vec_t(3,4)
-	
-	log(rt[1].p[1])
 	
 	assert(rt[1].p[1].y == 11)
 

@@ -1,41 +1,25 @@
 import math
 import webgl
 
-class MyGL extends GLNode{
+class Rect extends GLNode{
 
 	mesh = webgl.vec4Rect(-1, -1, 2, 2, 0)
 	
 	viewmtx: mat4.perspective(70deg, 1, -1, 1)
-	objmtx: mat4.RT(30deg, Time.sec * 30deg,0, 0,0,3)
+	objmtx: mat4.RT(30deg, Time.sec * 30deg + slide*10,0, 0,0,3)
 
 	vertex: mesh[] * (objmtx * viewmtx)
-	
 	slide = 1
-
-	touchdown(v){
-		start = slide
-		capture do(v){
-			slide = start + v.x
-		}
-	}
-	
-	click(){
-		bgcolor = #blue
-	}
-
-	pixel: mix(bgcolor, #black) do
-			sin on 8*pixel mesh[].x
-			* sin on 2.5*pixel mesh[].y
+	p:pixel mesh[]
+	bgcolor: #red
+	pixel: mix(bgcolor, #black, 
+		abs(sin(slide * atan(p.x, p.y))))
+		+ mix(#green, #purple) do
+		sin(sin(Time.sec) * 2 * slide * p.x * p.y)
 }
 
-// build the simplest of scenegraphcs
-GLView{
+var ref = GLView{
 	fill = #aero
-	MyGL{
-		bgcolor = #orange
-	}
-	MyGL{
-		bgcolor = #air
-		objmtx: mat4.RT(Time.sec *30deg, 0,0, 0,0,3)
-	}
+
+	Rect{ slide = 10 }
 }

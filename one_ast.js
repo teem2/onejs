@@ -49,7 +49,7 @@ ONE.ast_ = function(){
 			// the template nodes
 			for( var i = 0; i < nodes.length; i++ ){
 				var tgt = nodes[i]
-				var src = template[ tgt.arg.name ]
+				var src = template[tgt.arg.name]
 				if(!src) throw new Error("Template variable not found: " + tgt.arg.name)
                 
 				// clean ret the node
@@ -95,7 +95,7 @@ ONE.ast_ = function(){
 			var flags = js.pull_flags(ast)
             
 			if(flags){
-				if(flags.indexOf('ast')!= -1) ONE.log( ast.toDump() )
+				if(flags.indexOf('ast')!= -1) console.log( ast.toDump() )
 				if(flags.indexOf('code')!=-1){
 					var code = this.AST.ToCode
 					ONE.log( code.Function(ast) )
@@ -110,7 +110,7 @@ ONE.ast_ = function(){
 			for(var k in js.typemethods){
 				code = js.typemethods[k] + code
 			}
-			if(flags && flags.indexOf('js')!=-1) ONE.log( code )
+			if(flags && flags.indexOf('js')!=-1) console.log( code )
             
 			try{
 				if( typeof process !== 'undefined'){
@@ -277,11 +277,10 @@ ONE.ast_ = function(){
 			Call: { fn:1, args:2 },
 			Create: { fn:1, body:1, arrow:0 },
 
-			Class: { id:1, base:1, body:1 },
+			Class: { id:1, base:1, body:1, extarg:0, catch:1, then:1 },
 
 			Quote: { quote:1 },
 			Rest: { id:1, dots:0 },
-			Do: { call:1, arg:1, catch:1, then:1, kind:0 },
 			Then: { name:1, do:1 },
 
 			Debugger: { },
@@ -467,8 +466,7 @@ ONE.ast_ = function(){
 			Create: 1,
 
 			Quote: 1,
-			Path: 1,
-			Do: 1,
+			Path: 1
 		}
 
 		this.isExpr = function(){
@@ -1045,25 +1043,6 @@ ONE.ast_ = function(){
 
 			this.Rest = function( n ){
 				return '...' + this.expand(n.id, n)
-			}
-
-			this.Do = function( n ){
-				var ret = ''
-				ret += this.expand(n.call, n) 
-				var verb = n.kind + ' '
-				if(ret[ret.length - 1] == '\n') ret += this.depth + ' ' + verb
-				else ret += ' ' + verb
-				ret += this.expand(n.arg, n)
-				if(n.catch){
-					if(ret[ret.length - 1] == '\n') ret += this.depth
-					ret += 'catch ' + this.expand(n.catch)
-				}
-				if(n.then){
-					if(ret[ret.length - 1] == '}') ret += this.newline + this.depth
-					if(ret[ret.length - 1] == '\n') ret += this.depth
-					ret += this.expand( n.then )
-				}
-				return ret
 			}
 
 			this.Create = function( n ){

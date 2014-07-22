@@ -2279,9 +2279,55 @@ ONE.parser_strict_ = function(){
 		case this._do:
 			// do on next line followed by { } is interpreted as the JS do/while
 			if( this.lastSkippedNewlines && this.input.charCodeAt(this.tokPos) == 123)return base
+
+			var type = this.tokType
+			var node = base
+			if(base.type !== 'Call'){
+				node = this.startNodeFrom(base)
+				node.fn = base
+				node.args = []
+			}
+
+			// lets modify base into a call.
+			node.extarg = this.tokVal
+			this.next()
+			var arg = this.parseNoCommaExpression()
+	
+			if(type == this._do){
+				node.args.push(arg)
+			}
+			else
+				node.args.unshift(arg)
+
+			// we can parse other _do's or catch's
+			if(this.eat(this._catch)){
+				node.catch = this.parseNoCommaExpression()
+			}
+
+			if(this.tokType == this._name && this.tokVal == 'then'){
+				node = this.finishNode(node, 'Call')
+				var ident = this.parseIdent()
+				if(this.tokType == this._parenL){
+					this.eat(this._parenL)
+					this.expect(this._parenR)
+				}
+				node.then = this.parseSubscripts(ident, noCalls)
+				return node
+				//eat(this._ident)
+			}
+			return this.finishNode( node, 'Call')
+		/*
+		case this._on:
+		case this._do:
+			// do on next line followed by { } is interpreted as the JS do/while
+			if( this.lastSkippedNewlines && this.input.charCodeAt(this.tokPos) == 123)return base
 			// if we are a catch, we must scan up to
 			// the last do
 			var node = this.startNodeFrom(base)
+			
+			// lets modify base into a call.
+
+
 			node.call = base
 			node.kind = this.tokVal
 			this.next()
@@ -2303,6 +2349,7 @@ ONE.parser_strict_ = function(){
 				//eat(this._ident)
 			}
 			return this.finishNode( node, 'Do')
+			*/
 		} 
 		return base
 	}

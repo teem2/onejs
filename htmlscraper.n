@@ -126,7 +126,7 @@ class HTMLParser{
 }
 
 // Builds a JS object tree accessible like json: tag_1.tag[2].attr
-class HTMLScraper extends HTMLParser{ 
+class HTMLScraper extends HTMLParser{
 
 	// void tags
 	enum void_tag{

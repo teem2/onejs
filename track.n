@@ -240,10 +240,11 @@ class Time extends Proxy{
 	sec := 0
 
 	init:(){
+
 		sec_anim(time)=>{
 			sec = time
+			//console.log(this.sec)
 		}
-
 		// register someone hooking our signal
 		sec_hook(obj){
 			list_sec ?= []
