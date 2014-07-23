@@ -92,13 +92,23 @@ class GLNode extends Proxy{
 
 	type: triangle
 
-	enum glsl_variables{
-		gl_PointCoord, gl_FrontFacing, gl_FragCoord, gl_Position
-		gl_PointSize, gl_ClipDistance, gl_VertexID, gl_InstanceID
-		gl_MaxVertexAttribs, gl_MaxVertexUniformVectors
-		gl_MaxVaryingVectors, gl_MaxVertexTextureImageUnits
-		gl_MaxCombinedTextureImageUnits, gl_MaxTextureImageUnits
-		gl_MaxFragmentUniformVectors, gl_MaxDrawBuffers
+	var glsl_variables = {
+		gl_PointCoord:vec2
+		gl_FrontFacing:bool
+		gl_FragCoord:vec4
+		gl_Position:vec4
+		gl_PointSize:float
+		gl_ClipDistance:float
+		gl_VertexID:int
+		gl_InstanceID:int
+		gl_MaxVertexAttribs:int
+		gl_MaxVertexUniformVectors:int
+		gl_MaxVaryingVectors:int
+		gl_MaxVertexTextureImageUnits:int
+		gl_MaxCombinedTextureImageUnits:int
+		gl_MaxTextureImageUnits:int
+		gl_MaxFragmentUniformVectors:int
+		gl_MaxDrawBuffers:int
 	}
 
 	enum glsl_types{
@@ -306,21 +316,49 @@ class GLNode extends Proxy{
 				n.infer = vec3
 				return Post(n)// is color
 			}
-			if(name in glsl_functions || name in glsl_variables){
-				if(name == 'gl_FragCoord') n.mark = 3
-				return
+
+			if(macro_args && macro_args[name]){
+				var type = macro_args[name].infer
+				n.infer = type
+				return Post(n)
 			}
+
+			if(scope && scope[name]){
+				var type = scope[name]
+				n.infer = type
+				return Post(n)
+			}
+
+			var type = glsl_variables[name]
+			if(type){
+				if(name == 'gl_FragCoord') n.mark = 3
+				n.infer = type
+				return Post(n)
+			}
+
+			// static type method or property?
+			var type = find_type(name)
+			if(type){
+				n.infer = type
+				return Post(n)
+			}
+
 			// check if we are a macro?
 			var def = this.find_define(name)
 			if(def){
 				this[def.type](def, n)
-				return
+				return Post(n)
 			}
 
 			// lets resolve name
 			var prop = context[name]
 			if(prop === undefined) throw new Error('Cannot resolve ' + name)
 			
+			// we are a reference to a remote object
+			if(prop.proxy_uid){
+				throw new Error('Cannot reference bare remote objects in GLSL')
+			}
+
 			if(prop._signal_){
 				// what if we are a normal property with a value?..
 				// we will need to 
@@ -371,7 +409,61 @@ class GLNode extends Proxy{
 			}
 			Post(n)
 		}
-		
+
+		this.Function( n, parent ){
+			// we should only do our body, not our params
+			n.parent = parent
+			//Pre(n)
+
+			var body = n.body
+			if(body) this[body.type](body, n)
+
+			//Post(n)
+		}
+
+		Def( n, parent ){
+			n.parent = parent
+			var type
+			if(n.init) this[n.init.type](n.init, n)
+
+			if(n.parent.type == 'Var'){
+				if(!n.init) throw new Error('Cannot use uninitialized var')
+				type = n.init.infer
+			}
+			else if(n.parent.type === 'TypeVar'){
+				var kind = n.parent.kind
+				if(kind.type == 'Index'){
+					var name = kind.object.name
+					var type = this.find_type(name)
+					type = Object.create(type)
+					type.dim = 1
+				}
+				else{
+					var name = kind.name
+					type = this.find_type(name)
+				}
+			}
+			else throw new Error('Unsupported Def encountered')
+
+			scope[n.id.name] = type
+		}
+
+		Return( n, parent ){
+			// set return type
+			n.parent = parent
+			Pre(n)
+			if(n.arg){
+				this[n.arg.type](n.arg, n)
+			}
+			if(return_type && return_type != n.infer){
+				throw new Error('Multiple returntypes detected '+return_type.name + ' and ' + n.infer)
+			}
+			return_type = n.infer
+			Post(n)
+		}
+		// if we get a return
+		// we should 
+
 		// type inference calls		
 		Call( n, parent ){
 			n.parent = parent
@@ -392,16 +484,37 @@ class GLNode extends Proxy{
 				// lets check if we are calling a macro
 				n.args.expanded = true
 				//console.log(n.args, name)
-				var macro = this.find_macro(n, name, n.args)
+				var macro = find_macro(n, name, n.args)
 				if(macro){
-					console.log(name, n.args)
 					// we are a macro 
 					if(macro.type == 'Function'){
-
+						// lets type infer trace an actual macro call
+						var old_scope = scope
+						var old_return = return_type
+						return_type = undefined
+						var mparams = macro.params
+						scope = Object.create(null)
+						for(var i, arg from n.args){
+							if(!arg.infer) throw new Error('Cannot infer arg in macro '+name)
+							scope[mparams[i].id.name] = arg.infer
+						}
+						// lets set the arguments on the scope
+						this[macro.type](macro, n)
+						scope = old_scope
+						n.infer = return_type
+						return_type = old_return
 					}
-					else
-					if(macro.type == 'Call'){
-
+					else if(macro.type == 'Call'){
+						var oldargs = macroarg
+						macro_args = Object.create(null)
+						var margs = macro.args
+						for(var i, arg from n.args){
+							macro_args[margs[i].name] = arg
+						}
+						var val = macro.parent.value
+						// type infer trace a macro!
+						this[val.type](val, n)
+						macro_args = oldargs
 					}
 					else throw new Error('Macro called but not a function '+name)
 					// we have to figure out a return-type trace on our macro
@@ -410,10 +523,23 @@ class GLNode extends Proxy{
 			}
 			// static type methods
 			if(n.fn.type == 'Key'){
-
+				var obj = n.fn.object
+				if(obj.type == 'Id'){
+					var name = obj.name
+					if(name == 'Math'){
+						n.infer = float
+						return Post(n)
+					}
+					var type = this.find_type(name)
+					if(type){
+						// static method call
+						for(var arg from n.args) this[arg.type](arg, n)
+						n.infer = type
+						return Post(n)
+					}
+				}
 			}
 			// otherwise it may be a type method, we need to trace it
-
 			return AST.Walk::Call(n, parent)
 		}
 
@@ -436,41 +562,21 @@ class GLNode extends Proxy{
 		Key( n, parent ){
 			n.parent = parent
 			Pre(n)
-			
 			// we are a *.key
 			// what we dont want to do is resolve the key.
 			// we only want to walk the object.
 			if(n.object.type == 'Id'){
 				var objname = n.object.name
-				
-				if(objname in glsl_variables){
-					if(objname == 'gl_FragCoord') n.mark = 3
-					return Post(n)
-				}
-
-				// static type method or property?
-				var type = find_type(objname)
-				if(type){
-					n.infer = type
-					return Post(n)
-				}
-
 				// check if we are a different object
 				var obj = context[objname]
-
-				// we can be another expression, ifso
-				// we should flag expanding that
-				// expression into a temporary variable.
-				// if we reference an other expression more than
-				// once, we should tempvar it
-				if(!obj.t && typeof obj == 'object'){
+				if(typeof obj == 'object' && !obj.t){
 					if(obj.proxy_uid){
 						// we are depending on another object
 						var propname = n.key.name
 						var prop = obj[propname]
 
 						// mark signal in our proxy table
-						n.infer = prop._typed_ || float
+						n.infer = prop.value && prop.value.t || float
 						n.mark = 1 // uniform
 						proxy_refs[objname] = 1
 						var bind = proxy_bind[objname] || (proxy_bind[objname] = {})
@@ -484,8 +590,10 @@ class GLNode extends Proxy{
 					else throw new Error('Dont know what to do in key deptrace with  '+objname)
 				}
 			}
+
 			// only try to walk/resolve the object
 			this[n.object.type](n.object, n)
+
 			// we have to have an inferred type on object now
 			if(!n.infer) throw new Error('key access without type')
 			
@@ -703,11 +811,34 @@ class GLNode extends Proxy{
 					ret += ')'
 					return ret
 				}
+				// lets check our name against built in
+				if(name in glsl_functions)
+					return AST.ToCode::Call(n)
+
+				var macro = find_macro(n, name, n.args)
+				if(macro){
+					if(macro.type == 'Function'){
+						
+					}
+					else if(macro.type == 'Call'){
+						var oldargs = macroarg
+						macro_args = Object.create(null)
+						var margs = macro.args
+						for(var i, arg from n.args){
+							macro_args[margs[i].name] = arg
+						}
+						var val = macro.parent.value
+						var ret = this[val.type](val, n)
+						macro_args = oldargs
+						return ret
+					}
+				}
 			}
 
 			return AST.ToCode::Call(n)
 		}
-		
+		macro_match_args = AST.ToJS.macro_match_args
+		find_macro = AST.ToJS.find_macro
 		find_define = AST.ToJS.find_define
 		find_type = AST.ToJS.find_type
 	}
@@ -749,6 +880,8 @@ class GLNode extends Proxy{
 			GenGLSL.uniform_id = 0
 			GenGLSL.varying_id = 0
 			GenGLSL.tmpvar_id = 0
+
+			var pix_typemethods = GenGLSL.typemethods = {}
 			var pix_uniforms = GenGLSL.uniforms = []
 			var varyings = GenGLSL.varyings = []
 			var pix_tmpvars = GenGLSL.tmpvars = []
@@ -763,6 +896,7 @@ class GLNode extends Proxy{
 			GenGLSL.refcount = DepTraceGLSL.refcount = {}
 			DepTraceGLSL[vtx.value.type](vtx.value)
 
+			var vtx_typemethods = GenGLSL.typemethods = {}
 			var vtx_uniforms = GenGLSL.uniforms = []
 			var vtx_tmpvars = GenGLSL.tmpvars = []
 			var vtx_expr = GenGLSL.expand(vtx.value)

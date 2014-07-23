@@ -1771,7 +1771,7 @@ ONE.parser_strict_ = function(){
 				if(this.eat(this._eq)) node.lazy = 0
 				else node.lazy = 1
 
-				if(this.tokType != this._braceR && !this.lastSkippedNewlines){
+				if(this.tokType != this._braceR){//} && !this.lastSkippedNewlines){
 					node.right = this.parseNoCommaExpression()
 				}
 				this.eat(this._comma)

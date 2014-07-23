@@ -44,7 +44,7 @@ ONE.genjs_ = function(modules, parserCache){
 			this.line = 0
 			this.scope = Object.create(null)
 			this.typemethods = Object.create(null)
-			this.macroarg = Object.create(null)
+			this.macro_args = Object.create(null)
 			this.module = {
 				imports: [],
 				types: Object.create(outer.typeMap),
@@ -289,8 +289,8 @@ ONE.genjs_ = function(modules, parserCache){
 		
 		this.resolve = function( name, n ){
 			// TODO make this resolve order explicit
-			if(name in this.macroarg){
-				return this.macroarg[name]//this.expand(this.macroarg[name], n)
+			if(name in this.macro_args){
+				return this.macro_args[name]//this.expand(this.macro_args[name], n)
 			}
 			var type = this.typemethod, field
 			if(type && (field = type.fields[name])){
@@ -418,7 +418,7 @@ ONE.genjs_ = function(modules, parserCache){
 				if(node.type == 'Id'){
 					// check
 					var base = this.resolve(node.name)
-					//var marg = this.macroarg[base]
+					//var marg = this.macro_args[base]
 					//if(marg) base = marg.name
 					var type = this.scope[base]
 					var isthis
@@ -1842,14 +1842,14 @@ ONE.genjs_ = function(modules, parserCache){
 					if(!this.typemethods[gen]){
 						var d = this.depth
 						var s = this.scope
-						var oldarg = this.macroarg
-						this.macroarg = Object.create(null)
+						var oldarg = this.macro_args
+						this.macro_args = Object.create(null)
 						this.scope = Object.create(null)
 						this.depth = ''
 						this.typemethods[gen] = this.Function(macro, gen, undefined, true)
 						this.depth = d
 						this.scope = s
-						this.macroarg = oldarg
+						this.macro_args = oldarg
 					}
 					var ret = gen + '.call(this'
 					// set up the call and argument list
@@ -1862,8 +1862,8 @@ ONE.genjs_ = function(modules, parserCache){
 				}
 				else if(macro.type == 'Call'){
 					// inline macro expansion
-					var oldarg = this.macroarg
-					var marg = this.macroarg = Object.create(this.macroarg)
+					var oldarg = this.macro_args
+					var marg = this.macro_args = Object.create(this.macro_args)
 					var params = macro.args
 					// build up macro args
 					for(var i = 0; i < params.length; i++){
@@ -1871,10 +1871,10 @@ ONE.genjs_ = function(modules, parserCache){
 						if(param.type == 'Assign'){
 							throw new Error('implement macro default arg')
 						}
-						this.macroarg[param.name] = args.expanded[i]
+						this.macro_args[param.name] = args.expanded[i]
 					}
 					var ret = this.expand(macro.parent.value, n)
-					this.macroarg = oldarg
+					this.macro_args = oldarg
 					return ret
 				}
 				else throw new Error('Macro call, but wrong type '+name+' '+macro.id.type)

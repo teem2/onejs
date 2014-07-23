@@ -6,20 +6,36 @@ class Rect extends GLNode{
 	mesh = webgl.vec4Rect(-1, -1, 2, 2, 0)
 	
 	viewmtx: mat4.perspective(70deg, 1, -1, 1)
-	objmtx: mat4.RT(30deg, Time.sec * 30deg + slide*10,0, 0,0,3)
+	objmtx: mat4.RT(30deg, Time.sec * 30deg + param1*10,0, 0,0,3)
 
 	vertex: mesh[] * (objmtx * viewmtx)
-	slide = 1
-	p:pixel mesh[]
+
+	param1 = 1
 	bgcolor: #red
-	pixel: mix(bgcolor, #black, 
-		abs(sin(slide * atan(p.x, p.y))))
-		+ mix(#green, #purple) do
-		sin(sin(Time.sec) * 2 * slide * p.x * p.y)
+
+	p:pixel mesh[]
+	pixel:
+		(mix(bgcolor, #black) do 
+			abs(sin(param1 * atan(p.x, p.y))))
+		+ 
+		mix(#green, #purple) do
+			sin(sin(Time.sec+param1) * 2 * param1 * p.x * p.y)
 }
 
 var ref = GLView{
 	fill = #aero
 
-	Rect{ slide = 10 }
+	Rect{ 
+		param1 = 10 
+	}
+
+	Rect{ 
+		param1 = 30 
+		bgcolor:#orange
+	}
+
+	Rect{ 
+		param1 = 40 
+		bgcolor:#blue
+	}
 }
