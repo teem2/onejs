@@ -43,7 +43,7 @@ ONE.genjs_ = function(modules, parserCache){
 			this.signals = []
 			this.line = 0
 			this.scope = Object.create(null)
-			this.typemethods = Object.create(null)
+			this.type_methods = Object.create(null)
 			this.macro_args = Object.create(null)
 			this.module = {
 				imports: [],
@@ -289,10 +289,10 @@ ONE.genjs_ = function(modules, parserCache){
 		
 		this.resolve = function( name, n ){
 			// TODO make this resolve order explicit
-			if(name in this.macro_args){
+			if(this.macro_args && name in this.macro_args){
 				return this.macro_args[name]//this.expand(this.macro_args[name], n)
 			}
-			var type = this.typemethod, field
+			var type = this.type_method, field
 			if(type && (field = type.fields[name])){
 				//return '_.'+type.arr+'[_.o+'+(field.off / outer.viewSize[type.view])+']'
 				return '_['+(field.off / outer.viewSize[type.view])+']'
@@ -341,8 +341,8 @@ ONE.genjs_ = function(modules, parserCache){
 				if(this.template_marked){
 					if(blk.indexOf(this.template_marker)!= -1){
 						// lets loop blk n times
-						var type = this.typemethod
-						if(!type) throw new Error('template found but no typemethod')
+						var type = this.type_method
+						if(!type) throw new Error('template found but no type_method')
 						var total = type.slots
 						for(var j = 0; j < total; j++){
 							ret += this.depth + blk.replace(this.template_regex, j)
@@ -378,7 +378,7 @@ ONE.genjs_ = function(modules, parserCache){
 				}
 				if(flag === 35){
 					if(!n.name){
-						if(!this.typemethod) throw new Error('Type method template found outside of typemethod')
+						if(!this.type_method) throw new Error('Type method template found outside of type_method')
 						this.template_marked = true
 						return this.template_marker
 					}
@@ -422,7 +422,7 @@ ONE.genjs_ = function(modules, parserCache){
 					//if(marg) base = marg.name
 					var type = this.scope[base]
 					var isthis
-					if(typeof type == 'object' && !type.__class__ || (isthis = type = this.typemethod)){
+					if(typeof type == 'object' && !type.__class__ || (isthis = type = this.type_method)){
 						// alright so now we need to walk back down
 						// the parent chain and decode our offset
 						if(!isthis) node = node.parent
@@ -926,7 +926,6 @@ ONE.genjs_ = function(modules, parserCache){
 				ret += this.newline
 				return ret
 			}
-			
 			return 'var ' + this.flat( n.defs, n )
 			
 			throw new Error("implement TypeVar")
@@ -1119,7 +1118,7 @@ ONE.genjs_ = function(modules, parserCache){
 			return ret
 		}
 		
-		this.Function = function( n, nametag, extparams, typemethod ){
+		this.Function = function( n, nametag, extparams, type_method ){
 			if(n.id) this.scope[n.id.name] = 1
 			// make a new scope
 			var scope = this.scope
@@ -1149,8 +1148,8 @@ ONE.genjs_ = function(modules, parserCache){
 				else
 					str_body += this.depth + 'var '+name+' = Array.prototype.slice.call(arguments,0)' + this.newline
 			}
-			if(typeof typemethod == 'object'){
-				this.scope['_'] = typemethod
+			if(typeof type_method == 'object'){
+				this.scope['_'] = type_method
 				str_param += '_'
 			}
 			// do init
@@ -1245,7 +1244,7 @@ ONE.genjs_ = function(modules, parserCache){
 						ret += n.name.name + '",'
 						isgetset = true
 					}
-					else if(!typemethod){
+					else if(!type_method){
 						var fn = this.find_function(n.parent)
 						if(fn && fn.root){
 							// export the method
@@ -1311,7 +1310,7 @@ ONE.genjs_ = function(modules, parserCache){
 			
 			//if( ret[ret.length - 1] != '\n') ret += this.newline + this.depth
 			
-			if(typeof typemethod == 'object'){
+			if(typeof type_method == 'object'){
 				ret += this.depth+this.indent+'return _'+this.newline + this.depth
 			}
 			
@@ -1625,14 +1624,14 @@ ONE.genjs_ = function(modules, parserCache){
 				gen += '_'+(kind && kind.name || 'var')
 			}
 			
-			// make a typemethod
-			if(!this.typemethods[gen]){
+			// make a type_method
+			if(!this.type_methods[gen]){
 				var d = this.depth
 				this.depth = ''
-				var t = this.typemethod
-				this.typemethod = type
-				this.typemethods[gen] = this.Function(method, gen, undefined, type ) + this.newline
-				this.typemethod = t
+				var t = this.type_method
+				this.type_method = type
+				this.type_methods[gen] = this.Function(method, gen, undefined, type ) + this.newline
+				this.type_method = t
 				this.depth = d
 			}
 			
@@ -1839,17 +1838,17 @@ ONE.genjs_ = function(modules, parserCache){
 						var kind = params[i].id.kind
 						gen += '_'+(kind && kind.name || 'var')
 					}
-					if(!this.typemethods[gen]){
-						var d = this.depth
-						var s = this.scope
-						var oldarg = this.macro_args
-						this.macro_args = Object.create(null)
+					if(!this.type_methods[gen]){
+						var old_depth = this.depth
+						var old_scope = this.scope
+						var old_arg = this.macro_args
+						this.macro_args = undefined
 						this.scope = Object.create(null)
 						this.depth = ''
-						this.typemethods[gen] = this.Function(macro, gen, undefined, true)
-						this.depth = d
-						this.scope = s
-						this.macro_args = oldarg
+						this.type_methods[gen] = this.Function(macro, gen, undefined, true)
+						this.depth = old_depth
+						this.scope = old_scope
+						this.macro_args = old_arg
 					}
 					var ret = gen + '.call(this'
 					// set up the call and argument list
@@ -1862,7 +1861,7 @@ ONE.genjs_ = function(modules, parserCache){
 				}
 				else if(macro.type == 'Call'){
 					// inline macro expansion
-					var oldarg = this.macro_args
+					var old_arg = this.macro_args
 					var marg = this.macro_args = Object.create(this.macro_args)
 					var params = macro.args
 					// build up macro args
@@ -1873,8 +1872,11 @@ ONE.genjs_ = function(modules, parserCache){
 						}
 						this.macro_args[param.name] = args.expanded[i]
 					}
+					var old_module = this.module
+					if(macro.module && macro.module != old_module) this.module = macro.module
 					var ret = this.expand(macro.parent.value, n)
-					this.macro_args = oldarg
+					this.macro_args = old_arg
+					this.module = old_module
 					return ret
 				}
 				else throw new Error('Macro call, but wrong type '+name+' '+macro.id.type)

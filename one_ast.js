@@ -107,8 +107,8 @@ ONE.ast_ = function(){
 			var code = 'return ' + js.Function( ast, nametag )
             
 			// prepend type methods
-			for(var k in js.typemethods){
-				code = js.typemethods[k] + code
+			for(var k in js.type_methods){
+				code = js.type_methods[k] + code
 			}
 			if(flags && flags.indexOf('js')!=-1) console.log( code )
             
@@ -132,8 +132,8 @@ ONE.ast_ = function(){
 		}
         
 		var code = (ast.isExpr()?'return ':'') + js.expand( ast )
-		for(var k in js.typemethods){
-			code = js.typemethods[k] + code
+		for(var k in js.type_methods){
+			code = js.type_methods[k] + code
 		}
         
 		var run = Function(code)
@@ -541,6 +541,7 @@ ONE.ast_ = function(){
 					var blk = this.expand(node, parent)
 					if(blk[0] == '(' || blk[0] == '[') ret += this.depth + ';' + blk
 					else ret += this.depth + blk
+					if(this.term) ret += this.term
 					var ch = ret[ret.length - 1]
 					if(ch !== '\n' ){
 						ret += this.newline, this.line++

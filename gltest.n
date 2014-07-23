@@ -9,13 +9,17 @@ class Rect extends GLNode{
 	objmtx: mat4.RT(30deg, Time.sec * 30deg + param1*10,0, 0,0,3)
 
 	vertex: mesh[] * (objmtx * viewmtx)
-
 	param1 = 1
 	bgcolor: #red
 
 	p:pixel mesh[]
+	
+	define mul2(vec3 x){
+		return x*1.4
+	}
+
 	pixel:
-		(mix(bgcolor, #black) do 
+		mul2 on (mix(bgcolor, #black) do 
 			abs(sin(param1 * atan(p.x, p.y))))
 		+ 
 		mix(#green, #purple) do
@@ -25,17 +29,8 @@ class Rect extends GLNode{
 var ref = GLView{
 	fill = #aero
 
-	Rect{ 
-		param1 = 10 
-	}
+	Rect{param1 = 10}
+	Rect{param1 = 30}
+	Rect{param1 = 60}
 
-	Rect{ 
-		param1 = 30 
-		bgcolor:#orange
-	}
-
-	Rect{ 
-		param1 = 40 
-		bgcolor:#blue
-	}
 }

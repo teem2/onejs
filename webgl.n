@@ -80,9 +80,9 @@ class GLNode extends Proxy{
 
 		if(flags.indexOf('js') != -1) out(code)
 		
-		// prepend static typemethods
-		for(var k in js.typemethods){
-			code = js.typemethods[k] + code
+		// prepend static type_methods
+		for(var k in js.type_methods){
+			code = js.type_methods[k] + code
 		}
 
 		draw.proxy_remote = code
@@ -379,8 +379,10 @@ class GLNode extends Proxy{
 					// we need to store it in a temp variable
 					if(this.refcount[name]) this.refcount[name]++
 					else this.refcount[name] = 1
-
+					var mod = this.module
+					this.module = prop.value.module
 					this[prop.value.type](prop.value, n)
+					this.module = mod
 				}
 			}
 			else {
@@ -491,30 +493,33 @@ class GLNode extends Proxy{
 						// lets type infer trace an actual macro call
 						var old_scope = scope
 						var old_return = return_type
+						var old_module = this.module
 						return_type = undefined
 						var mparams = macro.params
 						scope = Object.create(null)
+						if(macro.module) this.module = macro.module
 						for(var i, arg from n.args){
 							if(!arg.infer) throw new Error('Cannot infer arg in macro '+name)
 							scope[mparams[i].id.name] = arg.infer
 						}
 						// lets set the arguments on the scope
 						this[macro.type](macro, n)
+						this.module = old_module
 						scope = old_scope
 						n.infer = return_type
 						return_type = old_return
 					}
 					else if(macro.type == 'Call'){
-						var oldargs = macroarg
+						var old_args = macro_args
 						macro_args = Object.create(null)
 						var margs = macro.args
 						for(var i, arg from n.args){
 							macro_args[margs[i].name] = arg
 						}
-						var val = macro.parent.value
+						var astnode = macro.parent.value
 						// type infer trace a macro!
-						this[val.type](val, n)
-						macro_args = oldargs
+						this[astnode.type](astnode, n)
+						macro_args = old_args
 					}
 					else throw new Error('Macro called but not a function '+name)
 					// we have to figure out a return-type trace on our macro
@@ -632,7 +637,11 @@ class GLNode extends Proxy{
 			if(prop === undefined || this.scope[name]) return this.resolve(n.name, n)
 			
 			if(prop.value && prop.value._ast_){
-				return expand(prop.value, n)
+				var mod = this.module
+				this.module = prop.value.module
+				var ret = expand(prop.value, n)
+				this.module = mod
+				return ret
 			}
 			
 			if(typeof prop == 'object'){
@@ -661,7 +670,7 @@ class GLNode extends Proxy{
 
 	// generate the GLSL
 	class GenGLSL extends AST.ToCode{
-		
+		term = ';'
 		// otherwise if we are not 'pixel' we need to spit out varyings.
 		expand( n, parent ){
 			//log(n.type)
@@ -671,6 +680,7 @@ class GLNode extends Proxy{
 				// okay so, we are a uniform. we splice in
 				// a temp uniform, and we define it
 				var uni = {
+					module: this.module
 					name: (pixel?'pix_':'vtx_') + n.infer.name + '_' + (uniform_id++)
 					node: n
 				}
@@ -705,6 +715,15 @@ class GLNode extends Proxy{
 				return name
 			}
 			
+			// check macro args
+			if(macro_args && name in macro_args){
+				return '('+macro_args[name]+')'
+			}
+
+			if(scope && name in scope){
+				return name
+			}
+
 			var prop = context[name]
 			if(prop === undefined) throw new Error("cannot resolve " + name)
 			
@@ -713,17 +732,21 @@ class GLNode extends Proxy{
 
 				var node = prop.value
 				var type = node.type
+				var old_module = this.module
 				if(type == 'Id' || type == 'Value' || 
 					type == 'Key' || (type == 'Index' &&
 						(!node.index || node.index.type == 'Value'))){
-					return expand(prop.value, n)
+					this.module = prop.value.module
+					var ret = expand(prop.value, n)
+					this.module = old_module
+					return ret
 				}
 				// use a tempvar
-				var count = this.refcount[name]
+				var count = refcount[name]
 				if(typeof count == 'object'){
 					// we already have it defined
-					this.tmpvars.splice(this.tmpvars.indexOf(count), 1)
-					this.tmpvars.push(count)
+					tmpvars.splice(tmpvars.indexOf(count), 1)
+					tmpvars.push(count)
 					return count.name
 				}
 				else if(count>1){ // define it
@@ -732,11 +755,14 @@ class GLNode extends Proxy{
 						type:n.infer.name,
 						value:expand(prop.value, n)
 					}
-					this.refcount[name] = tmp
-					this.tmpvars.push(tmp)
+					refcount[name] = tmp
+					tmpvars.push(tmp)
 					return tmp.name
 				}
-				else return expand(prop.value, n)
+				this.module = prop.value.module
+				var ret = expand(prop.value, n)
+				this.module = old_module
+				return ret
 			}
 			
 			throw new Error('Dont know what to do with '+name)
@@ -794,6 +820,27 @@ class GLNode extends Proxy{
 			return AST.ToCode::Binary(n)
 		}
 
+		// Function!
+		this.Function( n, name, args ){
+			// allright lets generate a function!
+			var ret = n.infer.name + ' ' + name + '('
+			// lets do the arguments
+			for(var i, param from n.params){
+				if(i) ret += ', '
+				var name = param.id.name
+				var kind = param.id.kind.name
+				ret += kind + ' ' + name
+				scope[name] = find_type(kind)
+			}
+			ret += ')'
+			var old_depth = this.depth
+			this.depth += this.indent
+			ret += this.expand(n.body, n)
+			this.depth = old_depth
+			return ret
+			return AST.ToCode::Function(n)
+		}
+
 		// type inference calls		
 		Call( n ){
 			if(n.fn.type == 'Id'){
@@ -818,18 +865,51 @@ class GLNode extends Proxy{
 				var macro = find_macro(n, name, n.args)
 				if(macro){
 					if(macro.type == 'Function'){
-						
+						// alright! we are going to generate an actual
+						// GLSL function!. huzzah.
+						var params = macro.params
+						var gen = 'macro_' + name
+						for(var param from params){
+							var kind = param.id.kind
+							gen += '_'+(kind && kind.name || 'var')
+						}
+						if(!type_methods[gen]){
+							var old_depth = depth
+							var old_scope = scope
+							var old_args = macro_args
+							var old_module = module
+							macro_args = undefined
+							scope = Object.create(null)
+							depth = '\t\t\t'
+							if(macro.module) this.module = macro.module
+							type_methods[gen] = this.Function(macro, gen)
+							depth = old_depth
+							scope = old_scope
+							macro_args = old_args
+							this.module = old_module
+						}
+						var ret = gen + '('
+						// set up the call and argument list
+						for(var i, arg from n.args){
+							if(i) ret += ', '
+							ret += this[arg.type](arg, n)
+						}
+						ret += ')'
+						return ret
 					}
 					else if(macro.type == 'Call'){
-						var oldargs = macroarg
+						var old_args = macro_args
+						var old_module = this.module
 						macro_args = Object.create(null)
 						var margs = macro.args
 						for(var i, arg from n.args){
-							macro_args[margs[i].name] = arg
+							macro_args[margs[i].name] = this[arg.type](arg, n)
 						}
-						var val = macro.parent.value
-						var ret = this[val.type](val, n)
-						macro_args = oldargs
+						var astnode = macro.parent.value
+						this.module = astnode.module
+						var ret = this[astnode.type](astnode, n)
+						this.module = old_module
+						macro_args = old_args
 						return ret
 					}
 				}
@@ -856,9 +936,7 @@ class GLNode extends Proxy{
 		_compile_draw( n ){
 		
 			var uid = 'd' + this.uid++
-			
 			// forward module and context
-			GenGLSL.module = module
 			GenGLSL.context = context
 			var attribs = GenGLSL.attribs = Object.create(null)
 			
@@ -871,8 +949,9 @@ class GLNode extends Proxy{
 			GenGLSL.pixel = DepTraceGLSL.pixel = 1
 			DepTraceGLSL.proxy_bind = proxy_bind
 			DepTraceGLSL.proxy_refs = proxy_refs
-			DepTraceGLSL.module = module
+			DepTraceGLSL.module = pix.value.module
 			GenGLSL.refcount = DepTraceGLSL.refcount = {}
+			GenGLSL.module = pix.value.module
 			DepTraceGLSL[pix.value.type](pix.value)
 			//log(pix.bind.toDump())
 			
@@ -881,7 +960,7 @@ class GLNode extends Proxy{
 			GenGLSL.varying_id = 0
 			GenGLSL.tmpvar_id = 0
 
-			var pix_typemethods = GenGLSL.typemethods = {}
+			var pix_type_methods = GenGLSL.type_methods = {}
 			var pix_uniforms = GenGLSL.uniforms = []
 			var varyings = GenGLSL.varyings = []
 			var pix_tmpvars = GenGLSL.tmpvars = []
@@ -894,9 +973,11 @@ class GLNode extends Proxy{
 			// dependency trace vertex shader
 			GenGLSL.pixel = DepTraceGLSL.pixel = 0
 			GenGLSL.refcount = DepTraceGLSL.refcount = {}
+			GenGLSL.module = vtx.value.module
+			DepTraceGLSL.module = vtx.value.module
 			DepTraceGLSL[vtx.value.type](vtx.value)
 
-			var vtx_typemethods = GenGLSL.typemethods = {}
+			var vtx_type_methods = GenGLSL.type_methods = {}
 			var vtx_uniforms = GenGLSL.uniforms = []
 			var vtx_tmpvars = GenGLSL.tmpvars = []
 			var vtx_expr = GenGLSL.expand(vtx.value)
@@ -966,6 +1047,14 @@ class GLNode extends Proxy{
 				`
 			}
 
+			// generate pixelshader methods
+			var pix_method_decl = ''
+			for(var method in pix_type_methods){
+				pix_method_decl += `
+				${pix_type_methods[method]}
+				`
+			}
+
 			var vtx_tmpcode = ''
 
 			// generate pixelshader tmpvars
@@ -976,10 +1065,19 @@ class GLNode extends Proxy{
 				`
 			}
 
+			// generate vertex shader methods
+			var vtx_method_decl = ''
+			for(var method in vtx_type_methods){
+				vtx_method_decl += `
+				${vtx_type_methods[method]}
+				`
+			}
+
+
 			// vertex shader
 			var vtx_shader = `
 				precision highp float;
-				${vtx_uni_decl}${attr_decl}${vary_decl}
+				${vtx_uni_decl}${attr_decl}${vary_decl}${vtx_method_decl}
 				void main(){
 					${vtx_tmpcode}
 					gl_Position = ${vtx_expr};
@@ -989,7 +1087,7 @@ class GLNode extends Proxy{
 			// pixel shader
 			var pix_shader = `
 				precision highp float;
-				${pix_uni_decl}${vary_decl}${vary_merged}
+				${pix_uni_decl}${vary_decl}${vary_merged}${pix_method_decl}
 				void main(){
 					${pix_tmpcode}
 					gl_FragColor = vec4(${pix_expr}, 1.);
@@ -1067,9 +1165,9 @@ class GLNode extends Proxy{
 			
 			// generate uniform setting
 			GenUniformJS.store_tempid = 1000*uid + 1
-			GenUniformJS.typemethods = typemethods
+			GenUniformJS.type_methods = type_methods
 			for(var uni from pix_uniforms.concat(vtx_uniforms)){
-				GenUniformJS.module = module
+				GenUniformJS.module = uni.module
 				GenUniformJS.context = context
 				GenUniformJS.proxy_props = proxy_props
 

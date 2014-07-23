@@ -2301,7 +2301,7 @@ ONE.parser_strict_ = function(){
 
 			// we can parse other _do's or catch's
 			if(this.eat(this._catch)){
-				node.catch = this.parseNoCommaExpression()
+				node.args.push(this.parseNoCommaExpression())
 			}
 
 			if(this.tokType == this._name && this.tokVal == 'then'){

@@ -497,13 +497,7 @@ class Root extends Node{
 class Mouse{
 
 	// define signals
-	x:
-	y:
-	xy:
-	isdown:
-	left:
-	right:
-	middle:
+	signal x, y, xy, isdown, left, right, middle
 
 	enum cursors{
 		'default'
