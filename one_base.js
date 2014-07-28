@@ -1,7 +1,161 @@
 "use strict"
-// Base class
+
 if(typeof window !== 'undefined') window.ONE = {}
 else ONE = {}
+
+ONE.init = function(){
+
+	// make self a class
+	this.base_()
+	
+	this.__class__ = 'ONE'
+	// create base class
+	this.base_.call(this.Base = {})
+	this.Base.Base = this.Base
+	this.signal_.call(this.Base.Signal = this.Signal = {})
+
+	// make ONE the new root scope
+	this.Base.$ = this.$ = Object.create(this)
+
+	//TODO setup logging api
+	this.Base.out = this.out
+	this.Base.error = this.error
+	this.Base.warn = this.warn
+	this.Base.trace = this.trace
+
+	// hide all the props
+	this.Base.enumfalse.apply(ONE.Base, Object.keys( ONE.Base ) )
+
+	// promise generator function wrapper
+	this.await = function( generator, bound, _catch ){
+		var ret = function(){
+			var iter = generator.apply(this, arguments)
+			return ONE.Signal.wrap(function(sig){
+				function error(e){
+					// throw forward
+					sig.throw(e)
+					// lets not throw in the iterator for now
+					//if(!ret) iter.throw(e)
+				}
+				function next( value ){
+					var iterval = iter.next( value )
+					if(iterval.done === false){ // we have a promise
+						iterval.value.then( next, error )
+					}
+					else{
+						sig.end( iterval.value )
+					}
+				}
+				next()
+			})
+		}
+		if(bound) return ret.bind(bound)
+		return ret
+	}
+
+	this.iterator = function( what ){
+		// check what it is.
+		if(what === null || what === undefined) return
+		if(typeof what.next == 'function') return what
+		if(typeof what != 'object') throw new Error('Cannot iterate over object')
+	
+		if(!Array.isArray(what)){
+			var obj = what
+			what = []
+			for( var k in obj ) what.push( obj[ k ] )
+		}
+	
+		var len = what.length
+		if(!len) return
+		return {
+			next:function(){
+				this.index++
+				if(this.index >= this.length - 1) this.done = true
+				this.value = what[this.index]
+				return this
+			},
+			done: false,
+			index: -1,
+			length: len
+		}
+	}
+
+	var Assert_ =  function(txt, why, value){
+		this.toString = function(){
+			var msg = "Assert failed: " + txt + 
+				(why?"  why: "+why:'')+
+				(value!==undefined?"  got value: "+value:"")
+			return msg
+		}
+	}
+	if(typeof window !== 'undefined') window.Assert = Assert_
+	else if(typeof global !== 'undefined') global.Assert = Assert_
+	else Assert = Assert_
+
+	// make all constructors compatible with the ONEJS way
+	Function.prototype.new = function(){
+		var obj = Object.create(this.prototype)
+		this.apply(obj, Array.prototype.slice.call(arguments, 1))
+		return obj
+	}
+	
+	// all X instanceOf Y is rewritten as Y prototypeOf X
+	// to map the simplified ONE class model to JS
+	Function.prototype.prototypeOf = function( other ){
+		return other instanceof this
+	}
+
+	Object.defineProperty( Array.prototype, 'last', {
+		configurable:false,
+		enumerable:false,
+		get:function(){
+			return this[this.length - 1]
+		},
+		set:function(value){
+			this[this.length - 1] = value
+		}
+	})
+	
+	Object.defineProperty( Array.prototype, 'first', {
+		configurable:false,
+		enumerable:false,
+		get:function(){
+			return this[0]
+		},
+		set:function(value){
+			this[0] = value
+		}
+	})
+	
+	Math._mod = function( x, y ){
+		return (x%y+y)%y
+	}
+
+	Math._sign = function(v){
+		if(v === 0) return 0
+		if(v < 0 ) return -1
+		return 1
+	}
+
+	Math._fract = function(v){
+		return v - Math.floor(v)
+	}
+
+	Math._clamp = function(x, mi, ma){
+		if(x < mi) return mi
+		if(x > ma) return ma
+		return x
+	}
+
+	Math._mix = function(f, a, b){
+		return a + f * (b - a)
+	}
+
+	Math._step = function(e, v){
+		if(v < e) return 0
+		return 1
+	}
+}
 
 ONE.base_ = function(){
 
@@ -589,20 +743,6 @@ ONE.base_ = function(){
 		Object.defineProperty( this, key, def )
 	}
 
-	this.proxy_hook = function(obj){
-	}
-
-	this.proxy_unhook = function(){
-	}
-
-	this.proxy_signal = function(pthis){
-		for(var i = 1, l = arguments.length;i<l;i++){
-			var sig = arguments[i]
-			//pthis[sig + '_hook'] = this.proxy_hook
-			//pthis[sig + '_unhook'] = this.proxy_unhook
-		}
-	}
-
 	this.signal = function( key, value, setter ){
 		var signalStore = '__' + key
 		var fastStore = '__$' + key
@@ -613,7 +753,7 @@ ONE.base_ = function(){
 			// make a getter/setter pair
 			Object.defineProperty( this, key, {
 				configurable:true,
-				enumerable:true,
+				enumerable:true ,
 				get:function(){
 					var sig = this[ signalStore ]					
 					// make an instance copy if needed
@@ -652,136 +792,6 @@ ONE.base_ = function(){
 	}
 
 	this.trace = function(){ console.log.apply(console, arguments); return arguments[0];}
-}
-
-ONE.init_ = function(){
-	
-	// make self a class
-	this.base_()
-	
-	this.__class__ = 'ONE'
-	// create base class
-	this.base_.call(this.Base = {})
-	this.Base.Base = this.Base
-	// add ast support to the Base class
-	this.ast_.call(this.Base)
-	this.color_()
-
-	this.signal_.call(this.Base.Signal = this.Signal = {})
-	if(this.proxy_) this.proxy_.call(this.Base)
-	// make ONE the new root scope
-	this.Base.$ = this.$ = Object.create(this)
-	this.Base.out = this.out
-	this.Base.error = this.error
-	this.Base.warn = this.warn
-	this.Base.trace = this.trace
-
-	// hide all the props
-	this.Base.enumfalse.apply(ONE.Base, Object.keys( ONE.Base ) )
-
-	this._await = function( generator, bound, _catch ){
-		var ret = function(){
-			var iter = generator.apply(this, arguments)
-			return ONE.Signal.wrap(function(sig){
-				function error(e){
-					// throw forward
-					sig.throw(e)
-					// lets not throw in the iterator for now
-					//if(!ret) iter.throw(e)
-				}
-				function next( value ){
-					var iterval = iter.next( value )
-					if(iterval.done === false){ // we have a promise
-						iterval.value.then( next, error )
-					}
-					else{
-						sig.end( iterval.value )
-					}
-				}
-				next()
-			})
-		}
-		if(bound) return ret.bind(bound)
-		return ret
-	}
-
-	this.iterator = function( what ){
-		// check what it is.
-		if(what === null || what === undefined) return
-		if(typeof what.next == 'function') return what
-		if(typeof what != 'object') throw new Error('Cannot iterate over object')
-	
-		if(!Array.isArray(what)){
-			var obj = what
-			what = []
-			for( var k in obj ) what.push( obj[ k ] )
-		}
-	
-		var len = what.length
-		if(!len) return
-		return {
-			next:function(){
-				this.index++
-				if(this.index >= this.length - 1) this.done = true
-				this.value = what[this.index]
-				return this
-			},
-			done: false,
-			index: -1,
-			length: len
-		}
-	}
-
-	var Assert_ =  function(txt, why, value){
-		this.toString = function(){
-			var msg = "Assert failed: " + txt + 
-				(why?"  why: "+why:'')+
-				(value!==undefined?"  got value: "+value:"")
-			return msg
-		}
-	}
-	if(typeof window !== 'undefined') window.Assert = Assert_
-	else if(typeof global !== 'undefined') global.Assert = Assert_
-	else Assert = Assert_
-	
-	// make all constructors compatible with the ONEJS way
-	Function.prototype.new = function(){
-		var obj = Object.create(this.prototype)
-		this.apply(obj, Array.prototype.slice.call(arguments, 1))
-		return obj
-	}
-	
-	// all X instanceOf Y is rewritten as Y prototypeOf X
-	// to map the simplified ONE class model to JS
-	Function.prototype.prototypeOf = function( other ){
-		return other instanceof this
-	}
-	
-	Object.defineProperty( Array.prototype, 'last', {
-		configurable:false,
-		enumerable:false,
-		get:function(){
-			return this[this.length - 1]
-		},
-		set:function(value){
-			this[this.length - 1] = value
-		}
-	})
-	
-	Object.defineProperty( Array.prototype, 'first', {
-		configurable:false,
-		enumerable:false,
-		get:function(){
-			return this[0]
-		},
-		set:function(value){
-			this[0] = value
-		}
-	})
-	
-	Math._mod = function( x, y ){
-		return (x%y+y)%y
-	}
 }
 
 // the Signal class
@@ -862,6 +872,7 @@ ONE.signal_ = function(){
 	}
 
 	// listen to set
+	this.forEach
 	this.on = function( cb, pthis ){
 		if(pthis && pthis.owner) cb = cb.bind( pthis )
 

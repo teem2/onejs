@@ -1,0 +1,110 @@
+<html>
+	<head>
+		<title>Base tests</title>
+		<script src='one_base.js'></script>
+		<script>
+			ONE.init()
+
+			function assert(v){
+				if(!v) throw new Error('Assert failed')
+			}
+
+			var Scopes = ONE.Base.extend(function(){
+				this.scoped()
+				this.$.y = 20
+				this.$.Proto = ONE.Base.extend()
+				var Nest = this.$.Proto.extend(this, function(){
+					this.scoped()
+					this.$.x = 10
+					assert(this.$.hasOwnProperty('x'))
+					assert(!this.$.hasOwnProperty('y'))
+					assert(this.$.y == 20)
+					this.$.y = 30
+					assert(this.$.y == 30)
+					this.init = function(v){
+						assert(this.$.y == v)
+					}
+				})
+				var x = Nest.new(this, 30)
+				assert(x.$.x == 10)
+				assert(this.$.y == 20)
+				assert(this.$.x === undefined)
+				console.log('Scopes OK')
+			})
+
+			var Super = ONE.Base.extend(function(){
+				var order = ''
+				var Role1 = ONE.Base.extend(function(){
+					this.fn = function(a){
+						order += '1'
+					}
+				})
+				var Role2 = ONE.Base.extend(function(){
+					this.learn(Role1)
+					this.fn = function(a){
+						order += '2'
+						this.super(arguments)
+					}
+				})
+				var Role3 = ONE.Base.extend(function(){
+					this.fn = function(a){
+						order += '3'
+						this.super(arguments)
+					}
+				})
+
+				var Base = ONE.Base.extend(function(){
+					this.learn(Role2, Role3)
+					this.fn = function(a){
+						order += '4'
+						this.super(arguments)
+					}
+				})
+
+				var base = Base.new(this)
+				base.fn()
+				assert(order == '4321')
+				console.log('Super OK')
+			})
+
+			var Roles = ONE.Base.extend(function(){
+				var Role1 = ONE.Base.extend(function(){
+					this.a = 20
+				})
+				var Role2 = ONE.Base.extend(function(){
+					this.a = 30
+				})
+				var Role3 = ONE.Base.extend(function(){
+					this.a = 40
+					this.b = 50
+				})
+				var C1 = ONE.Base.extend(function(){
+					this.a = 10
+				})
+
+				var x = C1.new(this)
+				C1.learn(Role1)
+				C1.learn(Role2)
+				C1.learn(Role3)
+				assert(x.a == 40)
+
+				C1.forget(Role2)
+				assert(x.a == 40)
+
+				C1.forget(Role3)
+				assert(x.a == 20)
+
+				C1.learn(Role3)
+				assert(x.a == 40)
+				assert(x.b == 50)
+
+				C1.forget(Role3)
+				assert(x.b === undefined)
+				console.log('Roles OK')
+			})
+
+		</script>
+	</head>
+	<body>
+	</body>
+</html>
