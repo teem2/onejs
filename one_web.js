@@ -44,12 +44,26 @@ ONE.worker_boot_ = function(host){
 	ONE.proxy_queue = []
 	ONE.proxy_uid = 1
 	ONE.proxy_free = []
-	ONE.init_()
+	ONE.init()
+	ONE.init_ast()
 
-	ONE.root = ONE.Base.create(ONE,function(){ this.__class__='Root'})
+	ONE.root = ONE.Base.call(ONE.Base,function(){ this.__class__='Root'}, ONE)
 }
 
 ONE.proxy_ = function(){
+	// TODO proxy stuff
+	this.proxy_hook = function(obj){
+	}
+
+	this.proxy_unhook = function(){
+	}
+
+	this.proxy_signal = function(pthis){
+		for(var i = 1, l = arguments.length;i<l;i++){
+			var sig = arguments[i]
+		}
+	}
+
 	this.Base.Proxy = this.Base.extend(function(){
 		this._init = function(){
 			if(!ONE.proxy_free.length) this.proxy_uid = ONE.proxy_uid++
@@ -144,7 +158,9 @@ ONE._createWorker = function(){
 	var source =
 		'\nONE = {}' +
 		'\nvar Assert'+
-		'\nONE.init_ = ' + ONE.init_.toString() +
+		'\nONE.init = ' + ONE.init.toString() +
+		'\nONE.init_ast = ' + ONE.init_ast.toString() +
+
 		'\nONE.base_ = ' + ONE.base_.toString() +
 		'\nONE.signal_ = ' + ONE.signal_.toString() +
 		'\nONE.proxy_ = ' + ONE.proxy_.toString() +
@@ -289,6 +305,7 @@ ONE.browser_boot_ = function(){
 					})
 					ONE.Signal.all(all).then(function(){
 						if(first) worker.postMessage({_id:'eval', module:module})
+						else first = false
 						sig.end()
 					}, 
 					function(err){

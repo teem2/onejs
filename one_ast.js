@@ -1,4 +1,11 @@
 // ONEJS AST code generators
+ONE.init_ast = function(){
+	// add ast support to the Base class
+	this.ast_.call(this.Base)
+	this.color_()
+	if(this.proxy_) this.proxy_.call(this.Base)
+}
+
 ONE.ast_ = function(){
 
 	// include the parser
@@ -275,7 +282,7 @@ ONE.ast_ = function(){
 
 			New: { fn:1, args:2 },
 			Call: { fn:1, args:2 },
-			Create: { fn:1, body:1, arrow:0 },
+			Nest: { fn:1, body:1, arrow:0 },
 
 			Class: { id:1, base:1, body:1, extarg:0, catch:1, then:1 },
 
@@ -463,7 +470,7 @@ ONE.ast_ = function(){
 
 			New: 1,
 			Call: 1,
-			Create: 1,
+			Nest: 1,
 
 			Quote: 1,
 			Path: 1
@@ -1046,7 +1053,7 @@ ONE.ast_ = function(){
 				return '...' + this.expand(n.id, n)
 			}
 
-			this.Create = function( n ){
+			this.CallBlock = function( n ){
 				return this.expand(n.object, n) + this.expand(n.body, n)
 			}
 

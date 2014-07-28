@@ -1,31 +1,199 @@
 // OneJS math types
+define out(x)         console.log(x)
 
-define abs(x)    Math.abs(x)
-define abs(vec2 x) vec2.abs(x)
-define abs(vec3 x) vec3.abs(x)
-define abs(vec4 x) vec4.abs(x)
+define sin(vec2 v)    vec2.sin(v)
+define sin(vec3 v)    vec3.sin(v)
+define sin(vec4 v)    vec4.sin(v)
+define sin(v)         Math.sin(v)
 
-define acos(x)   Math.acos(x)
-define asin(x)   Math.asin(x)
-define atan(x)   Math.atan(x)
-define atan(x, y) Math.atan2(x, y)
-define sin(x)    Math.sin(x)
-define cos(x)    Math.cos(x)
-define tan(x)    Math.tan(x)
-define sqrt(x)   Math.sqrt(x)
-define ceil(x)   Math.ceil(x)
-define floor(x)  Math.floor(x)
-define atan2(x)  Math.atan2(x)
-define exp(x)    Math.exp(x)
-define ln(x)     Math.log(x)
-define loge(x)   Math.log(x)
-define log10(x)  (Math.log(x) / LN10)
-define log2(x)   (Math.log(x) / LN2)
-define max(x)    Math.max(x)
-define min(x)    Math.min(x)
-define random()  Math.random()
-define log(x) 	 console.log(x)
-define mod(x, y) (x%y+y)%y
+define cos(vec2 v)    vec2.cos(v)
+define cos(vec3 v)    vec3.cos(v)
+define cos(vec4 v)    vec4.cos(v)
+define cos(v)         Math.cos(v)
+
+define tan(vec2 v)    vec2.tan(v)
+define tan(vec3 v)    vec3.tan(v)
+define tan(vec4 v)    vec4.tan(v)
+define tan(v)         Math.tan(v)
+
+define asin(vec2 v)    vec2.asin(v)
+define asin(vec3 v)    vec3.asin(v)
+define asin(vec4 v)    vec4.asin(v)
+define asin(v)         Math.asin(v)
+
+define acos(vec2 v)    vec2.acos(v)
+define acos(vec3 v)    vec3.acos(v)
+define acos(vec4 v)    vec4.acos(v)
+define acos(v)         Math.acos(v)
+
+define atan(vec2 v)    vec2.atan(v)
+define atan(vec3 v)    vec3.atan(v)
+define atan(vec4 v)    vec4.atan(v)
+define atan(v)         Math.atan(v)
+
+define atan(vec2 x, vec2 y)    vec2.atan(x, y)
+define atan(vec3 x, vec3 y)    vec3.atan(x, y)
+define atan(vec4 x, vec4 y)    vec4.atan(x, y)
+define atan(x, y)         Math.atan2(x, y)
+
+define pow(vec2 v, vec2 w)    vec2.pow(v, w)
+define pow(vec3 v, vec3 w)    vec3.pow(v, w)
+define pow(vec4 v, vec3 w)    vec4.pow(v, w)
+define pow(v, w)              Math.pow(v, w)
+
+define exp(vec2 v)    vec2.exp(vec2 v)
+define exp(vec3 v)    vec3.exp(vec3 v)
+define exp(vec4 v)    vec4.exp(vec4 v)
+define exp(v)         Math.exp(v)
+
+define log(vec2 v)    vec2.log(v)
+define log(vec3 v)    vec3.log(v)
+define log(vec4 v)    vec4.log(v)
+define log(v)         Math.log(v)
+
+define exp2(vec2 v)    vec2.exp2(v)
+define exp2(vec3 v)    vec3.exp2(v)
+define exp2(vec4 v)    vec4.exp2(v)
+define exp2(v)         Math.pow(2, v)
+
+define log2(vec2 v)    vec2.log2(v)
+define log2(vec3 v)    vec3.log2(v)
+define log2(vec4 v)    vec4.log2(v)
+define log2(v)         Math.log2(v)
+ 
+define sqrt(vec2 v)    vec2.sqrt(v)
+define sqrt(vec3 v)    vec3.sqrt(v)
+define sqrt(vec4 v)    vec4.sqrt(v)
+define sqrt(v)         Math.sqrt(v)
+
+define inversesqrt(vec2 v)    vec2.inversesqrt(v)
+define inversesqrt(vec3 v)    vec3.inversesqrt(v)
+define inversesqrt(vec4 v)    vec4.inversesqrt(v)
+define inversesqrt(v)         1/Math.sqrt(v)
+
+define abs(vec2 v)    vec2.abs(v)
+define abs(vec3 v)    vec3.abs(v)
+define abs(vec4 v)    vec4.abs(v)
+define abs(v)         Math.abs(v)
+
+define sign(vec2 v)    vec2.sign(v)
+define sign(vec3 v)    vec3.sign(v)
+define sign(vec4 v)    vec4.sign(v)
+define sign(v)         Math._sign(v)
+
+define floor(vec2 v)    vec2.floor(v)
+define floor(vec3 v)    vec3.floor(v)
+define floor(vec4 v)    vec4.floor(v)
+define floor(v)         Math.floor(v)
+
+define ceil(vec2 v)    vec2.ceil(v)
+define ceil(vec3 v)    vec3.ceil(v)
+define ceil(vec4 v)    vec4.ceil(v)
+define ceil(v)         Math.ceil(v)
+
+define fract(vec2 v)    vec2.fract(v)
+define fract(vec3 v)    vec3.fract(v)
+define fract(vec4 v)    vec4.fract(v)
+define fract(v)         Math._fract(v)
+
+define mod(vec2 a, vec2 b)    vec2.mod2(a, b)
+define mod(vec3 a, vec3 b)    vec3.mod2(a, b)
+define mod(vec4 a, vec4 b)    vec4.mod2(a, b)
+define mod(vec2 a, float b)   vec2.mod(a, b)
+define mod(vec3 a, float b)   vec3.mod(a, b)
+define mod(vec4 a, float b)   vec4.mod(a, b)
+define mod(a, b)    Math.mod(a, b)
+
+define min(vec2 a, vec2 b)    vec2.min2(a, b)
+define min(vec3 a, vec3 b)    vec3.min2(a, b)
+define min(vec4 a, vec4 b)    vec4.min2(a, b)
+define min(vec2 a, float b)    vec2.min(a, b)
+define min(vec3 a, float b)    vec3.min(a, b)
+define min(vec4 a, float b)    vec4.min(a, b)
+define min(a, b)    Math.min(a, b)
+
+define max(vec2 a, vec2 b)    vec2.max2(a, b)
+define max(vec3 a, vec3 b)    vec3.max2(a, b)
+define max(vec4 a, vec4 b)    vec4.max2(a, b)
+define max(vec2 a, float b)   vec2.max(a, b)
+define max(vec3 a, float b)   vec3.max(a, b)
+define max(vec4 a, float b)   vec4.max(a, b)
+define max(a, b)    Math.max(a, b)
+
+define clamp(vec2 x, vec2 mi, vec2 ma)    vec2.clamp2(x, mi, ma)
+define clamp(vec3 x, vec3 mi, vec3 ma)    vec3.clamp2(x, mi, ma)
+define clamp(vec4 x, vec4 mi, vec4  ma)   vec4.clamp2(x, mi, ma)
+define clamp(vec2 x, float mi, float ma)    vec2.clamp(x, mi, ma)
+define clamp(vec3 x, float mi, float ma)    vec3.clamp(x, mi, ma)
+define clamp(vec4 x, float mi, float  ma)   vec4.clamp(x, mi, ma)
+define clamp(x, mi, ma)    Math._clamp(x, mi, ma)
+
+define mix(vec2 a, vec2 b, vec2 f)    vec2.mix2(a, b, f)
+define mix(vec3 a, vec3 b, vec3 f)    vec3.mix2(a, b, f)
+define mix(vec4 a, vec4 b, vec4 f)    vec4.mix2(a, b, f)
+define mix(vec2 a, vec2 b, float f)   vec2.mix(a, b, f)
+define mix(vec3 a, vec3 b, float f)   vec3.mix(a, b, f)
+define mix(vec4 a, vec4 b, float f)   vec4.mix(a, b, f)
+define mix(f, a, b)                   Math._mix(f, a, b)
+
+define step(vec2 e, vec2 v)     vec2.step2(e, v)
+define step(vec3 e, vec3 v)     vec3.step2(e, v)
+define step(vec4 e, vec4 v)     vec4.step2(e, v)
+define step(float e, vec2 v)    vec2.step(e, v)
+define step(float e, vec3 v)    vec3.step(e, v)
+define step(float e, vec4 v)    vec4.step(e, v)
+define step(e, v)               Math._step(e, v)
+
+define smoothstep(vec2 e0, vec2 e1, vec2 v)     vec2.smoothstep2(e0, e1, v)
+define smoothstep(vec3 e0, vec2 e1, vec3 v)     vec3.smoothstep2(e0, e1, v)
+define smoothstep(vec4 e0, vec2 e1, vec4 v)     vec4.smoothstep2(e0, e1, v)
+define smoothstep(float e0, float e1, vec2 v)   vec2.smoothstep(e0, e1, v)
+define smoothstep(float e0, float e1, vec3 v)   vec3.smoothstep(e0, e1, v)
+define smoothstep(float e0, float e1, vec4 v)   vec4.smoothstep(e0, e1, v)
+define smoothstep(e0, e1, v)                    Math._smoothstep(e0, e1, v)
+
+define length(v)                  v.len()
+
+define distance(T a, T b)         a.distance(b)
+define dot(a, b)                  a.dot(b)
+define cross(vec3 a, vec3 b)      vec3.cross(a, b)
+
+define normalize(T v)             T.normalize(v)
+define faceforward(T n, T i, T r) T.faceforward(n, i, r)
+define reflect(T i, T n)          T.reflect(i, n)
+define refract(T i, T n, float a) T.refract(i, n, a)
+define outerProduct(vec2 c, vec2 r) mat2.outerProduct(c, r)
+define outerProduct(vec3 c, vec3 r) mat3.outerProduct(c, r)
+define outerProduct(vec4 c, vec4 r) mat4.outerProduct(c, r)
+define outerProduct(vec3 c, vec2 r) mat2x3.outerProduct(c, r)
+define outerProduct(vec2 c, vec3 r) mat3x2.outerProduct(c, r)
+define outerProduct(vec4 c, vec2 r) mat2x4.outerProduct(c, r)
+define outerProduct(vec2 c, vec4 r) mat4x2.outerProduct(c, r)
+define outerProduct(vec4 c, vec3 r) mat3x4.outerProduct(c, r)
+define outerProduct(vec3 c, vec4 r) mat4x3.outerProduct(c, r)
+
+define transpose(mat2 m)      mat2.transpose(m)
+define transpose(mat3 m)      mat3.transpose(m)
+define transpose(mat4 m)      mat4.transpose(m)
+define transpose(mat2x3 m)    mat3x2.transpose(m)
+define transpose(mat3x2 m)    mat2x3.transpose(m)
+define transpose(mat2x4 m)    mat4x2.transpose(m)
+define transpose(mat4x2 m)    mat2x4.transpose(m)
+define transpose(mat3x4 m)    mat4x3.transpose(m)
+define transpose(mat4x3 m)    mat3x4.transpose(m)
+
+define matrixCompMult(T a, T b) T.matrixCompMult(a, b)
+
+define lessThan(a, b)         a.lessThan(b)
+define lessThanEqual(a, b)    a.lessThanEqual(b)
+define greaterThan(a, b)      a.greaterThan(b)
+define greaterThanEqual(a, b) a.greaterThanEqual(b)
+define equal(a, b)            a.equal(b)
+define notEqual(a, b)         a.notEqual(b)
+define any(v)                 a.any()
+define all(v)                 v.all()
+define not(v)                 v.not()
+
 define rad 	     1
 define deg       0.017453292519943295
 define PI        3.141592653589793
@@ -37,7 +205,16 @@ define LOG10E    0.4342944819032518
 define SQRT_1_2  0.7071067811865476
 define SQRT2     1.4142135623730951
 
-define mix(vec3 a, vec3 b, float v) vec3.mix(a, b, v)
+define mix(T a, T b, float v) T.mix(a, b, v)
+define radians(vec2 v) vec2.radians(x)
+define radians(vec3 v) vec3.radians(x)
+define radians(vec4 v) vec4.radians(x)
+define radians(d)      d/deg
+
+define degrees(vec2 v) vec2.degrees(x)
+define degrees(vec3 v) vec3.degrees(x)
+define degrees(vec4 v) vec4.degrees(x)
+define degrees(d)      d*deg
 
 struct vec{
 
@@ -53,7 +230,7 @@ struct vec{
 
 	len(){
 		var d = 0
-		d += _[#] ** 2
+		d += _[#] * _[#]
 		return sqrt(d)
 	}
 
@@ -66,7 +243,11 @@ struct vec{
 	}
 
 	mix( vec a, vec b, f ){
-		_[#] = a[#] + f * (a[#] - b[#])
+		_[#] = a[#] + f * (b[#] - a[#])
+	}
+
+	mix2( vec a, vec b, vec f ){
+		_[#] = a[#] + f[#] * (b[#] - a[#])
 	}
 
 	greater( vec v ){
@@ -86,6 +267,107 @@ struct vec{
 		_[#] = cos(v[#])
 	}
 
+	tan( vec v ){
+		_[#] = tan(v[#])
+	}
+
+	asin( vec v){
+		_[#] = asin(v[#])
+	}
+
+	acos( vec v){
+		_[#] = asin(v[#])
+	}
+
+	atan( vec v){
+		_[#] = asin(v[#])
+	}
+
+	pow( vec v, vec w){
+		_[#] = pow(v[#], w[#])
+	}
+
+	exp( vec v ){
+		_[#] = exp(v[#])
+	}
+
+	log( vec v ){
+		_[#] = log(v[#])
+	}
+
+	exp2( vec v ){
+		_[#] = exp2(v[#])
+	}
+
+	log2( vec v ){
+		_[#] = log2(v[#])
+	}
+
+	sqrt( vec v ){
+		_[#] = sqrt(v[#])
+	}
+	
+	inversesqrt( vec v ){
+		_[#] = inversesqrt(v[#])
+	}
+
+	abs( vec v ){
+		_[#] = abs(v[#])
+	}
+
+	sign( vec v ){
+		_[#] = sign(v[#])
+	}
+
+	sign( vec v ){
+		_[#] = sign(v[#])
+	}
+
+	floor( vec v ){
+		_[#] = floor(v[#])
+	}
+
+	ceil( vec v ){
+		_[#] = ceil(v[#])
+	}
+
+	fract( vec v ){
+		_[#] = fract(v[#])
+	}
+
+	mod2( vec a, vec b ){
+		_[#] = mod(a[#], b[#])
+	}
+
+	mod( vec a, float b ){
+		_[#] = mod(a[#], b)
+	}
+
+	min2( vec a, vec b ){
+		_[#] = max(a[#], b[#])
+	}
+
+	min( vec a, float b ){
+		_[#] = max(a[#], b)
+	}
+
+	max2( vec a, vec b ){
+		_[#] = max(a[#], b[#])
+	}
+
+	max( vec a, float b ){
+		_[#] = max(a[#], b)
+	}
+
+	clamp( vec v, float min, float max ){
+		_[#] = v[#] < min? min: v[#] > max? max: v[#]
+	}
+
+	clamp2( vec v, vec min, vec max ){
+		_[#] = v[#] < min[#]? min[#]: v[#] > max[#]? max[#]: v[#]
+	}
+
+
 	normalize( vec v ){
 		var d = 0
 		d += v[#] ** 2
@@ -98,20 +380,23 @@ struct vec{
 		}
 	}
 
-	clamp( vec v, float min, float max ){
-		_[#] = v[#] < min? min: v[#] > max? max: v[#]
-	}
-
-	clamp( vec v, vec min, vec max ){
-		_[#] = v[#] < min[#]? min[#]: v[#] > max[#]? max[#]: v[#]
-	}
-
 	step( vec v, float s ){
 		_[#] = v[#] < s? 0: 1
 	}
 
-	step( vec v, vec s ){
+	step2( vec v, vec s ){
 		_[#] = v[#] < s[#]? 0: 1
+	}
+
+	smoothstep2( vec e0, vec e1, vec v){
+		_[#] = clamp((v[#] - e0[#])/(e1[#]-e0[#]), 0, 1)
+		_[#] = _[#] * _[#] * (3 - 2 * _[#])
+	}
+
+	smoothstep( float e0, float e1, vec v){
+		var e2 = e1 - e0
+		_[#] = clamp((v[#] - e0)/e2, 0, 1)
+		_[#] = _[#] * _[#] * (3 - 2 * _[#])
 	}
 
 	sign( vec v ){
@@ -119,7 +404,7 @@ struct vec{
 	}
 
 	dot( vec v ){
-		var d = 0
+		float d = 0
 		d += _[#] * v[#]
 		return d
 	}
@@ -128,6 +413,19 @@ struct vec{
 		_[#] = a[#] * b[#]
 	}
 }
+
+struct bvec2{
+	bool x, y
+}
+
+struct bvec3{
+	bool x, y, z
+}
+
+struct bvec4{
+	bool x, y, z, w
+}
+
 
 struct vec2 extends vec{
 	float x, y
@@ -155,7 +453,32 @@ struct vec2 extends vec{
 		x = m[0] * vx + m[4] * vy + m[12]
 		y = m[1] * vx + m[5] * vy + m[13]
 	}
+
+	lessThan( vec2 v ){
+		return bvec( x < v.x, y < v.y )
+	}
+
+	lessThanEqual( vec2 v ){
+		return bvec( x <= v.x, y <= v.y )
+	}
+
+	greaterThan( vec2 v ){
+		return bvec( x > v.x, y > v.y )
+	}
+
+	greaterThanEqual( vec2 v ){
+		return bvec( x >= b.x, y >= b.y )
+	}
+
+	equal( vec2 c ){
+		return bvec( x == b.x, y == b.y )
+	}
+
+	notEqual( vec2 c ){
+		return bvec( x != b.x, y != b.y )
+	}
 }
+
 
 struct vec3 extends vec{
 	float x, y, z
@@ -231,6 +554,10 @@ struct vec4 extends vec{
 struct mat{
 	zero(){
 		_[#] = 0
+	}
+
+	matrixCompMult(mat a, mat b){
+		_[#] = a[#] * b[#]
 	}
 }
 
@@ -436,6 +763,17 @@ struct mat2 extends mat{
 		m10 = a[2] * s1
 		m11 = a[3] * s1
 	}
+
+	transpose( mat2 a ){
+		var a01 = m01
+		m01 = m10
+		m10 = a01 
+	}
+
+	outerProduct(vec2 c, vec2 r){
+		m00 = c.x * r.x, m01 = c.x * r.y 
+		m10 = c.y * r.x, m11 = c.y * r.y
+	}
 }
 
 struct mat3 extends mat{
@@ -599,6 +937,12 @@ struct mat3 extends mat{
 		m20 = (a31 * b05 - a32 * b04 + a33 * b03) * det
 		m21 = (a32 * b02 - a30 * b05 - a33 * b01) * det
 		m22 = (a30 * b04 - a31 * b02 + a33 * b00) * det
+	}
+
+	outerProduct(vec3 c, vec3 r){
+		m00 = c.x * r.x, m01 = c.x * r.y, m02 = c.x * r.z 
+		m10 = c.y * r.x, m11 = c.y * r.y, m12 = c.y * r.z
+		m20 = c.z * r.x, m21 = c.z * r.y, m22 = c.z * r.z
 	}
 }
 
@@ -1085,5 +1429,12 @@ struct mat4 extends mat{
 		m31 = -(y0 * ex + y1 * ey + y2 * ez)
 		m32 = -(z0 * ex + z1 * ey + z2 * ez)
 		m33 = 1
+	}
+
+	outerProduct(vec4 c, vec4 r){
+		m00 = c.x * r.x, m01 = c.x * r.y, m02 = c.x * r.z, m03 = c.x * r.w  
+		m10 = c.y * r.x, m11 = c.y * r.y, m12 = c.y * r.z, m13 = c.y * r.w 
+		m20 = c.z * r.x, m21 = c.z * r.y, m22 = c.z * r.z, m23 = c.z * r.w 
+		m30 = c.w * r.x, m31 = c.w * r.y, m32 = c.w * r.z, m33 = c.w * r.w 
 	}
 }

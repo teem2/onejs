@@ -210,8 +210,8 @@ ONE.base_ = function(){
 	}
 
 	// create object with owner and role
-	this.create = function( owner, role ){
-
+	this.call = function( pthis, role, owner ){
+		if(pthis !== this) throw new Error("Base.call used with different this")
 		if(this.owner !== undefined) throw new Error("You are newing an instance")
 
 		var obj = Object.create(this)

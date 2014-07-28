@@ -386,9 +386,9 @@ ONE.parser_strict_ = function(){
 	this._intmod = {binop: 10, beforeExpr: true}
 	this._intdiv = {binop: 10, beforeExpr: true}
 	
-	this._or = {keyword: "or", replace:'||', replaceOp:this._logicalOR, binop: 1, beforeExpr: true}
-	this._and = {keyword: "and", replace:'&&', replaceOp:this._logicalAND, binop: 2, beforeExpr: true}
-	this._not = {keyword: "not", replace:'!', prefix: 1, beforeExpr: true}
+	//this._or = {keyword: "or", replace:'||', replaceOp:this._logicalOR, binop: 1, beforeExpr: true}
+	//this._and = {keyword: "and", replace:'&&', replaceOp:this._logicalAND, binop: 2, beforeExpr: true}
+	//this._not = {keyword: "not", replace:'!', prefix: 1, beforeExpr: true}
 
 	// This is a trick taken from Esprima. It turns out that, on
 	// non-Chrome browsers, to check whether a string is in a set, a
@@ -2265,7 +2265,7 @@ ONE.parser_strict_ = function(){
 				node.fn = base
 				//node.arrow = '->'
 				node.body = this.parseBlock(true)
-				return this.parseSubscripts(this.finishNode(node, "Create"), noCalls)
+				return this.parseSubscripts(this.finishNode(node, "Nest"), noCalls)
 			}
 		case this._thinArrow:
 		case this._fatArrow:

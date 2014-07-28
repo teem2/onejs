@@ -1,4 +1,4 @@
-//var {Root, Rect} = load('dom')
+// var {Root, Rect} = load('dom')
 import math
 import dom
 /*
@@ -58,7 +58,7 @@ Scoping(){
 Super(){
 	var order = ''
 	class Role1{
-		fn(a){ 
+		fn(){ 
 			order += '1' 
 		}
 	}
@@ -96,7 +96,7 @@ Roles(){
 
 	var x = new C1()
 	C1.learn(Role1)
-	C1.learn(Role2) 
+	C1.learn(Role2)
 	C1.learn(Role3)
 	assert(x.a == 40)
 

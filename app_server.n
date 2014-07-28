@@ -75,7 +75,7 @@ class StaticServer extends HttpServer{
 	}
 
 	route("/pull") do( req, res ){
-		log('Updating and clearing cache!')
+		out('Updating and clearing cache!')
 		child_process.exec('git pull')
 		child_process.exec('rm -rf cache_*')
 		res.writeHead(200)
@@ -96,7 +96,7 @@ class StaticServer extends HttpServer{
 			"Content-encoding":"deflate"
 		}
 		if(exist){
-			log('Loading cached ' + cache_file)
+			out('Loading cached ' + cache_file)
 			var stream = fs.createReadStream(cache_file)
 			res.writeHead(200, header)
 			stream.pipe(res)
@@ -105,7 +105,7 @@ class StaticServer extends HttpServer{
 
 		// lets fetch the root
 		var pkg = await package('index.html', root).catch do(){
-			console.log("Exception!")
+			out("Exception!")
 			res.writeHead(501)
 			res.end()
 		}
@@ -123,7 +123,7 @@ class StaticServer extends HttpServer{
 		if(path == '/') path = 'index.html'
 		var fullpath = Path.join(fs_root, path)
 
-		log(`Reading ${path}`)
+		out(`Reading ${path}`)
 
 		// read and return the file
 		var exist = await fs.exists(fullpath)
@@ -145,7 +145,7 @@ class StaticServer extends HttpServer{
 		if(files[path]) return
 
 		files[path] = fs.watchFileFast(path) do(){
-			log("---- " + path + " changed, sending reload to frontend ----" )
+			out("---- " + path + " changed, sending reload to frontend ----" )
 			for(var res of pending){
 				res.writeHead(200)
 				res.end('Reload')
@@ -155,7 +155,7 @@ class StaticServer extends HttpServer{
 	}
 
 	init( port, addr ){
-		log(`Starting webserver on ${addr}:${port}`)
+		out(`Starting webserver on ${addr}:${port}`)
 		super()
 	}
 }

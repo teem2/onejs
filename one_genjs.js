@@ -124,7 +124,12 @@ ONE.genjs_ = function(modules, parserCache){
 		globals.self = 1
 		
 		this.find_type = function( name ){
-			var type = this.module.types[name]
+			var type
+			if(this.generics){
+				type = 	this.generics[name]
+				if(type) return type
+			}
+			type = this.module.types[name]
 			if(type) return type
 			var im = this.module.imports
 			for(var i = 0, l = im.length; i < l;i++){
@@ -257,9 +262,9 @@ ONE.genjs_ = function(modules, parserCache){
 			this.depth = this.depth + this.indent
 			
 			if( init )
-				ret = '(' + this.destruc_prefix + '0=' + (def? def + '||': '') +
+				ret = '((' + this.destruc_prefix + '0=' + (def? def + '||': '') +
 					(typeof init == 'string'?init:this.expand( init, n )) +
-					',(' + this.newline + this.depth
+					')===undefined || (' + this.newline + this.depth
 			else{
 				if(!def) throw new Error('Destructuring assignment without init value')
 				ret = '(' + this.destruc_prefix + '0=' + (def?def:'') + ',(' + this.newline + this.depth
@@ -1256,7 +1261,7 @@ ONE.genjs_ = function(modules, parserCache){
 				}
 			}
 			
-			if(n.await) ret = ret  + 'ONE._await('
+			if(n.await) ret = ret  + 'ONE.await('
 			
 			ret += 'function'
 			
@@ -1335,7 +1340,7 @@ ONE.genjs_ = function(modules, parserCache){
 		this.find_function = function( n ){
 			var p = n.parent
 			while(p){
-				if(p.type == 'Create') return p
+				if(p.type == 'Nest') return p
 				if(p.type == 'Class') return p
 				if(p.type == 'Function') return p
 				if(p.root) console.log(p)
@@ -1623,7 +1628,7 @@ ONE.genjs_ = function(modules, parserCache){
 				var kind = method.params[i].id.kind
 				gen += '_'+(kind && kind.name || 'var')
 			}
-			
+
 			// make a type_method
 			if(!this.type_methods[gen]){
 				var d = this.depth
@@ -1764,10 +1769,10 @@ ONE.genjs_ = function(modules, parserCache){
 			var params
 			if(body.type == 'Function') params = body.params
 			else if(body.type == 'Call') params = body.args
-			if(!params) return false
+			if(!params) return
 			// match length
-			if(params.length !== args.length) return false
-
+			if(params.length !== args.length) return
+			var generics = Object.create(null)
 			for(var i = 0, l = params.length; i<l; i++){
 				var param = params[i]
 				var kind
@@ -1775,13 +1780,23 @@ ONE.genjs_ = function(modules, parserCache){
 				else kind = param.kind
 				if(kind){
 					var infer = args[i].infer
-					if(!infer){
-						throw new Error('cant infer argument '+i+' to type ' +kind.name+' for '+name)
+					if(!infer) return
+					// what if kind.name == 'T'
+					var ch
+					var name = kind.name
+					if(name.length == 1 && (ch = name.charCodeAt(0)) >= 65 && ch <= 90 ){ // generics
+						// lets store kind on our 
+						var prev = generics[name]
+						if(prev){
+							if(prev.name != infer.name) return
+						}
+						else generics[name] = infer
 					}
-					if(infer.name != kind.name) return false
+					else if(infer.name != name) return
 				}
 			}
-			return true
+
+			return generics
 		}
 		
 		// lets pattern match 
@@ -1792,7 +1807,8 @@ ONE.genjs_ = function(modules, parserCache){
 			if(this.context){ // support for context macros
 				var obj = this.context[name]
 				if(obj && obj.value && obj.value._ast_){
-					if(this.macro_match_args(n, name, obj.value, args)) return obj.value
+					var ret
+					if(ret = this.macro_match_args(n, name, obj.value, args)) return [obj.value, ret]
 					found = true
 				}
 			}
@@ -1802,7 +1818,8 @@ ONE.genjs_ = function(modules, parserCache){
 			macro = macros[nm]
 			while(macro){
 				macro.id.parent = macro
-				if(this.macro_match_args(n, name, macro.id, args)) return macro.id
+				var ret
+				if(ret = this.macro_match_args(n, name, macro.id, args)) return [macro.id, ret]
 				found = true
 				nm = nm + '_'
 				macro = macros[nm]
@@ -1815,7 +1832,8 @@ ONE.genjs_ = function(modules, parserCache){
 					var nm = name
 					while(macro){
 						macro.id.parent = macro
-						if(this.macro_match_args(n, name, macro.id, args)) return macro.id
+						var ret
+						if(ret = this.macro_match_args(n, name, macro.id, args)) return [macro.id, ret]
 						found = true
 						nm = nm + '_'
 						macro = macros[nm]
@@ -1827,10 +1845,11 @@ ONE.genjs_ = function(modules, parserCache){
 
 		this.macro_call = function( n, name, args ){
 			
-			var macro
+			var ret
 			args.expanded = undefined
-			if(macro = this.find_macro(n, name, args)){
+			if(ret = this.find_macro(n, name, args)){
 				// lets check type
+				var macro = ret[0], macro_generics = ret[1]
 				if(macro.type == 'Function'){
 					var params = macro.params
 					var gen = 'macro_' + name
@@ -1842,13 +1861,16 @@ ONE.genjs_ = function(modules, parserCache){
 						var old_depth = this.depth
 						var old_scope = this.scope
 						var old_arg = this.macro_args
+						var old_generics = this.generics
 						this.macro_args = undefined
 						this.scope = Object.create(null)
 						this.depth = ''
+						this.generics = macro_generics
 						this.type_methods[gen] = this.Function(macro, gen, undefined, true)
 						this.depth = old_depth
 						this.scope = old_scope
 						this.macro_args = old_arg
+						this.generics = old_generics
 					}
 					var ret = gen + '.call(this'
 					// set up the call and argument list
@@ -1862,7 +1884,7 @@ ONE.genjs_ = function(modules, parserCache){
 				else if(macro.type == 'Call'){
 					// inline macro expansion
 					var old_arg = this.macro_args
-					var marg = this.macro_args = Object.create(this.macro_args)
+					var marg = this.macro_args = Object.create(this.macro_args || null)
 					var params = macro.args
 					// build up macro args
 					for(var i = 0; i < params.length; i++){
@@ -1873,10 +1895,13 @@ ONE.genjs_ = function(modules, parserCache){
 						this.macro_args[param.name] = args.expanded[i]
 					}
 					var old_module = this.module
+					var old_generics = this.generics
+					this.generics = macro_generics
 					if(macro.module && macro.module != old_module) this.module = macro.module
 					var ret = this.expand(macro.parent.value, n)
 					this.macro_args = old_arg
 					this.module = old_module
+					this.generics = old_generics
 					return ret
 				}
 				else throw new Error('Macro call, but wrong type '+name+' '+macro.id.type)
@@ -2115,7 +2140,7 @@ ONE.genjs_ = function(modules, parserCache){
 			return call +'.call(' + cthis + (sarg?',' + this.space + sarg:'') + ')'
 		}
 		
-		this.Create = function( n ){
+		this.Nest = function( n ){
 			var fn = n.fn
 			
 			if(fn.type == 'Id'){
@@ -2131,8 +2156,9 @@ ONE.genjs_ = function(modules, parserCache){
 					return 'this.Signal.try(' + this.Function( n, null, ['end','fail'] ) +'.bind(this))'
 				}
 			}
-			// alright, in general calling Bla{ } instances it.
-			return this.expand(n.fn, n) + '.create(this, ' + this.Function( n ) + ')'
+			// just use the .call property
+			var exp = this.expand(n.fn, n)
+			return exp + '.call('+exp+', ' + this.Function( n ) + ', this)'
 		}
 		
 		this.Quote = function( n ){

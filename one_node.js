@@ -12,7 +12,8 @@ ONE.nodejs_boot_ = function(){
 	require('./one_genjs.js')
 	require('./one_ast.js')
 
-	ONE.init_()
+	ONE.init()
+	ONE.init_ast()
 
 	// load our first argument, parse dependencies and fire up
 	var args = process.argv.slice()

@@ -28,7 +28,7 @@ class GLNode extends Proxy{
 		gl.depthFunc(gl.LESS)
 	}
 
-	// default draw	
+	// default draw
 	draw:(){
 		draw(this)
 	}
@@ -416,10 +416,8 @@ class GLNode extends Proxy{
 			// we should only do our body, not our params
 			n.parent = parent
 			//Pre(n)
-
 			var body = n.body
 			if(body) this[body.type](body, n)
-
 			//Post(n)
 		}
 
@@ -446,8 +444,7 @@ class GLNode extends Proxy{
 				}
 			}
 			else throw new Error('Unsupported Def encountered')
-
-			scope[n.id.name] = type
+			n.infer = scope[n.id.name] = type
 		}
 
 		Return( n, parent ){
@@ -478,6 +475,7 @@ class GLNode extends Proxy{
 				var type = find_type(name)
 				// type infer the args
 				for(var arg from n.args) this[arg.type](arg, n)
+
 				if(type){
 					n.infer = type
 					// lets do the args
@@ -486,14 +484,16 @@ class GLNode extends Proxy{
 				// lets check if we are calling a macro
 				n.args.expanded = true
 				//console.log(n.args, name)
-				var macro = find_macro(n, name, n.args)
+				var [macro, macro_generics] = find_macro(n, name, n.args)
 				if(macro){
-					// we are a macro 
+					// we are a macro
 					if(macro.type == 'Function'){
 						// lets type infer trace an actual macro call
 						var old_scope = scope
 						var old_return = return_type
 						var old_module = this.module
+						var old_generics = generics
+						generics = macro_generics
 						return_type = undefined
 						var mparams = macro.params
 						scope = Object.create(null)
@@ -505,12 +505,15 @@ class GLNode extends Proxy{
 						// lets set the arguments on the scope
 						this[macro.type](macro, n)
 						this.module = old_module
+						generics = old_generics
 						scope = old_scope
 						n.infer = return_type
 						return_type = old_return
 					}
 					else if(macro.type == 'Call'){
 						var old_args = macro_args
+						old_generics = generics
+						generics = macro_generics
 						macro_args = Object.create(null)
 						var margs = macro.args
 						for(var i, arg from n.args){
@@ -820,19 +823,33 @@ class GLNode extends Proxy{
 			return AST.ToCode::Binary(n)
 		}
 
-		// Function!
-		this.Function( n, name, args ){
-			// allright lets generate a function!
-			var ret = n.infer.name + ' ' + name + '('
-			// lets do the arguments
-			for(var i, param from n.params){
-				if(i) ret += ', '
-				var name = param.id.name
-				var kind = param.id.kind.name
-				ret += kind + ' ' + name
-				scope[name] = find_type(kind)
+		Var( n ){
+			var ret = ''
+			for(var v from n.defs){
+				ret += this.Def(v)
 			}
-			ret += ')'
+			return ret
+		}
+
+		Def( n ){
+			var name = n.id.name
+			scope[name] = n.infer
+
+			if(n.parent.type == 'Var'){
+				return n.infer.name + ' ' + name + ' = ' + this.expand(n.init, n) + this.term + this.newline + this.indent
+				if(!n.init) throw new Error('Cannot use uninitialized var')
+				type = n.init.infer
+			}
+			else if(n.parent.type === 'TypeVar'){
+				return name
+			}
+			else throw new Error('Unsupported Def encountered')
+		}
+
+		// Function!
+		this.Function( n, name, argdef ){
+			// allright lets generate a function!
+			var ret = n.infer.name + ' ' + name + '(' + argdef + ')'
 			var old_depth = this.depth
 			this.depth += this.indent
 			ret += this.expand(n.body, n)
@@ -841,7 +858,7 @@ class GLNode extends Proxy{
 			return AST.ToCode::Function(n)
 		}
 
-		// type inference calls		
+		// Do calls
 		Call( n ){
 			if(n.fn.type == 'Id'){
 				// check 
@@ -862,44 +879,52 @@ class GLNode extends Proxy{
 				if(name in glsl_functions)
 					return AST.ToCode::Call(n)
 
-				var macro = find_macro(n, name, n.args)
+				var [macro, macro_generics] = find_macro(n, name, n.args)
 				if(macro){
 					if(macro.type == 'Function'){
 						// alright! we are going to generate an actual
 						// GLSL function!. huzzah.
 						var params = macro.params
 						var gen = 'macro_' + name
-						for(var param from params){
-							var kind = param.id.kind
-							gen += '_'+(kind && kind.name || 'var')
+						var args = ''
+						var argdef = ''
+						var old_scope = scope
+						scope = Object.create(null)
+
+						for(var i, arg from n.args){
+							if(i) args += ', ', argdef += ', '
+							args += this[arg.type](arg, n)
+							var type_name = arg.infer.name
+							var param_name = params[i].id.name
+							scope[param_name] = arg.infer
+							argdef += type_name + ' ' + param_name
+							gen += '_' + type_name
 						}
+
 						if(!type_methods[gen]){
 							var old_depth = depth
-							var old_scope = scope
 							var old_args = macro_args
 							var old_module = module
+							var old_generics = generics
+							generics = macro_generics
 							macro_args = undefined
-							scope = Object.create(null)
 							depth = '\t\t\t'
 							if(macro.module) this.module = macro.module
-							type_methods[gen] = this.Function(macro, gen)
+							type_methods[gen] = this.Function(macro, gen, argdef)
 							depth = old_depth
-							scope = old_scope
+							generics = old_generics
 							macro_args = old_args
 							this.module = old_module
 						}
-						var ret = gen + '('
-						// set up the call and argument list
-						for(var i, arg from n.args){
-							if(i) ret += ', '
-							ret += this[arg.type](arg, n)
-						}
-						ret += ')'
-						return ret
+						scope = old_scope
+
+						return gen + '(' + args + ')'
 					}
 					else if(macro.type == 'Call'){
 						var old_args = macro_args
 						var old_module = this.module
+						var old_generics = generics
+						generics = macro_generics
 						macro_args = Object.create(null)
 						var margs = macro.args
 						for(var i, arg from n.args){
@@ -909,6 +934,7 @@ class GLNode extends Proxy{
 						this.module = astnode.module
 						var ret = this[astnode.type](astnode, n)
 						this.module = old_module
+						generics = old_generics
 						macro_args = old_args
 						return ret
 					}
@@ -1224,7 +1250,7 @@ class GLView extends GLNode{
 			premultipliedAlpha: false,
 			preserveDrawingBuffer: true
 		})
-		canvas.webkitRequestFullscreen()
+		//canvas.webkitRequestFullscreen()
 		window.onresize = =>{
 			var pixelRatio = window.devicePixelRatio
 			var w = parent.offsetWidth

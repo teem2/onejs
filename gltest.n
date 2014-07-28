@@ -1,3 +1,4 @@
+#js
 import math
 import webgl
 
@@ -10,16 +11,17 @@ class Rect extends GLNode{
 
 	vertex: mesh[] * (objmtx * viewmtx)
 	param1 = 1
-	bgcolor: #red
-
+	bgcolor: #yellow
 	p:pixel mesh[]
 	
-	define mul2(vec3 x){
-		return x*1.4
+	mul2:(x){
+		var y = x
+		return y * 1.4
 	}
 
 	pixel:
-		mul2 on (mix(bgcolor, #black) do 
+		mul2 do
+		(mix(bgcolor, #black) do 
 			abs(sin(param1 * atan(p.x, p.y))))
 		+ 
 		mix(#green, #purple) do
@@ -28,9 +30,16 @@ class Rect extends GLNode{
 
 var ref = GLView{
 	fill = #aero
+	Rect{
+		param1 = 10
+	}
 
-	Rect{param1 = 10}
-	Rect{param1 = 30}
-	Rect{param1 = 60}
-
+	Rect{
+		param1 = 30
+		bgcolor:mix(#red, #white, abs on sin on 32 * p.y)
+	}
+	Rect{
+		param1 = 60
+		bgcolor:#red
+	}
 }
