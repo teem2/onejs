@@ -1152,7 +1152,7 @@ ONE.ast_ = function(){
 			return ret
 		}
 		ONE.genjs_.call(this, modules, parserCache)
-
+		ONE.genjs_compat_()
 	}, "AST")
 	
 	return this

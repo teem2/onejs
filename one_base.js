@@ -5,7 +5,7 @@ else ONE = {}
 
 ONE.init = function(){
 
-	// make self a class
+	// make ONE a class
 	this.base_()
 	
 	this.__class__ = 'ONE'
@@ -17,144 +17,8 @@ ONE.init = function(){
 	// make ONE the new root scope
 	this.Base.$ = this.$ = Object.create(this)
 
-	//TODO setup logging api
-	this.Base.out = this.out
-	this.Base.error = this.error
-	this.Base.warn = this.warn
-	this.Base.trace = this.trace
-
 	// hide all the props
 	this.Base.enumfalse.apply(ONE.Base, Object.keys( ONE.Base ) )
-
-	// promise generator function wrapper
-	this.await = function( generator, bound, _catch ){
-		var ret = function(){
-			var iter = generator.apply(this, arguments)
-			return ONE.Signal.wrap(function(sig){
-				function error(e){
-					// throw forward
-					sig.throw(e)
-					// lets not throw in the iterator for now
-					//if(!ret) iter.throw(e)
-				}
-				function next( value ){
-					var iterval = iter.next( value )
-					if(iterval.done === false){ // we have a promise
-						iterval.value.then( next, error )
-					}
-					else{
-						sig.end( iterval.value )
-					}
-				}
-				next()
-			})
-		}
-		if(bound) return ret.bind(bound)
-		return ret
-	}
-
-	this.iterator = function( what ){
-		// check what it is.
-		if(what === null || what === undefined) return
-		if(typeof what.next == 'function') return what
-		if(typeof what != 'object') throw new Error('Cannot iterate over object')
-	
-		if(!Array.isArray(what)){
-			var obj = what
-			what = []
-			for( var k in obj ) what.push( obj[ k ] )
-		}
-	
-		var len = what.length
-		if(!len) return
-		return {
-			next:function(){
-				this.index++
-				if(this.index >= this.length - 1) this.done = true
-				this.value = what[this.index]
-				return this
-			},
-			done: false,
-			index: -1,
-			length: len
-		}
-	}
-
-	var Assert_ =  function(txt, why, value){
-		this.toString = function(){
-			var msg = "Assert failed: " + txt + 
-				(why?"  why: "+why:'')+
-				(value!==undefined?"  got value: "+value:"")
-			return msg
-		}
-	}
-	if(typeof window !== 'undefined') window.Assert = Assert_
-	else if(typeof global !== 'undefined') global.Assert = Assert_
-	else Assert = Assert_
-
-	// make all constructors compatible with the ONEJS way
-	Function.prototype.new = function(){
-		var obj = Object.create(this.prototype)
-		this.apply(obj, Array.prototype.slice.call(arguments, 1))
-		return obj
-	}
-	
-	// all X instanceOf Y is rewritten as Y prototypeOf X
-	// to map the simplified ONE class model to JS
-	Function.prototype.prototypeOf = function( other ){
-		return other instanceof this
-	}
-
-	Object.defineProperty( Array.prototype, 'last', {
-		configurable:false,
-		enumerable:false,
-		get:function(){
-			return this[this.length - 1]
-		},
-		set:function(value){
-			this[this.length - 1] = value
-		}
-	})
-	
-	Object.defineProperty( Array.prototype, 'first', {
-		configurable:false,
-		enumerable:false,
-		get:function(){
-			return this[0]
-		},
-		set:function(value){
-			this[0] = value
-		}
-	})
-	
-	Math._mod = function( x, y ){
-		return (x%y+y)%y
-	}
-
-	Math._sign = function(v){
-		if(v === 0) return 0
-		if(v < 0 ) return -1
-		return 1
-	}
-
-	Math._fract = function(v){
-		return v - Math.floor(v)
-	}
-
-	Math._clamp = function(x, mi, ma){
-		if(x < mi) return mi
-		if(x > ma) return ma
-		return x
-	}
-
-	Math._mix = function(f, a, b){
-		return a + f * (b - a)
-	}
-
-	Math._step = function(e, v){
-		if(v < e) return 0
-		return 1
-	}
 }
 
 ONE.base_ = function(){
@@ -174,8 +38,10 @@ ONE.base_ = function(){
 		var obj = Object.create(this)
 
 		if(outer && outer.$) obj.$ = outer.$
+		//Object.defineProperty( obj, '$', {enumerable:false, configurable:false} )
 
 		obj.__class__ = selfname || 'unknown-class'
+		//Object.defineProperty( obj, '__class__', {enumerable:false, configurable:false} )
 
 		// allow reference to self on inherited classes
 		if(selfname) obj[selfname] = obj
@@ -195,7 +61,7 @@ ONE.base_ = function(){
 		var obj = Object.create(this)
 
 		var len = arguments.length
-		obj.owner = owner || null
+		Object.defineProperty( obj, 'owner', {value:owner || null, enumerable:false, configurable:false} )
 
 		if(len > 1) {
 			if(obj._init) obj._init.apply(obj, Array.prototype.slice.call(arguments, 1))
@@ -209,7 +75,7 @@ ONE.base_ = function(){
 		return obj
 	}
 
-	// create object with owner and role
+	// call signature for new
 	this.call = function( pthis, role, owner ){
 		if(pthis !== this) throw new Error("Base.call used with different this")
 		if(this.owner !== undefined) throw new Error("You are newing an instance")
@@ -224,6 +90,11 @@ ONE.base_ = function(){
 		if( role ) role.call( obj )
 
 		return obj
+	}
+
+	// apply forwards to call
+	this.apply = function( pthis, args ){
+		this.call.apply(this, [pthis].concat(args))
 	}
 
 	this.isClass = function(){
@@ -337,63 +208,83 @@ ONE.base_ = function(){
 				overloads = this.__overloads__ = { }
 				Object.defineProperty( this, '__overloads__', {enumerable:false, configurable:false} )
 			}
-		} else {
+		} 
+		else {
 			roles = this.__roles__
 			overloads = this.__overloads__
 		}
 		
 		var learn = [ ]
-		for( var i = 0, len = arguments.length; i < len; i++ ){
+		for(var i = 0, len = arguments.length; i < len; i++){
 			var role = arguments[ i ]
-			if( typeof role == 'string' ){// try to resolve it on the scope
-				role = this.resolve( role )
-				if( !role ) throw new Error("Cannot find role "+arguments[i]+" on this")
-			}
-			
-			if( typeof role == 'function' ){
-				var obj = Object.create( ONE.Base )
+
+			if(typeof role == 'function'){
+				var obj = Object.create(ONE.Base)
 				obj.__teach__ = this
 				obj.__role__ = role
-				if( i == 0 && arguments.length > 1 ) role.apply( obj, Array.prototype.slice( arguments, 1 ) )
-				else role.call( obj, this )
+				if(i == 0 && arguments.length > 1) role.apply(obj, Array.prototype.slice(arguments, 1))
+				else role.call(obj, this)
 				role = obj
 			} 
 			
-			if( typeof role != 'object' ) throw new Error("Cannot learn role " + role)
+			if(typeof role != 'object') throw new Error("Cannot learn role " + role)
 
-			if( roles.indexOf( role ) == -1 ){
-				roles.push( role )
-				learn.push( role )
+			if(roles.indexOf(role) == -1){
+				roles.push(role)
+				learn.push(role)
 			}
 		}
 
-		if( !learn.length ) return this
-		for( var i = 0, len = learn.length; i < len; i++ ){
+		if(!learn.length) return this
+		for(var i = 0, len = learn.length; i < len; i++){
 			
-			var source = learn[ i ]
+			var source = learn[i]
 			
-			var keys = Object.getOwnPropertyNames( source )
+			var keys = Object.getOwnPropertyNames(source)
 			var klen = keys.length
 	
-			for( var ki = 0; ki < klen; ki ++ ){
-				var k = keys[ ki ]
-
-				if( k[ 0 ] === '$ ' ){
-					if( k.length == 1 || k[1] == '$' ) continue // scope
+			for(var ki = 0; ki < klen; ki++){
+				var k = keys[ki]
+				if(k[0] === '$ '){
+					if(k.length == 1 || k[1] == '$') continue // scope
 				}
-				if( k[ 0 ] === '_' && ( k[ 1 ] === '$' || k[ 1 ] === '_' ) ){ // merge arrays
-					if( k[ 1 ] == '_' ) continue //private storage
+				/*
+				if(k[0] === '_'){
+					continue
+				}
+
+				if(k[0] === '$ '){
+
+				// check if we have a setter
+				if(this.__lookupSetter__(k)){
+					// if we have a setter,
+					// we might be a signal.
+					var store = this['__'+k]
+					if(store._signal_){ // we have a signal
+						// we need to merge the onSet and onEnd arrays
+						
+					}
+					else{ // lets just 
+						
+					}
+				}
+				continue
+
+				*/
+
+				if(k[ 0 ] === '_' && ( k[ 1 ] === '$' || k[ 1 ] === '_' )){ // merge arrays
+					if(k[ 1 ] == '_') continue //private storage
 					// array merging code
-					if( k [ 2 ] == 'O' ){ // object merge
-						if( !this.hasOwnproperty( k ) ) this[ k ] = Object.create( source[ k ] )
+					if(k [ 2 ] == 'O'){ // object merge
+						if(!this.hasOwnproperty(k)) this[k] = Object.create(source[k])
 						else {
-							var out = this[ k ]
-							if( typeof out != 'object' ) throw new Error("Trying to assign object on non object "+k)
-							var obj = source[ k ]
-							for( var kk in obj ) out[ kk ] = obj[ kk ]
+							var out = this[k]
+							if(typeof out != 'object') throw new Error("Trying to assign object on non object "+k)
+							var obj = source[k]
+							for(var kk in obj) out[kk] = obj[kk]
 						}
-					} else if( k[ 2 ] == 'A') { // array merge
-						if( !this.hasOwnProperty( k ) ) this[ k ] = source[ k ].slice()
+					} else if(k[ 2 ] == 'A') { // array merge
+						if(!this.hasOwnProperty(k ) ) this[ k ] = source[ k ].slice()
 						else  Array.prototype.push.apply( this[ k ], source[ k ] )
 					}
 					continue

@@ -46,7 +46,6 @@ ONE.worker_boot_ = function(host){
 	ONE.proxy_free = []
 	ONE.init()
 	ONE.init_ast()
-
 	ONE.root = ONE.Base.call(ONE.Base,function(){ this.__class__='Root'}, ONE)
 }
 
@@ -166,6 +165,7 @@ ONE._createWorker = function(){
 		'\nONE.proxy_ = ' + ONE.proxy_.toString() +
 		'\nONE.ast_ = ' + ONE.ast_.toString() +
 		'\nONE.genjs_ = ' + ONE.genjs_.toString() +
+		'\nONE.genjs_compat_ = ' + ONE.genjs_compat_.toString() +
 		'\nONE.color_ = ' + ONE.color_.toString() +
 		'\nONE.parser_strict_ = ' + ONE.parser_strict_.toString() +
 		'\nONE.worker_boot_ = ' + ONE.worker_boot_.toString() +
@@ -233,21 +233,6 @@ ONE.browser_boot_ = function(){
 
 	ONE.signal_.call( this.Signal = {} )
 
-	function reloader(){
-		var rtime = Date.now()
-		var x = new XMLHttpRequest()
-		x.onreadystatechange = function(){
-			if(x.readyState != 4) return
-			if(x.status == 200){
-				//console.clear()
-				return location.reload()
-			}
-			setTimeout(reloader, (Date.now() - rtime) < 1000?500:0)
-		}
-		x.open('GET', "/_reloader_")
-		x.send()
-	}
-
 	function module_get( url, module ){
 		return ONE.Signal.wrap(function(sig){
 			var elem = document.getElementById(module)
@@ -275,7 +260,6 @@ ONE.browser_boot_ = function(){
 	var type = "main"
 	var root
 	if(location.hash){
-		reloader()
 		root = location.hash.slice(1)
 		var hack = location.hash.indexOf('?')
 		if(hack !== -1) root = root.slice(0,hack-1)
@@ -331,8 +315,9 @@ ONE.browser_boot_ = function(){
 	}
 
 	// initialize ONEJS also on the main thread	
-	if(!fake_worker) ONE.init_()
-
+	if(!fake_worker) ONE.init()
+	if(location.hash) ONE.reloader()
+		
 	window.onerror = function(msg, url, line) {
 		var name = url.match(/[^\/]*$/)[0]
 		ONE.error(msg + ' in '+name+' line '+line)

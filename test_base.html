@@ -4,11 +4,40 @@
 		<script src='one_base.js'></script>
 		<script>
 			ONE.init()
-
+			//ONE.reloader()
+			
 			function assert(v){
 				if(!v) throw new Error('Assert failed')
 			}
 
+			/*
+			var Signals = ONE.Base.extend(function(){
+				var Sig1 = ONE.Base.extend(function(){
+					this.signal('click')
+					this.click = function(){
+						console.log('Sig1:click')
+					}
+					this.signal('x', 10)
+				})
+				var Sig2 = ONE.Base.extend(function(){
+					this.click = function(){
+						console.log('Sig2:click')
+					}
+				})
+				var Bt = ONE.Base.extend(function(){
+					this.learn(Sig1, Sig2)
+					x = 20
+				})
+
+				var b = Bt.new()
+				b.click.call()
+				console.log(b.x)
+				Bt.forget(Sig2)
+				b.click.call()
+				console.log(b.x)
+			})
+			*/
+	
 			var Scopes = ONE.Base.extend(function(){
 				this.scoped()
 				this.$.y = 20

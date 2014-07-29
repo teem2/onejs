@@ -33,7 +33,6 @@ var ref = GLView{
 	Rect{
 		param1 = 10
 	}
-
 	Rect{
 		param1 = 30
 		bgcolor:mix(#red, #white, abs on sin on 32 * p.y)
