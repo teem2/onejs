@@ -165,7 +165,7 @@ ONE.base_ = function(){
 			isfirst = true
 			Object.defineProperty( this, '__roles__', {enumerable:false, configurable:false} )
 			if(! this.hasOwnProperty('__overloads__') ){
-				overloads = this.__overloads__ = { }
+				overloads = this.__overloads__ = Object.create(null)
 				Object.defineProperty( this, '__overloads__', {enumerable:false, configurable:false} )
 			}
 		} 
@@ -225,22 +225,23 @@ ONE.base_ = function(){
 					var val = this[ k ]
 					
 					// harmless __supername__ property for usable this.super
-					if( typeof val == 'function' ) val.__supername__ = k
+					if(typeof val == 'function') val.__supername__ = k
 
-					if( val !== undefined ){
-						if( stack.length ){ // compare to stack top
-							var top = stack[ stack.length - 1 ]
+					if(val !== undefined){
+						if(stack.length){ // compare to stack top
+							var top = stack[stack.length - 1]
 							if( top instanceof StackValue ) top = top.v
-							else top = top[ k ]
+							else top = top[k]
 							if( top !== val ){
 								stack.push( new StackValue( val ) )
 							}  // compare to prototype
-						} else if( Object.getPrototypeOf( this )[ k ] !== val ){
+						} 
+						else if( Object.getPrototypeOf( this )[ k ] !== val ){
 							stack.push( new StackValue( val ) )
 						}
 					}
 					// overlay the role
-					stack.push( source )
+					stack.push(source)
 					
 					// assign
 					this[k] = source[k] // normal assign
