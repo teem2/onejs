@@ -199,11 +199,10 @@ ONE.base_ = function(){
 		for(var i = 0, len = learn.length; i < len; i++){
 			
 			var source = learn[i]
-			for(var k in source){	
-
+			for(var k in source){
 				// this shouldnt be needed but, guess what!
 				if(!source.propertyIsEnumerable(k)) continue
-				
+
 				if(k[0] === '_' || k[0] === '$'){
 					continue
 				}
@@ -216,14 +215,14 @@ ONE.base_ = function(){
 						// we need to make a new signal,
 						// and merge onset and onend in there
 						// we need to merge the onSet and onEnd arrays
-
+						
 					}
 					else{ // lets just 
 						
 					}
 				}
 				else if(source.__lookupSetter__(k)){ // we might be a signal
-
+					
 				}
 				else { // 2 normal properties
 					var stack = overloads[k] || (overloads[k] = [])
@@ -251,7 +250,6 @@ ONE.base_ = function(){
 					// assign
 					this[k] = source[k] // normal assign
 				}
-
 			}
 		}
 		return this
@@ -342,7 +340,8 @@ ONE.base_ = function(){
 	// Make properties non enumerable
 	this.enumfalse = function( enums ){
 		for( var i = enums.length - 1; i>=0; i--){
-			Object.defineProperty( this, enums[i], {enumerable:false, configurable:true})
+			var k = enums[i]
+			Object.defineProperty( this, k, {value:this[k], enumerable:false, configurable:true})
 		}
 	}
 
@@ -366,7 +365,7 @@ ONE.base_ = function(){
 			ret = call.call( this, i )
 		}
 		tm = this.now() - tm
-		console.log("profile " + msg + " " + Math.ceil(tm)+'ms')
+		console.log("profile " + msg + " " + Math.ceil(tm) + 'ms')
 		return ret
 	}
 
@@ -390,28 +389,28 @@ ONE.base_ = function(){
 		var ret // return value of recur
 		// recursive Role scanner
 		function recur( obj ){
-			if( obj.hasOwnProperty( key ) ){
-				var val = obj[ key ]
-				if( next && val != me ) return ret = val
-				if( val == me ) next = 1
+			if(obj.hasOwnProperty(key)){
+				var val = obj[key]
+				if(next && val != me) return ret = val
+				if(val == me) next = 1
 			}
-			if( obj.hasOwnProperty( '__overloads__') ){
-				var stack = obj.__overloads__[ key ]
-				if( stack ) for( var i = stack.length - 1; i >= 0; i-- ){
+			if(obj.hasOwnProperty( '__overloads__')){
+				var stack = obj.__overloads__[key]
+				if(stack) for(var i = stack.length - 1; i >= 0; i--){
 					var item = stack[ i ]
-					if( next ){
-					   var val = item instanceof StackValue ? item.v : item[ key ]
-					   if( val != me ) return ret = val
+					if(next){
+					   var val = item instanceof StackValue ? item.v : item[key]
+					   if(val != me) return ret = val
 					}
 					if(item instanceof StackValue){
-						if( item.v == me ) next = 1
-					} else if( recur( item ) ) return ret
+						if(item.v == me) next = 1
+					} else if(recur(item)) return ret
 				}
 			}
 		}
-		while( proto ){
-			if( recur( proto ) ) return ret
-			proto = Object.getPrototypeOf( proto )
+		while(proto){
+			if(recur(proto)) return ret
+			proto = Object.getPrototypeOf(proto)
 		}
 	}
 	 
