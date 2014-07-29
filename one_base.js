@@ -38,10 +38,7 @@ ONE.base_ = function(){
 		var obj = Object.create(this)
 
 		if(outer && outer.$) obj.$ = outer.$
-		//Object.defineProperty( obj, '$', {enumerable:false, configurable:false} )
-
 		obj.__class__ = selfname || 'unknown-class'
-		//Object.defineProperty( obj, '__class__', {enumerable:false, configurable:false} )
 
 		// allow reference to self on inherited classes
 		if(selfname) obj[selfname] = obj
@@ -202,12 +199,7 @@ ONE.base_ = function(){
 		for(var i = 0, len = learn.length; i < len; i++){
 			
 			var source = learn[i]
-			
-			var keys = Object.getOwnPropertyNames(source)
-			var klen = keys.length
-	
-			for(var ki = 0; ki < klen; ki++){
-				var k = keys[ki]
+			for(var k in source){	
 				
 				if(k[0] === '_' || k[0] === '$'){
 					continue
@@ -304,11 +296,7 @@ ONE.base_ = function(){
 			// restore a property as best we can
 			var source = forget[ i ]
 			
-			var keys = Object.getOwnPropertyNames( source )
-			var klen = keys.length
-			
-			for( var ki = 0; ki< klen; ki++ ){
-				var k = keys[ ki ]
+			for(var k in source){
 
 				if( k[ 0 ] === '_'  || k[0] === '$') continue
 
