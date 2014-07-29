@@ -18,7 +18,7 @@ ONE.init = function(){
 	this.Base.$ = this.$ = Object.create(this)
 
 	// hide all the props
-	this.Base.enumfalse.apply(ONE.Base, Object.keys( ONE.Base ) )
+	this.Base.enumfalse( Object.keys( ONE.Base ) )
 }
 
 ONE.base_ = function(){
@@ -63,7 +63,7 @@ ONE.base_ = function(){
 		var len = arguments.length
 		Object.defineProperty( obj, 'owner', {value:owner || null, enumerable:false, configurable:false} )
 
-		if(len > 1) {
+		if(len > 1){
 			if(obj._init) obj._init.apply(obj, Array.prototype.slice.call(arguments, 1))
 			else if(obj.init) obj.init.apply(obj, Array.prototype.slice.call(arguments, 1))
 		}
@@ -152,47 +152,10 @@ ONE.base_ = function(){
 		throw new Error('could not mix in', irole)
 	}
 
-	// define something as a mixin
-	this.mixin = function( name, init ){
-
-		if( this.__lookupSetter__( name ) ) throw new Error("Cannot redefine mixer " + name )
-		if( name in this ){
-			//?obj.apply( this[ name ] )
-		}
-		var storeKey = '__' + name
-		this[ storeKey ] = init
-		Object.defineProperty(this, name, {
-			configurable:true,
-			enumerable:true,
-			get:function(){
-				return this[ storeKey ]
-			},
-			set:function( value ){
-				this[ storeKey ].mixin( value )
-			}
-		})
-	}
-
 	// Internal prefixes:
 	// __xx = computed value storage
-	// $$xx = expression storage
 	// __xx__ = class datastructures
-	// __$xx = system private, not copied by learn/forget
-	// _$Oxx = Object that needs to be merged by learn/forget
-	// _$Axx = Array that needs to be merged by learn/forget
-	// $_xx = system private, but copied by learn/forget
 	// $ = scope object
-
-	// Currently in use:
-	// _$AHkey = Signal hooks array
-	// __$exprs = Expressions to init
-	// __$sigbinds = $_sigbind signals to init
-	// $_sigbind = bind to signal (used by Track)
-	// $_sigunbind == unbind from signal
-	// $_Mkey = monitoring listeners callback
-	// __onename__ = class/role name if available
-	// __roles__ = roles object
-	// __overloads__ = role overloading stacks
 
 	// learn a property bag, creates undo stacks so forget works.
 	this.learn = function( ){
@@ -245,90 +208,52 @@ ONE.base_ = function(){
 	
 			for(var ki = 0; ki < klen; ki++){
 				var k = keys[ki]
-				if(k[0] === '$ '){
-					if(k.length == 1 || k[1] == '$') continue // scope
-				}
-				/*
-				if(k[0] === '_'){
+				
+				if(k[0] === '_' || k[0] === '$'){
 					continue
 				}
 
-				if(k[0] === '$ '){
-
-				// check if we have a setter
-				if(this.__lookupSetter__(k)){
+				if(this.__lookupSetter__(k)){ // we are a signal
 					// if we have a setter,
 					// we might be a signal.
-					var store = this['__'+k]
+					var store = this['__' + k]
 					if(store._signal_){ // we have a signal
 						// we need to merge the onSet and onEnd arrays
-						
+
 					}
 					else{ // lets just 
 						
 					}
 				}
-				continue
+				else if(source.__lookupSetter__(k)){ // we might be a signal
 
-				*/
-
-				if(k[ 0 ] === '_' && ( k[ 1 ] === '$' || k[ 1 ] === '_' )){ // merge arrays
-					if(k[ 1 ] == '_') continue //private storage
-					// array merging code
-					if(k [ 2 ] == 'O'){ // object merge
-						if(!this.hasOwnproperty(k)) this[k] = Object.create(source[k])
-						else {
-							var out = this[k]
-							if(typeof out != 'object') throw new Error("Trying to assign object on non object "+k)
-							var obj = source[k]
-							for(var kk in obj) out[kk] = obj[kk]
-						}
-					} else if(k[ 2 ] == 'A') { // array merge
-						if(!this.hasOwnProperty(k ) ) this[ k ] = source[ k ].slice()
-						else  Array.prototype.push.apply( this[ k ], source[ k ] )
-					}
-					continue
 				}
-				
-				// what we do is we take a look at whats in 'this' now 
-				// and if something exists, we write it into our overload array
-				var stack = overloads[ k ] || ( overloads[ k ] = [ ] )
-				var val = this['$$'+k] || this[ k ]
-				
-				// harmless __supername__ property for usable this.super
-				if( typeof val == 'function' ) val.__supername__ = k
-				
-				if( val !== undefined ){
-					if( stack.length ){ // compare to stack top
-						var top = stack[ stack.length - 1 ]
-						if( top instanceof StackValue ) top = top.v
-						else top = top[ k ]
-						if( top !== val ){
+				else { // 2 normal properties
+					var stack = overloads[ k ] || ( overloads[ k ] = [ ] )
+					var val = this[ k ]
+					
+					// harmless __supername__ property for usable this.super
+					if( typeof val == 'function' ) val.__supername__ = k
+
+					if( val !== undefined ){
+						if( stack.length ){ // compare to stack top
+							var top = stack[ stack.length - 1 ]
+							if( top instanceof StackValue ) top = top.v
+							else top = top[ k ]
+							if( top !== val ){
+								stack.push( new StackValue( val ) )
+							}  // compare to prototype
+						} else if( Object.getPrototypeOf( this )[ k ] !== val ){
 							stack.push( new StackValue( val ) )
-						}  // compare to prototype
-					} else if( Object.getPrototypeOf( this )[ k ] !== val ){
-						stack.push( new StackValue( val ) )
+						}
 					}
-				}
-				// overlay the role
-				stack.push( source )
-				
-				if( this.__lookupSetter__( k ) ){ // we have a setter so just call it
-					this[ k ] = source[ '$$' + k ] || source[ k ]
-					continue
-				} 
-
-				if( source.__lookupSetter__( k ) ){ // target has a setter, copy the whole descriptor
-					Object.defineProperty( this, k, Object.getOwnPropertyDescriptor( source, k ) )
-					if( val !== undefined ) this[ k ] = val // trigger setter of parent with my value
-					continue
+					// overlay the role
+					stack.push( source )
+					
+					// assign
+					this[k] = source[k] // normal assign
 				}
 
-				this[ k ] = source[ k ] // normal assign
-				
-				if( !source.propertyIsEnumerable( k ) ){
-					Object.defineProperty( this, k, {enumerable:false, configurable:true})
-				}
 			}
 		}
 		return this
@@ -344,7 +269,7 @@ ONE.base_ = function(){
 
 		if( !roles.length ) return
 		var num = 0
-		for( var i = 0, len = arguments.length; i < len; i++ ){
+		for(var i = 0, len = arguments.length; i < len; i++){
 
 			var role = arguments[ i ]
 
@@ -353,10 +278,6 @@ ONE.base_ = function(){
 				continue
 			}
 
-			if( typeof role == 'string' ){// try to resolve it on the scope
-				role = this.resolve( role )
-			} 
-		
 			if( typeof role == 'function'){
 				for( var i = 0; i < roles.length; i++ ){
 					if( roles[ i ].__role__ ===  role ){
@@ -365,7 +286,8 @@ ONE.base_ = function(){
 						break
 					}
 				}
-			} else if ( typeof role == 'object' ){
+			} 
+			else if ( typeof role == 'object' ){
 				var i = roles.indexOf( role )
 				if( i !== -1 ) { 
 					forget.push( role )
@@ -388,67 +310,44 @@ ONE.base_ = function(){
 			for( var ki = 0; ki< klen; ki++ ){
 				var k = keys[ ki ]
 
-				if( k[ 0 ] === '$' ){
-					if( k.length == 1 || k[ 1 ] === '$' ) continue // scope
-				}
-				
-				if( k[ 0 ] === '_' && ( k[ 1 ] === '$' || k[ 1 ] === '_' ) ){ // unmerge arrays
-					if( k[ 1 ] == '_' ) continue //private storage
-					
-					if( !this.hasOwnProperty( k ) ) continue
-					if( k[ 2 ] != 'A' ) continue
-					
-					// remove our array items
-					var roleArray = source[ k ]
-					var myArray = this[ k ]
-					for( var i = roleArray.length - 1; i >= 0; i-- ){
-						var idx = myArray.indexOf( roleArray[ i ] )
-						if( idx !== -1 ) myArray.splice( idx, 1 )
-					}
-				} else { // see if we have to restore our property from the overload stack
-					var stack = overloads[ k ] // the overload stack
-					// our top of the stack
-					var top = stack[ stack.length - 1 ]
-					if( top instanceof StackValue ) top = top.v
-					else top = top[ k ]
+				if( k[ 0 ] === '_'  || k[0] === '$') continue
 
-					// get our current value
-					var val = this['$$'+k] || this[ k ]
-					
-					var srcidx = stack.indexOf( source )
-					// check if we are like the top of the stack, and we are removing that one
-					if( val === top && srcidx === stack.length - 1 ){ 
-						// fetch overloaded value
-						var newtop = stack[ srcidx - 1 ]
-						// restore property from overload stack
-						if( newtop === undefined ) this[ k ] = undefined
-						else {
-							if( newtop instanceof StackValue ) this[ k ] = newtop.v
-							else this[ k ] = newtop[ k ]
-						}                            
-					}
-					// remove our source from the overlay stack
-					stack.splice( srcidx, 1 )
+				if(this.__lookupSetter__(k)){
+					continue
 				}
+
+				var stack = overloads[k] // the overload stack
+
+				// our top of the stack
+				var top = stack[ stack.length - 1 ]
+				if( top instanceof StackValue ) top = top.v
+				else top = top[ k ]
+
+				// get our current value
+				var val = this[ k ]
+				
+				var srcidx = stack.indexOf( source )
+				// check if we are like the top of the stack, and we are removing that one
+				if( val === top && srcidx === stack.length - 1 ){ 
+					// fetch overloaded value
+					var newtop = stack[ srcidx - 1 ]
+					// restore property from overload stack
+					if( newtop === undefined ) this[ k ] = undefined
+					else {
+						if( newtop instanceof StackValue ) this[ k ] = newtop.v
+						else this[ k ] = newtop[ k ]
+					}                            
+				}
+				// remove our source from the overlay stack
+				stack.splice( srcidx, 1 )
 			}
 		}
 	}
 
-	// export copies properties onto the scope
-	this.export = function( ){
-		for( var i = 0, len = arguments.length; i < len; i++ ){
-			var key = arguments[ i ]
-			if( typeof key != 'string' ) throw new Error("Cannot export "+key)
-			var obj = this.resolve( key )
-			if( obj === undefined ) throw new Error("Cannot find "+key)
-			this.$[ key ] = obj
-		}
-	}
-
 	// Make properties non enumerable
-	this.enumfalse = function(){
-		for( var i = arguments.length - 1; i>=0; i--){
-			Object.defineProperty( this, arguments[i], {enumerable:false, configurable:true})
+	this.enumfalse = function( enums ){
+		for( var i = enums.length - 1; i>=0; i--){
+			Object.defineProperty( this, enums[i], {enumerable:false, configurable:true})
 		}
 	}
 
@@ -556,14 +455,6 @@ ONE.base_ = function(){
 		}
 	}
 
-	// resolves a string multipart object a.b.c.d on this
-	this.resolve = function( str ){
-		var parts = str.split('.')
-		var t = this
-		for( var i = 0, l = parts.length; t && i < l; i++ ) t = t[ parts[ i ] ]
-		return t
-	}
-
 	// push a property on the overload stack
 	this.push = function( key, value ){
 		var overloads
@@ -578,7 +469,7 @@ ONE.base_ = function(){
 		
 		this[ key ] = value
 	}
-	
+
 	// pop a property off the overload stack
 	this.pop = function( key ){
 		if( !this.hasOwnProperty('__overloads__') ) return
@@ -597,7 +488,7 @@ ONE.base_ = function(){
 	}
 
 	// flush an entire property stack
-	this.stackFlush = function( key ){
+	this.popAll = function( key ){
 		if( !this.hasOwnProperty('__overloads__') ) return
 		var overloads = this.__overloads__
 		var stack = overloads[ key ]

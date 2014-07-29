@@ -4,13 +4,26 @@
 		<script src='one_base.js'></script>
 		<script>
 			ONE.init()
-			//ONE.reloader()
-			
+			/*
+			ONE.reloader = function(){
+				var rtime = Date.now()
+				var x = new XMLHttpRequest()
+				x.onreadystatechange = function(){
+					if(x.readyState != 4) return
+					if(x.status == 200){
+						return location.reload()
+					}
+					setTimeout(ONE.reloader, (Date.now() - rtime) < 1000?500:0)
+				}
+				x.open('GET', "/_reloader_")
+				x.send()
+			}
+			ONE.reloader()
+			*/
 			function assert(v){
 				if(!v) throw new Error('Assert failed')
 			}
-
-			/*
+/*
 			var Signals = ONE.Base.extend(function(){
 				var Sig1 = ONE.Base.extend(function(){
 					this.signal('click')
@@ -35,8 +48,7 @@
 				Bt.forget(Sig2)
 				b.click.call()
 				console.log(b.x)
-			})
-			*/
+			})*/
 	
 			var Scopes = ONE.Base.extend(function(){
 				this.scoped()
