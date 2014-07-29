@@ -200,6 +200,9 @@ ONE.base_ = function(){
 			
 			var source = learn[i]
 			for(var k in source){	
+
+				// this shouldnt be needed but, guess what!
+				if(!source.propertyIsEnumerable(k)) continue
 				
 				if(k[0] === '_' || k[0] === '$'){
 					continue
@@ -210,6 +213,8 @@ ONE.base_ = function(){
 					// we might be a signal.
 					var store = this['__' + k]
 					if(store._signal_){ // we have a signal
+						// we need to make a new signal,
+						// and merge onset and onend in there
 						// we need to merge the onSet and onEnd arrays
 
 					}
@@ -221,8 +226,8 @@ ONE.base_ = function(){
 
 				}
 				else { // 2 normal properties
-					var stack = overloads[ k ] || ( overloads[ k ] = [ ] )
-					var val = this[ k ]
+					var stack = overloads[k] || (overloads[k] = [])
+					var val = this[k]
 					
 					// harmless __supername__ property for usable this.super
 					if(typeof val == 'function') val.__supername__ = k
@@ -230,14 +235,14 @@ ONE.base_ = function(){
 					if(val !== undefined){
 						if(stack.length){ // compare to stack top
 							var top = stack[stack.length - 1]
-							if( top instanceof StackValue ) top = top.v
+							if(top instanceof StackValue) top = top.v
 							else top = top[k]
-							if( top !== val ){
-								stack.push( new StackValue( val ) )
+							if(top !== val){
+								stack.push(new StackValue(val))
 							}  // compare to prototype
 						} 
-						else if( Object.getPrototypeOf( this )[ k ] !== val ){
-							stack.push( new StackValue( val ) )
+						else if(Object.getPrototypeOf(this)[k] !== val){
+							stack.push(new StackValue(val))
 						}
 					}
 					// overlay the role
@@ -254,9 +259,9 @@ ONE.base_ = function(){
 
 	// forget a property bag
 	this.forget = function( role ){
-	   if( !this.hasOwnProperty('__roles__') ) return
+	   if(!this.hasOwnProperty('__roles__')) return
 		
-		var forget = [ ]
+		var forget = []
 		var roles = this.__roles__
 		var overloads = this.__overloads__
 
@@ -264,41 +269,42 @@ ONE.base_ = function(){
 		var num = 0
 		for(var i = 0, len = arguments.length; i < len; i++){
 
-			var role = arguments[ i ]
+			var role = arguments[i]
 
-			if( typeof role == 'number'){
+			if(typeof role == 'number'){
 				num = role
 				continue
 			}
 
-			if( typeof role == 'function'){
-				for( var i = 0; i < roles.length; i++ ){
-					if( roles[ i ].__role__ ===  role ){
-						forget.push( roles[ i ] )
-						roles.splice( i, 1 )
+			if(typeof role == 'function'){
+				for(var i = 0; i < roles.length; i++){
+					if(roles[ i ].__role__ ===  role){
+						forget.push(roles[i])
+						roles.splice(i, 1)
 						break
 					}
 				}
-			} 
-			else if ( typeof role == 'object' ){
-				var i = roles.indexOf( role )
+			}
+			else if (typeof role == 'object'){
+				var i = roles.indexOf(role)
 				if( i !== -1 ) { 
-					forget.push( role )
-					roles.splice( i, 1 )
+					forget.push(role)
+					roles.splice(i, 1)
 				}
 			} 
 		}
 
-		if( num !== 0 ) forget.push.apply( forget, roles.splice( -num, num ) )
+		if(num !== 0) forget.push.apply(forget, roles.splice(-num, num))
 
-		if( !forget.length ) return
+		if(!forget.length) return
 
-		for( var i = forget.length -1; i >= 0; i-- ){
+		for(var i = forget.length -1; i >= 0; i--){
 			// restore a property as best we can
-			var source = forget[ i ]
+			var source = forget[i]
 			
 			for(var k in source){
-
+				// this shouldnt be needed but, guess what!
+				if(!source.propertyIsEnumerable(k)) continue
 				if( k[ 0 ] === '_'  || k[0] === '$') continue
 
 				if(this.__lookupSetter__(k)){
@@ -308,27 +314,27 @@ ONE.base_ = function(){
 				var stack = overloads[k] // the overload stack
 
 				// our top of the stack
-				var top = stack[ stack.length - 1 ]
-				if( top instanceof StackValue ) top = top.v
-				else top = top[ k ]
+				var top = stack[stack.length - 1]
+				if(top instanceof StackValue) top = top.v
+				else top = top[k]
 
 				// get our current value
-				var val = this[ k ]
+				var val = this[k]
 				
-				var srcidx = stack.indexOf( source )
+				var srcidx = stack.indexOf(source)
 				// check if we are like the top of the stack, and we are removing that one
-				if( val === top && srcidx === stack.length - 1 ){ 
+				if(val === top && srcidx === stack.length - 1){ 
 					// fetch overloaded value
-					var newtop = stack[ srcidx - 1 ]
+					var newtop = stack[srcidx - 1]
 					// restore property from overload stack
-					if( newtop === undefined ) this[ k ] = undefined
+					if(newtop === undefined) this[k] = undefined
 					else {
-						if( newtop instanceof StackValue ) this[ k ] = newtop.v
-						else this[ k ] = newtop[ k ]
+						if(newtop instanceof StackValue) this[k] = newtop.v
+						else this[k] = newtop[k]
 					}                            
 				}
 				// remove our source from the overlay stack
-				stack.splice( srcidx, 1 )
+				stack.splice(srcidx, 1)
 			}
 		}
 	}
