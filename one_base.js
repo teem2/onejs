@@ -341,7 +341,11 @@ ONE.base_ = function(){
 	this.enumfalse = function( enums ){
 		for( var i = enums.length - 1; i>=0; i--){
 			var k = enums[i]
-			Object.defineProperty( this, k, {value:this[k], enumerable:false, configurable:true})
+			if (this.hasOwnProperty(k)) {
+				Object.defineProperty( this, k, {value:this[k], enumerable:false, configurable:true})
+			} else {
+				console.error('attempting to overwrite property', k, 'not owned by', this)
+			}
 		}
 	}
 
